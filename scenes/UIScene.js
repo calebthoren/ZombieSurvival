@@ -8,62 +8,77 @@ export default class UIScene extends Phaser.Scene {
     }
 
     create() {
-        console.log("UIScene started!");
-
-        // --- Health UI ---
-        // --- Health Bar ---
         this.healthBarWidth = 200;
         this.healthBarHeight = 20;
         this.healthBarX = 10;
         this.healthBarY = 10;
 
-        // Background bar (grey)
         this.healthBarBackground = this.add.rectangle(
-            this.healthBarX,
-            this.healthBarY,
-            this.healthBarWidth,
-            this.healthBarHeight,
-            0x222222
+            this.healthBarX, this.healthBarY,
+            this.healthBarWidth, this.healthBarHeight, 0x222222
         ).setOrigin(0, 0);
 
-        // Foreground bar (red, will shrink)
         this.healthBarFill = this.add.rectangle(
-            this.healthBarX,
-            this.healthBarY,
-            this.healthBarWidth,
-            this.healthBarHeight,
-            0xff0000
+            this.healthBarX, this.healthBarY,
+            this.healthBarWidth, this.healthBarHeight, 0xff0000
         ).setOrigin(0, 0);
 
-        // Health number text (dark red)
         this.healthText = this.add.text(0, 0, '', {
             fontSize: '10px',
-            fill: '#5e0000ff',
+            fill: '#800000',
             fontFamily: 'monospace'
         });
 
         this.updateHealth();
 
-        // --- Ammo UI ---
-        this.ammoText = this.add.text(10, 30, '', {
+        this.ammoText = this.add.text(10, 40, '', {
             fontSize: '16px',
             fill: '#ffffff',
             fontFamily: 'monospace'
         });
         this.updateAmmo();
 
-        // --- Hotbar UI ---
         const screenCenterX = this.cameras.main.width / 2;
         const slotSize = 48;
         const spacing = 8;
         this.hotbarSlots = [];
+        this.hotbarTexts = [];
+        this.selectedSlotIndex = 0;
 
         for (let i = 0; i < 5; i++) {
             const slotX = screenCenterX - ((slotSize + spacing) * 2) + i * (slotSize + spacing);
-            const slot = this.add.rectangle(slotX, this.cameras.main.height - 60, slotSize, slotSize, 0x333333);
-            slot.setStrokeStyle(2, 0xffffff);
+
+            const slot = this.add.rectangle(
+                slotX, this.cameras.main.height - 60,
+                slotSize, slotSize, 0x333333
+            ).setStrokeStyle(2, 0xffffff).setAlpha(0.65);
             this.hotbarSlots.push(slot);
+
+            const slotNumber = this.add.text(
+                slotX - slotSize / 2 + 4,
+                this.cameras.main.height - 60 - 20,
+                `${i + 1}`,
+                {
+                    fontSize: '10px',
+                    fill: '#ffffff',
+                    fontFamily: 'monospace'
+                }
+            ).setAlpha(0.65);
+
+            this.hotbarTexts.push(slotNumber);
         }
+
+        this.highlightHotbarSlot(this.selectedSlotIndex);
+
+        this.hotbarKeyListener = this.input.keyboard.on('keydown', (event) => {
+            const mainScene = this.scene.get('MainScene');
+            if (!mainScene || mainScene.isGameOver) return;
+
+            const key = parseInt(event.key);
+            if (key >= 1 && key <= 5) {
+                this.selectHotbarSlot(key - 1);
+            }
+        });
     }
 
     updateHealth(amount) {
@@ -72,30 +87,17 @@ export default class UIScene extends Phaser.Scene {
         }
 
         const health = this.playerData.health ?? 0;
-
-        // Resize health bar based on percentage
         const percent = health / 100;
         const newWidth = this.healthBarWidth * percent;
         this.healthBarFill.width = newWidth;
 
-        // Update health text
-        const text = `${health}`;
-        this.healthText.setText(text);
-
-        // Position text inside the red bar, aligned right
-        const textPadding = 4;
-        const textWidth = this.healthText.width;
-        if (textWidth + textPadding * 2 <= newWidth) {
-            this.healthText.setVisible(true);
-            this.healthText.setPosition(
-                this.healthBarX + newWidth - textWidth - textPadding,
-                this.healthBarY + 4
-            );
-        } else {
-            this.healthText.setVisible(false);
-        }
+        this.healthText.setText(`${health}`);
+        this.healthText.setVisible(true);
+        this.healthText.setPosition(
+            this.healthBarX + 4,
+            this.healthBarY + 4
+        );
     }
-
 
     updateAmmo(amount) {
         if (typeof amount === 'number') {
@@ -106,4 +108,20 @@ export default class UIScene extends Phaser.Scene {
         this.ammoText.setText(`Ammo: ${count}`);
     }
 
+    selectHotbarSlot(index) {
+        if (index < 0 || index >= this.hotbarSlots.length) return;
+
+        this.selectedSlotIndex = index;
+        this.highlightHotbarSlot(index);
+    }
+
+    highlightHotbarSlot(index) {
+        this.hotbarSlots.forEach((slot, i) => {
+            if (i === index) {
+                slot.setStrokeStyle(3, 0xffff00);
+            } else {
+                slot.setStrokeStyle(2, 0xffffff);
+            }
+        });
+    }
 }
