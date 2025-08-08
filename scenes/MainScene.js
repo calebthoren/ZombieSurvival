@@ -6,14 +6,15 @@ export default class MainScene extends Phaser.Scene {
     preload() {
         this.load.image('player', 'https://labs.phaser.io/assets/sprites/phaser-dude.png');
         this.load.image('zombie', 'assets/enemies/zombie.png');
-        this.load.image('rock', 'assets/resources/rock.png');
+        this.load.image('big_rock_node', 'assets/resources/big_rock_node.png');
         this.load.image('bullet', 'assets/weapons/bullet.png');
+        this.load.image('slingshot', 'assets/weapons/slingshot.png');
+        this.load.image('slingshot_rock', 'assets/weapons/slingshot_rock.png');
     }
 
     create() {
         this.health = 100;
         this.ammo = 0;
-        this.lastHitTime = 0;
         this.isGameOver = false;
 
         this.scene.launch('UIScene', { playerData: { health: this.health, ammo: this.ammo } });
@@ -47,7 +48,7 @@ export default class MainScene extends Phaser.Scene {
             const rock = this.resources.create(
                 Phaser.Math.Between(100, 700),
                 Phaser.Math.Between(100, 500),
-                'rock'
+                'big_rock_node'
             );
             rock.setScale(1);
         }
@@ -87,15 +88,22 @@ export default class MainScene extends Phaser.Scene {
 
     fireBullet(pointer) {
         if (this.isGameOver) return;
-        if (this.ammo <= 0) {
-            console.log("Out of ammo!");
+
+        const equipped = this.uiScene.getEquippedItem();
+        if (!equipped || equipped.textureKey !== 'slingshot') {
+            console.log("No slingshot equipped.");
             return;
         }
 
-        const bullet = this.bullets.get(this.player.x, this.player.y, 'bullet');
+        if (!this.uiScene.hasItemInInventory('slingshot_rock')) {
+            console.log("Out of slingshot ammo.");
+            return;
+        }
+
+        // Get bullet from pool
+        const bullet = this.bullets.get(this.player.x, this.player.y, 'slingshot_rock');
         if (bullet) {
-            this.ammo -= 1;
-            this.uiScene.updateAmmo(this.ammo);
+            this.uiScene.consumeAmmo('slingshot_rock');
 
             bullet.setActive(true).setVisible(true);
             bullet.body.allowGravity = false;
@@ -118,14 +126,22 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
+
+
+
     handleBulletHit(bullet, zombie) {
         bullet.destroy();
         zombie.destroy();
     }
 
     collectResource(player, resource) {
-        this.ammo += 1;
-        this.uiScene.updateAmmo(this.ammo);
+        const added = this.uiScene.addItemToFirstAvailableSlot('slingshot_rock', 1);
+
+        if (!added) {
+            console.log("Inventory full. Couldn't collect rock.");
+            // Optionally: show a message or sound here
+        }
+
         resource.disableBody(true, true);
 
         const delay = Phaser.Math.Between(5000, 7000);
@@ -136,14 +152,17 @@ export default class MainScene extends Phaser.Scene {
         });
     }
 
+
     handlePlayerZombieCollision(player, zombie) {
         if (this.isGameOver) return;
 
         const currentTime = this.time.now;
         const cooldown = 500;
 
-        if (currentTime - this.lastHitTime < cooldown) return;
-        this.lastHitTime = currentTime;
+        if (!zombie.lastHitTime) zombie.lastHitTime = 0;
+
+        if (currentTime - zombie.lastHitTime < cooldown) return;
+        zombie.lastHitTime = currentTime;
 
         const damage = Phaser.Math.Between(5, 10);
         this.health = Math.max(0, this.health - damage);
@@ -188,6 +207,8 @@ export default class MainScene extends Phaser.Scene {
         }
 
         const zombie = this.zombies.create(x, y, 'zombie');
+        zombie.lastHitTime = 0; // individual cooldown
+
         zombie.setScale(0.1);
 
         this.spawnZombieTimer.reset({
