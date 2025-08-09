@@ -1,9 +1,21 @@
+// scenes/MainScene.js
+import { WORLD_GEN } from '../data/worldGenConfig.js';
+
 export default class MainScene extends Phaser.Scene {
     constructor() {
         super('MainScene');
+
+        // Day/Night state
+        this.dayIndex = 1;              // starts on Day 1
+        this.phase = 'day';             // 'day' | 'night'
+        this.phaseStartTime = 0;        // ms since scene start
+        this.waveNumber = 0;            // increments each night
+        this.spawnZombieTimer = null;   // day trickle timer
+        this.nightWaveTimer = null;     // night waves timer
     }
 
     preload() {
+        // NOTE: Using standalone images
         this.load.image('player', 'https://labs.phaser.io/assets/sprites/phaser-dude.png');
         this.load.image('zombie', 'assets/enemies/zombie.png');
         this.load.image('big_rock_node', 'assets/resources/big_rock_node.png');
@@ -13,54 +25,172 @@ export default class MainScene extends Phaser.Scene {
     }
 
     create() {
+        // Basic state
         this.health = 100;
-        this.ammo = 0;
         this.isGameOver = false;
 
-        this.scene.launch('UIScene', { playerData: { health: this.health, ammo: this.ammo } });
+        // Launch UI and keep a reference
+        this.scene.launch('UIScene', { playerData: { health: this.health, ammo: 0 } });
         this.uiScene = this.scene.get('UIScene');
 
+        // Player
         this.player = this.physics.add.sprite(400, 300, 'player').setScale(0.5);
         this.player.setCollideWorldBounds(true);
 
+        // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.keys = this.input.keyboard.addKeys("W,A,S,D");
+        this.keys = this.input.keyboard.addKeys('W,A,S,D');
 
+        // Projectile pool (used for slingshot rocks)
         this.bullets = this.physics.add.group({
             classType: Phaser.Physics.Arcade.Image,
             maxSize: 20,
             runChildUpdate: true
         });
 
+        // Shooting
         this.shootListener = this.input.on('pointerdown', this.fireBullet, this);
 
+        // Groups
         this.zombies = this.physics.add.group();
-
-        this.spawnZombieTimer = this.time.addEvent({
-            delay: Phaser.Math.Between(1000, 3000),
-            callback: this.spawnZombie,
-            callbackScope: this,
-            loop: true
-        });
-
         this.resources = this.physics.add.group();
-        for (let i = 0; i < 10; i++) {
-            const rock = this.resources.create(
-                Phaser.Math.Between(100, 700),
-                Phaser.Math.Between(100, 500),
-                'big_rock_node'
-            );
-            rock.setScale(1);
-        }
 
-        this.inventory = [];
+        // Spawn resources using data config
+        this.spawnResourceNodes();
 
+        // Overlaps
         this.physics.add.overlap(this.player, this.resources, this.collectResource, null, this);
         this.physics.add.overlap(this.player, this.zombies, this.handlePlayerZombieCollision, null, this);
         this.physics.add.overlap(this.bullets, this.zombies, this.handleBulletHit, null, this);
+
+        // Night overlay
+        const w = this.sys.game.config.width;
+        const h = this.sys.game.config.height;
+        this.nightOverlay = this.add.rectangle(0, 0, w, h, 0x000000)
+            .setOrigin(0, 0)
+            .setScrollFactor(0)
+            .setDepth(999)
+            .setAlpha(0);
+
+        // Start the cycle at DAY
+        this.startDay();
+
+        // Update small clock/label in the UI
+        this.time.addEvent({
+            delay: 250,
+            loop: true,
+            callback: () => this.updateTimeUi(),
+        });
     }
 
-    update() {
+    // --------------------------
+    // World Gen — Resources
+    // --------------------------
+    spawnResourceNodes() {
+        const cfg = WORLD_GEN.spawns.resources.big_rock_node;
+        const count = Phaser.Math.Between(cfg.minCount, cfg.maxCount);
+
+        for (let i = 0; i < count; i++) {
+            const x = Phaser.Math.Between(100, this.sys.game.config.width - 100);
+            const y = Phaser.Math.Between(100, this.sys.game.config.height - 100);
+            const rock = this.resources.create(x, y, 'big_rock_node');
+            rock.setScale(1);
+        }
+    }
+
+    // --------------------------
+    // Day/Night Cycle Management
+    // --------------------------
+    startDay() {
+        this.phase = 'day';
+        this.phaseStartTime = this.time.now;
+
+        if (this.nightWaveTimer) {
+            this.nightWaveTimer.remove(false);
+            this.nightWaveTimer = null;
+        }
+        this.waveNumber = 0;
+
+        this.scheduleDaySpawn();
+        this.updateTimeUi();
+    }
+
+    startNight() {
+        this.phase = 'night';
+        this.phaseStartTime = this.time.now;
+
+        if (this.spawnZombieTimer) {
+            this.spawnZombieTimer.remove(false);
+            this.spawnZombieTimer = null;
+        }
+
+        this.waveNumber = 0;
+        this.scheduleNightWave();
+        this.updateTimeUi();
+    }
+
+    scheduleDaySpawn() {
+        const dayCfg = WORLD_GEN.spawns.zombie.day;
+        const delay = Phaser.Math.Between(dayCfg.minDelayMs, dayCfg.maxDelayMs);
+
+        this.spawnZombieTimer = this.time.addEvent({
+            delay,
+            callback: () => {
+                if (this.phase !== 'day' || this.isGameOver) return;
+                if (Math.random() < dayCfg.chance) {
+                    this.spawnZombie();
+                }
+                this.scheduleDaySpawn();
+            },
+            callbackScope: this,
+            loop: false
+        });
+    }
+
+    scheduleNightWave() {
+        const nightCfg = WORLD_GEN.spawns.zombie.nightWaves;
+        this.nightWaveTimer = this.time.addEvent({
+            delay: 10,
+            loop: false,
+            callback: () => {
+                this.waveNumber++;
+                if (this.phase !== 'night' || this.isGameOver) return;
+
+                const targetCount = Math.min(
+                    nightCfg.baseCount + (this.waveNumber - 1) * nightCfg.perWave,
+                    nightCfg.maxCount
+                );
+
+                for (let i = 0; i < targetCount; i++) {
+                    this.time.delayedCall(i * nightCfg.burstIntervalMs, () => {
+                        if (this.phase === 'night' && !this.isGameOver) {
+                            this.spawnZombie();
+                        }
+                    });
+                }
+
+                this.time.delayedCall(nightCfg.waveIntervalMs, () => {
+                    if (this.phase === 'night' && !this.isGameOver) {
+                        this.scheduleNightWave();
+                    }
+                });
+            }
+        });
+    }
+
+    // --------------------------
+    // Phase timing helpers
+    // --------------------------
+    getPhaseElapsed() {
+        return this.time.now - this.phaseStartTime;
+    }
+
+    getPhaseDuration() {
+        const dn = WORLD_GEN.dayNight;
+        return this.phase === 'day' ? dn.dayMs : dn.nightMs;
+    }
+
+    update(time, delta) {
         if (this.isGameOver) {
             if (Phaser.Input.Keyboard.JustDown(this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE))) {
                 this.scene.stop('UIScene');
@@ -69,41 +199,103 @@ export default class MainScene extends Phaser.Scene {
             return;
         }
 
+        // Movement with normalization (no diagonal speed boost)
         const speed = 100;
         const p = this.player.body.velocity;
         p.set(0);
 
-        if (this.keys.W.isDown) p.y = -speed;
-        else if (this.keys.S.isDown) p.y = speed;
+        const up = (this.keys.W?.isDown) || (this.cursors.up?.isDown);
+        const down = (this.keys.S?.isDown) || (this.cursors.down?.isDown);
+        const left = (this.keys.A?.isDown) || (this.cursors.left?.isDown);
+        const right = (this.keys.D?.isDown) || (this.cursors.right?.isDown);
 
-        if (this.keys.A.isDown) p.x = -speed;
-        else if (this.keys.D.isDown) p.x = speed;
+        if (up) p.y = -speed;
+        else if (down) p.y = speed;
+        if (left) p.x = -speed;
+        else if (right) p.x = speed;
 
+        if (p.x !== 0 && p.y !== 0) {
+            p.x *= Math.SQRT1_2; // 1/sqrt(2)
+            p.y *= Math.SQRT1_2;
+        }
+
+        // Zombie pursuit
         this.zombies.getChildren().forEach(zombie => {
             this.physics.moveToObject(zombie, this.player, 40);
             if (zombie.body.velocity.x < 0) zombie.setFlipX(true);
             else if (zombie.body.velocity.x > 0) zombie.setFlipX(false);
         });
+
+        // Check phase transitions
+        const elapsed = this.getPhaseElapsed();
+        const duration = this.getPhaseDuration();
+        if (elapsed >= duration) {
+            if (this.phase === 'day') {
+                this.startNight();
+            } else {
+                this.dayIndex++;
+                this.startDay();
+            }
+        }
+
+        // Update overlay alpha for dusk/dawn feel
+        this.updateNightOverlay();
     }
 
+    updateNightOverlay() {
+        const { transitionMs, nightOverlayAlpha } = WORLD_GEN.dayNight;
+        const elapsed = this.getPhaseElapsed();
+        const duration = this.getPhaseDuration();
+
+        let target = 0;
+        if (this.phase === 'night') {
+            if (elapsed <= transitionMs) {
+                target = Phaser.Math.Linear(0, nightOverlayAlpha, elapsed / transitionMs);
+            } else if (elapsed >= duration - transitionMs) {
+                const t = (elapsed - (duration - transitionMs)) / transitionMs;
+                target = Phaser.Math.Linear(nightOverlayAlpha, 0, t);
+            } else {
+                target = nightOverlayAlpha;
+            }
+        } else {
+            target = 0;
+        }
+        this.nightOverlay.setAlpha(target);
+    }
+
+    updateTimeUi() {
+        if (!this.uiScene) return;
+        const elapsed = this.getPhaseElapsed();
+        const duration = this.getPhaseDuration();
+        const progress = Phaser.Math.Clamp(elapsed / duration, 0, 1);
+
+        const phaseLabel = this.phase === 'day' ? 'Daytime' : 'Night';
+        this.uiScene.updateTimeDisplay(this.dayIndex, phaseLabel, progress);
+    }
+
+    // --------------------------
+    // Combat / Shooting (uses InventoryModel via UIScene)
+    // --------------------------
     fireBullet(pointer) {
         if (this.isGameOver) return;
 
-        const equipped = this.uiScene.getEquippedItem();
-        if (!equipped || equipped.textureKey !== 'slingshot') {
-            console.log("No slingshot equipped.");
+        const equipped = this.uiScene?.inventory?.getEquipped();
+        if (!equipped || equipped.id !== 'slingshot') {
+            // No slingshot equipped
             return;
         }
 
-        if (!this.uiScene.hasItemInInventory('slingshot_rock')) {
-            console.log("Out of slingshot ammo.");
+        // Ask the inventory model which ammo type is active and how much exists
+        const { ammoId, total } = this.uiScene.inventory.totalOfActiveAmmo('slingshot');
+        if (!ammoId || total <= 0) {
+            // No usable ammo
             return;
         }
 
-        // Get bullet from pool
-        const bullet = this.bullets.get(this.player.x, this.player.y, 'slingshot_rock');
+        const bullet = this.bullets.get(this.player.x, this.player.y, ammoId);
         if (bullet) {
-            this.uiScene.consumeAmmo('slingshot_rock');
+            // Consume 1 ammo of the active type
+            this.uiScene.inventory.consumeAmmo(ammoId, 1);
 
             bullet.setActive(true).setVisible(true);
             bullet.body.allowGravity = false;
@@ -126,41 +318,33 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-
-
-
     handleBulletHit(bullet, zombie) {
         bullet.destroy();
         zombie.destroy();
     }
 
     collectResource(player, resource) {
-        const added = this.uiScene.addItemToFirstAvailableSlot('slingshot_rock', 1);
-
-        if (!added) {
-            console.log("Inventory full. Couldn't collect rock.");
-            // Optionally: show a message or sound here
+        // Give 1 rock (ammo) using the inventory model (grid-first, then hotbar)
+        if (this.uiScene?.inventory) {
+            this.uiScene.inventory.addItem('slingshot_rock', 1);
         }
 
+        // Respawn the node after a short delay
         resource.disableBody(true, true);
-
         const delay = Phaser.Math.Between(5000, 7000);
         this.time.delayedCall(delay, () => {
-            const x = Phaser.Math.Between(100, 700);
-            const y = Phaser.Math.Between(100, 500);
+            const x = Phaser.Math.Between(100, this.sys.game.config.width - 100);
+            const y = Phaser.Math.Between(100, this.sys.game.config.height - 100);
             resource.enableBody(true, x, y, true, true);
         });
     }
-
 
     handlePlayerZombieCollision(player, zombie) {
         if (this.isGameOver) return;
 
         const currentTime = this.time.now;
         const cooldown = 500;
-
         if (!zombie.lastHitTime) zombie.lastHitTime = 0;
-
         if (currentTime - zombie.lastHitTime < cooldown) return;
         zombie.lastHitTime = currentTime;
 
@@ -193,11 +377,12 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
+    // Spawn a zombie at a random screen edge
     spawnZombie() {
         const edge = Phaser.Math.Between(0, 3);
-        let x, y;
         const maxX = this.sys.game.config.width;
         const maxY = this.sys.game.config.height;
+        let x, y;
 
         switch (edge) {
             case 0: x = Phaser.Math.Between(0, maxX); y = 0; break;
@@ -207,15 +392,7 @@ export default class MainScene extends Phaser.Scene {
         }
 
         const zombie = this.zombies.create(x, y, 'zombie');
-        zombie.lastHitTime = 0; // individual cooldown
-
+        zombie.lastHitTime = 0;
         zombie.setScale(0.1);
-
-        this.spawnZombieTimer.reset({
-            delay: Phaser.Math.Between(1000, 3000),
-            callback: this.spawnZombie,
-            callbackScope: this,
-            loop: true
-        });
     }
 }

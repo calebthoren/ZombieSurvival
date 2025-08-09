@@ -1,29 +1,39 @@
+// scenes/UIScene.js
+import InventoryModel from '../systems/inventoryModel.js';
+import { INVENTORY_CONFIG } from '../data/inventoryConfig.js';
+import { ITEM_DB } from '../data/itemDatabase.js';
+
 export default class UIScene extends Phaser.Scene {
     constructor() {
         super({ key: 'UIScene' });
     }
 
     init(data) {
-        this.playerData = data.playerData || { health: 100, ammo: 10 };
+        this.playerData = data.playerData || { health: 100 };
     }
 
     create() {
+        // -------------------------
+        // Inventory model (logic)
+        // -------------------------
+        this.inventory = new InventoryModel(this.events);
+
+        // -------------------------
+        // Basic HUD
+        // -------------------------
         this.healthBarWidth = 200;
         this.healthBarHeight = 20;
         this.healthBarX = 10;
         this.healthBarY = 10;
-        const slotSize = 44;
 
         this.input.mouse.disableContextMenu();
 
         this.healthBarBackground = this.add.rectangle(
-            this.healthBarX, this.healthBarY,
-            this.healthBarWidth, this.healthBarHeight, 0x222222
+            this.healthBarX, this.healthBarY, this.healthBarWidth, this.healthBarHeight, 0x222222
         ).setOrigin(0, 0);
 
         this.healthBarFill = this.add.rectangle(
-            this.healthBarX, this.healthBarY,
-            this.healthBarWidth, this.healthBarHeight, 0xff0000
+            this.healthBarX, this.healthBarY, this.healthBarWidth, this.healthBarHeight, 0xff0000
         ).setOrigin(0, 0);
 
         this.healthText = this.add.text(0, 0, '', {
@@ -31,568 +41,451 @@ export default class UIScene extends Phaser.Scene {
             fill: '#800000',
             fontFamily: 'monospace'
         });
-
         this.updateHealth();
 
-        const screenWidth = this.cameras.main.width;
-        const screenHeight = this.cameras.main.height;
-        const screenCenterX = screenWidth / 2;
-        const spacing = 8;
-        this.hotbarSlots = [];
-        this.hotbarTexts = [];
-        this.hotbarVisuals = [];
+        // -------------------------
+        // Bottom on-screen hotbar
+        // -------------------------
+        const screenW = this.cameras.main.width;
+        const screenH = this.cameras.main.height;
+        const spacing = INVENTORY_CONFIG.padding ?? 8;
+        this.slotSize = INVENTORY_CONFIG.slotSize ?? 44;
+
+        this.bottomHotbarRects = [];
+        this.bottomHotbarVisuals = []; // {icon, countText}
         this.selectedSlotIndex = 0;
 
-        for (let i = 0; i < 5; i++) {
-            const slotX = screenCenterX - ((slotSize + spacing) * 2) + i * (slotSize + spacing);
+        for (let i = 0; i < INVENTORY_CONFIG.hotbarCount; i++) {
+            const x = screenW / 2 - ((this.slotSize + spacing) * 2) + i * (this.slotSize + spacing);
+            const rect = this.add.rectangle(
+                x, screenH - 60, this.slotSize, this.slotSize, 0x333333
+            ).setStrokeStyle(2, 0xffffff).setAlpha(0.65).setOrigin(0, 0);
+            this.bottomHotbarRects.push(rect);
 
-            const slot = this.add.rectangle(
-                slotX, screenHeight - 60,
-                slotSize, slotSize, 0x333333
-            ).setStrokeStyle(2, 0xffffff).setAlpha(0.65);
-
-            this.hotbarSlots.push(slot);
-
-            const slotNumber = this.add.text(
-                slotX - slotSize / 2 + 4,
-                screenHeight - 60 - 20,
+            const numText = this.add.text(
+                x - this.slotSize / 2 + 4,
+                screenH - 60 - 20,
                 `${i + 1}`,
-                {
-                    fontSize: '10px',
-                    fill: '#ffffff',
-                    fontFamily: 'monospace'
-                }
+                { fontSize: '10px', fill: '#ffffff', fontFamily: 'monospace' }
             ).setAlpha(0.65);
 
-            this.hotbarTexts.push(slotNumber);
-
             const icon = this.add.image(
-                slot.x + slotSize / 2,
-                slot.y + slotSize / 2,
-                ''
-            ).setScale(0.5).setVisible(false).setDepth(10);
+                rect.x + this.slotSize / 2, rect.y + this.slotSize / 2, ''
+            ).setVisible(false).setDepth(10);
 
             const countText = this.add.text(
-                slot.x + slotSize - 16,
-                slot.y + slotSize - 16,
-                '',
-                {
-                    fontSize: '12px',
-                    fill: '#ffffff',
-                    fontFamily: 'monospace'
-                }
+                rect.x + this.slotSize - 16, rect.y + this.slotSize - 16, '',
+                { fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace' }
             ).setVisible(false).setDepth(11);
 
-            this.hotbarVisuals.push({ icon, countText });
+            this.bottomHotbarVisuals.push({ icon, countText });
         }
+        this.#highlightBottomHotbar(0);
 
-        this.highlightHotbarSlot(this.selectedSlotIndex);
-
+        // Number keys to select hotbar slot
         this.input.keyboard.on('keydown', (event) => {
-            const mainScene = this.scene.get('MainScene');
-            if (!mainScene || mainScene.isGameOver) return;
-
-            const key = parseInt(event.key);
-            if (key >= 1 && key <= 5) {
-                this.selectHotbarSlot(key - 1);
+            const key = parseInt(event.key, 10);
+            if (key >= 1 && key <= INVENTORY_CONFIG.hotbarCount) {
+                this.selectedSlotIndex = key - 1;
+                this.inventory.setSelectedHotbarIndex(this.selectedSlotIndex);
+                this.#highlightBottomHotbar(this.selectedSlotIndex);
+                this.#refreshAllIcons();
             }
         });
 
-        // --- Inventory Panel ---
+        // -------------------------
+        // Inventory Panel (with top hotbar + 6x5 grid)
+        // -------------------------
         this.inventoryPanel = this.add.container().setVisible(false);
 
-        const panelWidth = screenWidth - 100;
-        const panelHeight = screenHeight - 240;
+        const panelW = this.cameras.main.width - 100;
+        const panelH = this.cameras.main.height - 240;
         const panelX = 50;
         const panelY = 100;
 
-
-        const panelBg = this.add.rectangle(panelX, panelY, panelWidth, panelHeight, 0x444444)
+        const panelBg = this.add.rectangle(panelX, panelY, panelW, panelH, 0x444444)
             .setOrigin(0, 0)
-            .setStrokeStyle(2, 0xffffff)
+            .setStrokeStyle(2, 0xffffff);
         this.inventoryPanel.add(panelBg);
 
-        // Draw dividers to split inventory panel into 3 vertical sections
-        const thirdWidth = panelWidth / 3;
-        const dividerY1 = panelY;
-        const dividerY2 = panelY + panelHeight;
-
-        const divider1X = panelX + thirdWidth;
-        const divider2X = panelX + thirdWidth * 2;
-
-        const divider1 = this.add.line(0, 0, divider1X, dividerY1, divider1X, dividerY2, 0xffffff)
-            .setLineWidth(2)
-            .setAlpha(0.6)
-            .setOrigin(0); // ✅ Ensure correct position
-
-        const divider2 = this.add.line(0, 0, divider2X, dividerY1, divider2X, dividerY2, 0xffffff)
-            .setLineWidth(2)
-            .setAlpha(0.6)
-            .setOrigin(0); // ✅ Ensure correct position
-
-        // Add dividers to the inventory panel
+        // Visual dividers (purely cosmetic)
+        const third = panelW / 3;
+        const d1x = panelX + third, d2x = panelX + 2 * third;
+        const divider1 = this.add.line(0, 0, d1x, panelY, d1x, panelY + panelH, 0xffffff).setLineWidth(2).setAlpha(0.6).setOrigin(0);
+        const divider2 = this.add.line(0, 0, d2x, panelY, d2x, panelY + panelH, 0xffffff).setLineWidth(2).setAlpha(0.6).setOrigin(0);
         this.inventoryPanel.add(divider1);
         this.inventoryPanel.add(divider2);
 
+        // Left segment — top hotbar row + grid
+        const segW = panelW / 3;
+        const segX = panelX - 12;
+               const segY = panelY + 20;
 
-        // --- Left Segment (expanded layout) ---
-        const segmentWidth = panelWidth / 3;
-        const leftSegmentExtra = 12; // breathing room left and right
+        const cols = INVENTORY_CONFIG.gridCols;
+        const rows = INVENTORY_CONFIG.gridRows;
 
-        const segmentX = panelX - leftSegmentExtra;
-        const segmentY = panelY + 20;
+        const totalSlotWidth = cols * this.slotSize;
+        const centeredX = segX + (segW + 24 - totalSlotWidth) / 2;
+        const hotbarY = segY;
+        const gridStartY = hotbarY + this.slotSize + 12;
 
-        const gridCols = 5;
-        const gridRows = 6;
-        const slotSpacing = 0;
-        const totalSlotWidth = gridCols * slotSize;
+        this.uiHotbarSlots = []; // [{rect, icon, countText, area:'hotbar', index:i}]
+        this.uiGridSlots = [];   // [{rect, icon, countText, area:'grid', index:i}]
+        const border = 1;
 
-        const centeredX = segmentX + (segmentWidth + leftSegmentExtra * 2 - totalSlotWidth) / 2;
-        const hotbarY = segmentY;
-        const borderWidth = 1;
+        // Panel top hotbar
+        for (let i = 0; i < cols; i++) {
+            const x = centeredX + i * this.slotSize;
+            const rect = this.add.rectangle(x, hotbarY, this.slotSize, this.slotSize, 0x333333)
+                .setStrokeStyle(border, 0xffffff).setOrigin(0, 0).setAlpha(0.9).setInteractive();
+            this.inventoryPanel.add(rect);
 
-        this.inventoryHotbar = [];
-        for (let i = 0; i < gridCols; i++) {
-            const x = centeredX + i * slotSize; 
-            const slot = this.add.rectangle(x, hotbarY, slotSize, slotSize, 0x333333)
-                .setStrokeStyle(borderWidth, 0xffffff)
-                .setOrigin(0, 0)
-                .setAlpha(0.9)
-                .setInteractive();
-
-            slot.index = i;
-            slot.type = 'hotbar';
-            slot.highlight = this.add.rectangle(x, hotbarY, slotSize, slotSize)
-                .setOrigin(0, 0)
-                .setStrokeStyle(2, 0xffff00)
-                .setVisible(false);
-
-            this.inventoryPanel.add(slot);
-            this.inventoryPanel.add(slot.highlight);
-            this.inventoryHotbar.push(slot);
+            const slot = { rect, icon: null, countText: null, area: 'hotbar', index: i };
+            this.uiHotbarSlots.push(slot);
         }
 
-        this.inventorySlots = [];
-        const inventoryGap = 12; // vertical space between hotbar and grid
-        const gridStartY = hotbarY + slotSize + inventoryGap;
+        // Panel grid (6x5)
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const x = centeredX + c * this.slotSize;
+                const y = gridStartY + r * this.slotSize;
+                const rect = this.add.rectangle(x, y, this.slotSize, this.slotSize, 0x222222)
+                    .setStrokeStyle(border, 0x888888).setOrigin(0, 0).setAlpha(0.9).setInteractive();
+                this.inventoryPanel.add(rect);
 
+                rect.on('pointerover', () => { this.hoveredSlot = { area: 'grid', index: r * cols + c }; });
+                rect.on('pointerout', () => { if (this.hoveredSlot?.area === 'grid' && this.hoveredSlot?.index === r * cols + c) this.hoveredSlot = null; });
 
-        for (let row = 0; row < gridRows; row++) {
-            for (let col = 0; col < gridCols; col++) {
-                const x = centeredX + col * slotSize;
-                const y = gridStartY + row * slotSize;
-
-                const slot = this.add.rectangle(x, y, slotSize, slotSize, 0x222222)
-                    .setStrokeStyle(borderWidth, 0x888888)
-                    .setOrigin(0, 0)
-                    .setAlpha(0.9)
-                    .setInteractive();
-
-                slot.index = row * gridCols + col;
-                slot.type = 'inventory';
-
-                slot.on('pointerover', () => {
-                    slot.setStrokeStyle(2, 0xffffaa);
-                });
-                slot.on('pointerout', () => {
-                    if (!slot.isSelected) {
-                        slot.setStrokeStyle(borderWidth, 0x888888);
-                    }
-                });
-
-                this.inventoryPanel.add(slot);
-                this.inventorySlots.push(slot);
+                const slot = { rect, icon: null, countText: null, area: 'grid', index: r * cols + c };
+                this.uiGridSlots.push(slot);
             }
         }
 
-        this.input.keyboard.on('keydown-TAB', (event) => {
-            event.preventDefault();
+        // Wire interactions (drag logic uses model ops)
+        this.#wireSlotInput([...this.uiHotbarSlots, ...this.uiGridSlots]);
+
+        // Toggle TAB
+        this.input.keyboard.on('keydown-TAB', (e) => {
+            e.preventDefault();
             this.toggleInventory();
         });
 
-        this.makeSlotsDraggable([...this.inventoryHotbar, ...this.inventorySlots]);
+        // Scroll wheel (when panel visible)
+        this.input.on('wheel', (_p, _objs, _dx, dy) => {
+            if (!this.inventoryPanel.visible || !this.hoveredSlot) return;
+            const up = dy < 0, down = dy > 0;
+            const slot = this.hoveredSlot;
 
-        this.addItemToSlot(this.inventorySlots[0], 'slingshot_rock', 7);
-        this.addItemToSlot(this.inventoryHotbar[0], 'slingshot', 0);
+            if (up) {
+                // place 1 from carried into hovered
+                if (!this.dragCarry) return;
+                const one = { id: this.dragCarry.id, count: 1 };
+                const res = this.inventory.place(slot.area, slot.index, one, 1);
+                if (!res.leftover) {
+                    this.dragCarry.count -= 1;
+                    if (this.dragCarry.count <= 0) this.#clearCarry();
+                    else this.#updateCarryVisual();
+                }
+            } else if (down) {
+                if (!this.dragCarry) {
+                    // pick up 1 into carry
+                    const got = this.inventory.split(slot.area, slot.index, 1);
+                    if (got) { this.dragCarry = got; this.#updateCarryVisual(); }
+                } else {
+                    // if same type in slot, siphon 1 more into carry
+                    const arr = slot.area === 'hotbar' ? this.inventory.hotbar : this.inventory.grid;
+                    const s = arr[slot.index];
+                    if (s && s.id === this.dragCarry.id) {
+                        const got = this.inventory.split(slot.area, slot.index, 1);
+                        if (got) {
+                            this.dragCarry.count += got.count;
+                            this.#updateCarryVisual();
+                        }
+                    }
+                }
+            }
+        });
 
+        // Seed demo items (optional)
+        this.inventory.addItem('slingshot_rock', 7);
+        this.inventory.hotbar[0] = { id: 'slingshot', count: 1 };
+        this.events.emit('inv:changed');
+
+        // React to model changes -> refresh visuals
+        this.events.on('inv:slotChanged', ({ area, index }) => this.#redrawSlot(area, index));
+        this.events.on('inv:changed', () => this.#refreshAllIcons());
+
+        // Day/Night mini HUD
+        this.dayNightLabel = this.add.text(this.cameras.main.centerX, 12, 'Day 1 — Daytime', {
+            fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace'
+        }).setOrigin(0.5, 0);
+
+        const barW = 200, barH = 6;
+        this.timeBarBg = this.add.rectangle(this.cameras.main.centerX, 30, barW, barH, 0x000000)
+            .setOrigin(0.5, 0.5).setAlpha(0.4);
+        this.timeBarFill = this.add.rectangle(this.cameras.main.centerX - barW / 2, 30, 0, barH, 0xffff66)
+            .setOrigin(0, 0.5).setAlpha(0.9);
+
+        // Initial paint
+        this.#refreshAllIcons();
     }
 
+    // -------------------------
+    // Health
+    // -------------------------
     updateHealth(amount) {
         if (typeof amount === 'number') {
             this.playerData.health = Phaser.Math.Clamp(amount, 0, 100);
         }
-
-        const health = this.playerData.health ?? 0;
-        const percent = health / 100;
-        const newWidth = this.healthBarWidth * percent;
-        this.healthBarFill.width = newWidth;
-
-        this.healthText.setText(`${health}`);
+        const hp = this.playerData.health ?? 0;
+        const pct = hp / 100;
+        this.healthBarFill.width = this.healthBarWidth * pct;
+        this.healthText.setText(`${hp}`);
         this.healthText.setVisible(true);
         this.healthText.setPosition(this.healthBarX + 4, this.healthBarY + 4);
     }
 
-    selectHotbarSlot(index) {
-        if (index < 0 || index >= this.hotbarSlots.length) return;
-        this.selectedSlotIndex = index;
-        this.highlightHotbarSlot(index);
+    // -------------------------
+    // Inventory panel
+    // -------------------------
+    toggleInventory() {
+        const visible = this.inventoryPanel.visible;
+        this.inventoryPanel.setVisible(!visible);
+        if (!visible) this.#refreshAllIcons();
     }
 
-    highlightHotbarSlot(index) {
-        this.hotbarSlots.forEach((slot, i) => {
-            if (i === index) slot.setStrokeStyle(3, 0xffff00);
-            else slot.setStrokeStyle(2, 0xffffff);
+    setInventoryAlpha(v) {
+        if (!this.inventoryPanel) return;
+        this.inventoryPanel.iterate((child) => child.setAlpha && child.setAlpha(v));
+    }
+
+    // -------------------------
+    // Input wiring for panel slots
+    // -------------------------
+    #wireSlotInput(slots) {
+        slots.forEach((s) => {
+            // Hover tracking for wheel
+            s.rect.on('pointerover', () => { this.hoveredSlot = { area: s.area, index: s.index }; });
+            s.rect.on('pointerout', () => { if (this.hoveredSlot?.area === s.area && this.hoveredSlot?.index === s.index) this.hoveredSlot = null; });
+
+            s.rect.on('pointerdown', (pointer) => {
+                if (!this.inventoryPanel.visible) return;
+
+                const isLeft = pointer.leftButtonDown();
+                const isRight = pointer.rightButtonDown();
+
+                if (isLeft) {
+                    // LEFT: full pick/place (with swap)
+                    if (!this.dragCarry) {
+                        const got = this.inventory.takeAll(s.area, s.index);
+                        if (got) { this.dragCarry = got; this.#updateCarryVisual(); }
+                    } else {
+                        const res = this.inventory.place(s.area, s.index, { id: this.dragCarry.id, count: this.dragCarry.count }, this.dragCarry.count);
+                        if (res.swapped) {
+                            this.dragCarry = res.swapped;
+                            this.#updateCarryVisual();
+                        } else if (res.leftover) {
+                            this.dragCarry = res.leftover;
+                            this.#updateCarryVisual();
+                        } else {
+                            this.#clearCarry();
+                        }
+                    }
+                }
+
+                if (isRight) {
+                    // RIGHT: half logic
+                    if (!this.dragCarry) {
+                        const got = this.inventory.split(s.area, s.index); // half
+                        if (got) { this.dragCarry = got; this.#updateCarryVisual(); }
+                    } else {
+                        // place half of carry if empty or same id; if different id, swap full
+                        const amount = Math.max(1, Math.floor(this.dragCarry.count / 2));
+                        const arr = s.area === 'hotbar' ? this.inventory.hotbar : this.inventory.grid;
+                        const dest = arr[s.index];
+                        if (dest && dest.id !== this.dragCarry.id) {
+                            // swap full on right-click if different item
+                            const res = this.inventory.place(s.area, s.index, { id: this.dragCarry.id, count: this.dragCarry.count }, this.dragCarry.count);
+                            if (res.swapped) {
+                                this.dragCarry = res.swapped;
+                                this.#updateCarryVisual();
+                            } else {
+                                // nothing placed; keep carrying
+                                this.#updateCarryVisual();
+                            }
+                        } else {
+                            const res = this.inventory.place(s.area, s.index, { id: this.dragCarry.id, count: amount }, amount);
+                            if (!res.leftover) {
+                                this.dragCarry.count -= amount;
+                                if (this.dragCarry.count <= 0) this.#clearCarry();
+                                else this.#updateCarryVisual();
+                            } else {
+                                // couldn't place, keep carrying
+                                this.#updateCarryVisual();
+                            }
+                        }
+                    }
+                }
+            });
         });
     }
 
-    toggleInventory() {
-        const showing = this.inventoryPanel.visible;
-        this.inventoryPanel.setVisible(!showing);
+    // -------------------------
+    // Visual refresh
+    // -------------------------
+    #refreshAllIcons() {
+        // Panel hotbar
+        for (let i = 0; i < this.uiHotbarSlots.length; i++) this.#redrawSlot('hotbar', i);
+        // Panel grid
+        for (let i = 0; i < this.uiGridSlots.length; i++) this.#redrawSlot('grid', i);
+        // Bottom HUD
+        this.#updateBottomHotbar();
     }
 
-    updateSlotVisuals(slot) {
-        if (slot.icon) slot.icon.destroy();
-        if (slot.countText) slot.countText.destroy();
+    #redrawSlot(area, index) {
+        const slot = area === 'hotbar' ? this.uiHotbarSlots[index] : this.uiGridSlots[index];
+        if (!slot) return;
 
-        if (!slot.item) return;
+        if (slot.icon) { slot.icon.destroy(); slot.icon = null; }
+        if (slot.countText) { slot.countText.destroy(); slot.countText = null; }
 
-        const slotSize = 48;
-        slot.icon = this.add.image(
-            slot.x + slotSize / 2,
-            slot.y + slotSize / 2,
-            slot.item.textureKey
-        ).setScale(0.5).setDepth(10);
+        const arr = area === 'hotbar' ? this.inventory.hotbar : this.inventory.grid;
+        const s = arr[index];
+        if (!s) return;
+
+        slot.icon = this.add.image(slot.rect.x + this.slotSize / 2, slot.rect.y + this.slotSize / 2, s.id).setDepth(10);
+        this.#fitIconToSlot(slot.icon);
+
+        let label = `${s.count}`;
+        const def = ITEM_DB?.[s.id];
+        const showWeaponAmmo = def?.showCountOnIcon === true && def?.weapon?.usesAmmo === true;
+        if (showWeaponAmmo) {
+            const { total } = this.inventory.totalOfActiveAmmo(s.id);
+            label = `${total}`;
+        }
 
         slot.countText = this.add.text(
-            slot.x + slotSize - 16,
-            slot.y + slotSize - 16,
-            `${slot.item.count}`,
-            {
-                fontSize: '12px',
-                fill: '#ffffff',
-                fontFamily: 'monospace'
-            }
+            slot.rect.x + this.slotSize - 16, slot.rect.y + this.slotSize - 16, label,
+            { fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace' }
         ).setDepth(11);
 
         this.inventoryPanel.add(slot.icon);
         this.inventoryPanel.add(slot.countText);
     }
 
-    makeSlotsDraggable(slots) {
-        this.input.setTopOnly(true);
+    #updateBottomHotbar() {
+        for (let i = 0; i < this.bottomHotbarVisuals.length; i++) {
+            const vis = this.bottomHotbarVisuals[i];
+            const s = this.inventory.hotbar[i];
 
-        slots.forEach((slot) => {
-            slot.setInteractive();
+            if (s) {
+                vis.icon.setTexture(s.id);
+                vis.icon.setVisible(true);
+                this.#fitIconToSlot(vis.icon);
 
-            slot.on('pointerdown', (pointer) => {
-                if (!this.inventoryPanel.visible) return;
-
-                const isLeft = pointer.leftButtonDown();
-                const isRight = pointer.rightButtonDown();
-
-                // LEFT CLICK = Pick up or place full stack
-                if (isLeft) {
-                    if (!this.draggingItem) {
-                        if (!slot.item) return;
-                        this.draggingItem = { ...slot.item };
-                        slot.item = null;
-                    } else {
-                        if (!slot.item) {
-                            slot.item = { ...this.draggingItem };
-                            this.draggingItem = null;
-                        } else if (slot.item.textureKey === this.draggingItem.textureKey) {
-                            slot.item.count += this.draggingItem.count;
-                            this.draggingItem = null;
-                        } else {
-                            const temp = slot.item;
-                            slot.item = this.draggingItem;
-                            this.draggingItem = temp;
-                        }
-                    }
-                    this.updateSlotVisuals(slot);
-                    if (slot.type === 'hotbar') {
-                        this.updateBottomHotbarDisplay();}
-
-                    this.updateDraggingVisual(pointer);
+                const def = ITEM_DB?.[s.id];
+                const show = def?.showCountOnIcon === true && def?.weapon?.usesAmmo === true;
+                if (show) {
+                    const { total } = this.inventory.totalOfActiveAmmo(s.id);
+                    vis.countText.setText(`${total}`);
+                } else {
+                    vis.countText.setText(`${s.count}`);
                 }
-
-                // RIGHT CLICK = Pick up/place half stack
-                if (isRight) {
-                    if (!this.draggingItem) {
-                        if (!slot.item || slot.item.count < 2) return;
-                        const half = Math.floor(slot.item.count / 2);
-                        this.draggingItem = {
-                            textureKey: slot.item.textureKey,
-                            count: half
-                        };
-                        slot.item.count -= half;
-                        if (slot.item.count <= 0) slot.item = null;
-                        this.updateSlotVisuals(slot);
-                        if (slot.type === 'hotbar') {
-                            this.updateBottomHotbarDisplay();}
-
-                        this.updateDraggingVisual(pointer);
-                    } else {
-                        if (!slot.item) {
-                            const half = Math.floor(this.draggingItem.count / 2);
-                            slot.item = {
-                                textureKey: this.draggingItem.textureKey,
-                                count: half
-                            };
-                            this.draggingItem.count -= half;
-                        } else if (slot.item.textureKey === this.draggingItem.textureKey) {
-                            const half = Math.floor(this.draggingItem.count / 2);
-                            slot.item.count += half;
-                            this.draggingItem.count -= half;
-                        } else {
-                            const temp = slot.item;
-                            slot.item = this.draggingItem;
-                            this.draggingItem = temp;
-                        }
-
-                        if (this.draggingItem?.count <= 0) {
-                            this.destroyDraggingVisual();
-                            this.draggingItem = null;
-                        }
-
-                        this.updateSlotVisuals(slot);
-                        if (slot.type === 'hotbar') {
-                            this.updateBottomHotbarDisplay();}
-
-
-                        this.updateDraggingVisual(pointer);
-                    }
-                }
-            });
-
-            slot.on('pointerover', () => {
-                this.hoveredSlot = slot;
-            });
-            slot.on('pointerout', () => {
-                if (this.hoveredSlot === slot) this.hoveredSlot = null;
-            });
-        });
-
-        // SCROLL WHEEL: pick up (up), place (down) if inventory is open
-        this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY) => {
-            if (!this.inventoryPanel.visible || !this.hoveredSlot) return;
-            const slot = this.hoveredSlot;
-
-            const scrollingUp = deltaY < 0;
-            const scrollingDown = deltaY > 0;
-
-            if (scrollingUp) {
-                // PLACE 1 item
-                if (!this.draggingItem) return;
-
-                if (!slot.item) {
-                    slot.item = {
-                        textureKey: this.draggingItem.textureKey,
-                        count: 1
-                    };
-                    this.draggingItem.count -= 1;
-                } else if (slot.item.textureKey === this.draggingItem.textureKey) {
-                    slot.item.count += 1;
-                    this.draggingItem.count -= 1;
-                }
-
-                if (this.draggingItem.count <= 0) {
-                    this.destroyDraggingVisual();
-                    this.draggingItem = null;
-                }
-
-                this.updateSlotVisuals(slot);
-                if (slot.type === 'hotbar') {
-                    this.updateBottomHotbarDisplay();}
-
-                this.updateDraggingVisual(pointer);
+                vis.countText.setVisible(true);
+            } else {
+                vis.icon.setVisible(false);
+                vis.countText.setVisible(false);
             }
+        }
 
-            if (scrollingDown) {
-                // Pick up 1 item if not holding anything and slot has an item
-                if (!this.draggingItem && slot.item) {
-                    this.draggingItem = {
-                        textureKey: slot.item.textureKey,
-                        count: 1
-                    };
-                    slot.item.count -= 1;
-                    if (slot.item.count <= 0) slot.item = null;
+        // highlight ring
+        this.#highlightBottomHotbar(this.inventory.selectedHotbarIndex);
+    }
 
-                    this.updateSlotVisuals(slot);
-                    if (slot.type === 'hotbar') {
-                        this.updateBottomHotbarDisplay();}
-
-
-                    this.updateDraggingVisual(pointer);
-                }
-                // Add 1 item to stack if holding the same type
-                else if (
-                    this.draggingItem &&
-                    slot.item &&
-                    slot.item.textureKey === this.draggingItem.textureKey
-                ) {
-                    this.draggingItem.count += 1;
-                    slot.item.count -= 1;
-                    if (slot.item.count <= 0) slot.item = null;
-
-                    this.updateSlotVisuals(slot);
-                    if (slot.type === 'hotbar') {
-                        this.updateBottomHotbarDisplay();}
-
-                    this.updateDraggingVisual(pointer);
-                }
+    #highlightBottomHotbar(index) {
+        // Non‑selected = white border; Selected = yellow border
+        this.bottomHotbarRects.forEach((r, i) => {
+            if (i === index) {
+                r.setStrokeStyle(3, 0xffff00); // selected = yellow, thicker
+            } else {
+                r.setStrokeStyle(2, 0xffffff); // others = white, normal
             }
         });
     }
 
-    updateDraggingVisual() {
-        if (!this.draggingItem) {
-            this.destroyDraggingVisual();
-            return;
-        }
 
-        if (!this.draggingIcon) {
-            this.draggingIcon = this.add.image(0, 0, this.draggingItem.textureKey)
-                .setScale(0.5)
-                .setDepth(1000);
-        } else {
-            this.draggingIcon.setTexture(this.draggingItem.textureKey);
-        }
-
-        if (!this.draggingIconCount) {
-            this.draggingIconCount = this.add.text(
-                0, 0,
-                `${this.draggingItem.count}`,
-                {
-                    fontSize: '12px',
-                    fill: '#ffffff',
-                    fontFamily: 'monospace'
-                }
-            ).setDepth(1001);
-        } else {
-            this.draggingIconCount.setText(`${this.draggingItem.count}`);
-        }
-
-        this.updateBottomHotbarDisplay();
+    #fitIconToSlot(img) {
+        if (!img.texture || !img.texture.key) return;
+        const src = img.texture.getSourceImage?.();
+        if (!src || !src.width || !src.height) { img.setScale(0.5); return; }
+        const pad = 6;
+        const maxW = this.slotSize - pad;
+        const maxH = this.slotSize - pad;
+        const s = Math.min(maxW / src.width, maxH / src.height);
+        img.setScale(s);
     }
 
-    destroyDraggingVisual() {
-        if (this.draggingIcon) {
-            this.draggingIcon.destroy();
-            this.draggingIcon = null;
+    // -------------------------
+    // Carry (drag) visuals
+    // -------------------------
+    #updateCarryVisual() {
+        if (!this.dragCarry) { this.#clearCarry(); return; }
+
+        // Icon
+        if (!this.dragIcon) {
+            this.dragIcon = this.add.image(0, 0, this.dragCarry.id).setDepth(1000);
+        } else {
+            this.dragIcon.setTexture(this.dragCarry.id);
         }
-        if (this.draggingIconCount) {
-            this.draggingIconCount.destroy();
-            this.draggingIconCount = null;
+        this.#fitIconToSlot(this.dragIcon);
+
+        // Decide which number to show:
+        // - For weapons that display ammo, show total usable ammo
+        // - Otherwise, show the carried stack count (normal items)
+        const def = ITEM_DB?.[this.dragCarry.id];
+        let labelText = `${this.dragCarry.count}`;
+        const isWeaponShowingAmmo = def?.showCountOnIcon === true && def?.weapon?.usesAmmo === true;
+
+        if (isWeaponShowingAmmo) {
+            const { total } = this.inventory.totalOfActiveAmmo(this.dragCarry.id);
+            labelText = `${total}`;
         }
 
-        this.updateBottomHotbarDisplay();
+        // Count text
+        if (!this.dragText) {
+            this.dragText = this.add.text(0, 0, labelText, {
+                fontSize: '12px',
+                fill: '#ffffff',
+                fontFamily: 'monospace'
+            }).setDepth(1001);
+        } else {
+            this.dragText.setText(labelText);
+        }
+    }
+
+    #clearCarry() {
+        this.dragCarry = null;
+        if (this.dragIcon) { this.dragIcon.destroy(); this.dragIcon = null; }
+        if (this.dragText) { this.dragText.destroy(); this.dragText = null; }
     }
 
     update() {
-        if (this.draggingIcon && this.input.activePointer) {
-            const pointer = this.input.activePointer;
-            this.draggingIcon.setPosition(pointer.worldX, pointer.worldY);
-            if (this.draggingIconCount) {
-                this.draggingIconCount.setPosition(pointer.worldX + 12, pointer.worldY + 12);
-            }
+        if (this.dragIcon && this.input.activePointer) {
+            const p = this.input.activePointer;
+            this.dragIcon.setPosition(p.worldX, p.worldY);
+            if (this.dragText) this.dragText.setPosition(p.worldX + 12, p.worldY + 12);
         }
     }
 
-    setInventoryAlpha(value) {
-        if (!this.inventoryPanel) return;
-
-        this.inventoryPanel.iterate((child) => {
-            if (child.setAlpha) {
-                child.setAlpha(value);
-            }
-        });
-    }
-
-    
-
-    addItemToSlot(slot, textureKey, count) {
-        slot.item = { textureKey, count };
-        this.updateSlotVisuals(slot);
-        if (slot.type === 'hotbar') {
-            this.updateBottomHotbarDisplay();}
-    }
-
-
-    updateBottomHotbarDisplay() {
-        for (let i = 0; i < this.hotbarVisuals.length; i++) {
-            const visual = this.hotbarVisuals[i];
-            const slot = this.inventoryHotbar[i];
-
-            if (slot.item) {
-                visual.icon.setTexture(slot.item.textureKey);
-                visual.icon.setVisible(true);
-
-                visual.countText.setText(`${slot.item.count}`);
-                visual.countText.setVisible(true);
-            } else {
-                visual.icon.setVisible(false);
-                visual.countText.setVisible(false);
-            }
-        }
-    }
-
-    getEquippedItem() {
-        return this.inventoryHotbar[this.selectedSlotIndex]?.item || null;
-    }
-
-    addItemToFirstAvailableSlot(textureKey, count = 1) {
-        const tryAddToSlot = (slot) => {
-            if (!slot.item) {
-                slot.item = { textureKey, count };
-                this.updateSlotVisuals(slot);
-                if (slot.type === 'hotbar') this.updateBottomHotbarDisplay();
-                return true;
-            } else if (slot.item.textureKey === textureKey) {
-                slot.item.count += count;
-                this.updateSlotVisuals(slot);
-                if (slot.type === 'hotbar') this.updateBottomHotbarDisplay();
-                return true;
-            }
-            return false;
-        };
-
-        for (let slot of this.inventorySlots) {
-            if (tryAddToSlot(slot)) return true;
-        }
-        for (let slot of this.inventoryHotbar) {
-            if (tryAddToSlot(slot)) return true;
-        }
-        return false;
-    }
-
-    consumeAmmo(textureKey) {
-        const tryRemoveFromSlot = (slot) => {
-            if (slot.item && slot.item.textureKey === textureKey) {
-                slot.item.count -= 1;
-                if (slot.item.count <= 0) slot.item = null;
-                this.updateSlotVisuals(slot);
-                if (slot.type === 'hotbar') this.updateBottomHotbarDisplay();
-                return true;
-            }
-            return false;
-        };
-
-        for (let slot of this.inventorySlots) {
-            if (tryRemoveFromSlot(slot)) return true;
-        }
-        for (let slot of this.inventoryHotbar) {
-            if (tryRemoveFromSlot(slot)) return true;
-        }
-        return false;
-    }
-
-    hasItemInInventory(textureKey) {
-        for (let slot of [...this.inventoryHotbar, ...this.inventorySlots]) {
-            if (slot.item && slot.item.textureKey === textureKey && slot.item.count > 0) {
-                return true;
-            }
-        }
-        return false;
+    // -------------------------
+    // Day/Night HUD update (called by MainScene)
+    // -------------------------
+    updateTimeDisplay(dayIndex, phaseLabel, progress) {
+        if (!this.dayNightLabel || !this.timeBarFill) return;
+        this.dayNightLabel.setText(`Day ${dayIndex} — ${phaseLabel}`);
+        const barW = this.timeBarBg.width;
+        const clamped = Phaser.Math.Clamp(progress, 0, 1);
+        this.timeBarFill.width = Math.max(0, barW * clamped);
+        this.timeBarFill.setFillStyle(phaseLabel === 'Night' ? 0x66aaff : 0xffff66);
     }
 }
