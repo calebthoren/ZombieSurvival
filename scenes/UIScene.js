@@ -6,6 +6,11 @@ import { ITEM_DB } from '../data/itemDatabase.js';
 export default class UIScene extends Phaser.Scene {
     constructor() {
         super({ key: 'UIScene' });
+        // Cache for icon scales (per texture key) to avoid recomputing
+        this._iconScaleCache = new Map();
+        // Debounce guard for bottom hotbar updates
+        this._hotbarRefreshQueued = false;
+        this._hotbarRefreshDelayMs = 16; // one frame-ish
     }
 
     init(data) {
@@ -52,22 +57,20 @@ export default class UIScene extends Phaser.Scene {
         this.slotSize = INVENTORY_CONFIG.slotSize ?? 44;
 
         this.bottomHotbarRects = [];
-        this.bottomHotbarVisuals = []; // {icon, countText}
+        this.bottomHotbarVisuals = []; // [{icon, countText}]
         this.selectedSlotIndex = 0;
 
         for (let i = 0; i < INVENTORY_CONFIG.hotbarCount; i++) {
             const x = screenW / 2 - ((this.slotSize + spacing) * 2) + i * (this.slotSize + spacing);
             const rect = this.add.rectangle(
                 x, screenH - 60, this.slotSize, this.slotSize, 0x333333
-            ).setStrokeStyle(2, 0xffffff).setAlpha(0.65).setOrigin(0, 0);
+            ).setStrokeStyle(2, 0xffffff).setAlpha(INVENTORY_CONFIG.slotAlpha).setOrigin(0, 0);
             this.bottomHotbarRects.push(rect);
 
             const numText = this.add.text(
-                x - this.slotSize / 2 + 4,
-                screenH - 60 - 20,
-                `${i + 1}`,
-                { fontSize: '10px', fill: '#ffffff', fontFamily: 'monospace' }
-            ).setAlpha(0.65);
+                rect.x + 4, rect.y + 2, `${i + 1}`,
+                { fontSize: '8px', fill: '#ffffff', fontFamily: 'monospace' }
+            ).setAlpha(INVENTORY_CONFIG.slotAlpha).setDepth(11);
 
             const icon = this.add.image(
                 rect.x + this.slotSize / 2, rect.y + this.slotSize / 2, ''
@@ -78,7 +81,7 @@ export default class UIScene extends Phaser.Scene {
                 { fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace' }
             ).setVisible(false).setDepth(11);
 
-            this.bottomHotbarVisuals.push({ icon, countText });
+            this.bottomHotbarVisuals.push({ icon, countText, numText });
         }
         this.#highlightBottomHotbar(0);
 
@@ -89,7 +92,8 @@ export default class UIScene extends Phaser.Scene {
                 this.selectedSlotIndex = key - 1;
                 this.inventory.setSelectedHotbarIndex(this.selectedSlotIndex);
                 this.#highlightBottomHotbar(this.selectedSlotIndex);
-                this.#refreshAllIcons();
+                // Only the highlight + bottom HUD needs change; slot panels unchanged
+                this.#queueBottomHotbarRefresh();
             }
         });
 
@@ -103,23 +107,28 @@ export default class UIScene extends Phaser.Scene {
         const panelX = 50;
         const panelY = 100;
 
+        // Panel background (uses config alpha)
         const panelBg = this.add.rectangle(panelX, panelY, panelW, panelH, 0x444444)
             .setOrigin(0, 0)
-            .setStrokeStyle(2, 0xffffff);
+            .setStrokeStyle(2, 0xffffff)
+            .setAlpha(INVENTORY_CONFIG.panelAlpha);
         this.inventoryPanel.add(panelBg);
+        this.panelBg = panelBg;
 
-        // Visual dividers (purely cosmetic)
+        // Visual dividers (cosmetic)
         const third = panelW / 3;
         const d1x = panelX + third, d2x = panelX + 2 * third;
-        const divider1 = this.add.line(0, 0, d1x, panelY, d1x, panelY + panelH, 0xffffff).setLineWidth(2).setAlpha(0.6).setOrigin(0);
-        const divider2 = this.add.line(0, 0, d2x, panelY, d2x, panelY + panelH, 0xffffff).setLineWidth(2).setAlpha(0.6).setOrigin(0);
+        const divider1 = this.add.line(0, 0, d1x, panelY, d1x, panelY + panelH, 0xffffff)
+            .setLineWidth(2).setAlpha(INVENTORY_CONFIG.slotAlpha).setOrigin(0);
+        const divider2 = this.add.line(0, 0, d2x, panelY, d2x, panelY + panelH, 0xffffff)
+            .setLineWidth(2).setAlpha(INVENTORY_CONFIG.slotAlpha).setOrigin(0);
         this.inventoryPanel.add(divider1);
         this.inventoryPanel.add(divider2);
 
         // Left segment — top hotbar row + grid
         const segW = panelW / 3;
         const segX = panelX - 12;
-               const segY = panelY + 20;
+        const segY = panelY + 20;
 
         const cols = INVENTORY_CONFIG.gridCols;
         const rows = INVENTORY_CONFIG.gridRows;
@@ -137,10 +146,22 @@ export default class UIScene extends Phaser.Scene {
         for (let i = 0; i < cols; i++) {
             const x = centeredX + i * this.slotSize;
             const rect = this.add.rectangle(x, hotbarY, this.slotSize, this.slotSize, 0x333333)
-                .setStrokeStyle(border, 0xffffff).setOrigin(0, 0).setAlpha(0.9).setInteractive();
+                .setStrokeStyle(border, 0xffffff).setOrigin(0, 0).setAlpha(INVENTORY_CONFIG.slotAlpha).setInteractive();
             this.inventoryPanel.add(rect);
 
-            const slot = { rect, icon: null, countText: null, area: 'hotbar', index: i };
+            // POOLED ICON & COUNT: create once, reuse
+            const icon = this.add.image(
+                rect.x + this.slotSize / 2, rect.y + this.slotSize / 2, ''
+            ).setVisible(false).setDepth(10);
+            const countText = this.add.text(
+                rect.x + this.slotSize - 16, rect.y + this.slotSize - 16, '',
+                { fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace' }
+            ).setVisible(false).setDepth(11);
+
+            this.inventoryPanel.add(icon);
+            this.inventoryPanel.add(countText);
+
+            const slot = { rect, icon, countText, area: 'hotbar', index: i };
             this.uiHotbarSlots.push(slot);
         }
 
@@ -150,13 +171,25 @@ export default class UIScene extends Phaser.Scene {
                 const x = centeredX + c * this.slotSize;
                 const y = gridStartY + r * this.slotSize;
                 const rect = this.add.rectangle(x, y, this.slotSize, this.slotSize, 0x222222)
-                    .setStrokeStyle(border, 0x888888).setOrigin(0, 0).setAlpha(0.9).setInteractive();
+                    .setStrokeStyle(border, 0x888888).setOrigin(0, 0).setAlpha(INVENTORY_CONFIG.slotAlpha).setInteractive();
                 this.inventoryPanel.add(rect);
 
                 rect.on('pointerover', () => { this.hoveredSlot = { area: 'grid', index: r * cols + c }; });
                 rect.on('pointerout', () => { if (this.hoveredSlot?.area === 'grid' && this.hoveredSlot?.index === r * cols + c) this.hoveredSlot = null; });
 
-                const slot = { rect, icon: null, countText: null, area: 'grid', index: r * cols + c };
+                // POOLED ICON & COUNT: create once, reuse
+                const icon = this.add.image(
+                    rect.x + this.slotSize / 2, rect.y + this.slotSize / 2, ''
+                ).setVisible(false).setDepth(10);
+                const countText = this.add.text(
+                    rect.x + this.slotSize - 16, rect.y + this.slotSize - 16, '',
+                    { fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace' }
+                ).setVisible(false).setDepth(11);
+
+                this.inventoryPanel.add(icon);
+                this.inventoryPanel.add(countText);
+
+                const slot = { rect, icon, countText, area: 'grid', index: r * cols + c };
                 this.uiGridSlots.push(slot);
             }
         }
@@ -172,48 +205,75 @@ export default class UIScene extends Phaser.Scene {
 
         // Scroll wheel (when panel visible)
         this.input.on('wheel', (_p, _objs, _dx, dy) => {
-            if (!this.inventoryPanel.visible || !this.hoveredSlot) return;
             const up = dy < 0, down = dy > 0;
-            const slot = this.hoveredSlot;
 
-            if (up) {
-                // place 1 from carried into hovered
-                if (!this.dragCarry) return;
-                const one = { id: this.dragCarry.id, count: 1 };
-                const res = this.inventory.place(slot.area, slot.index, one, 1);
-                if (!res.leftover) {
-                    this.dragCarry.count -= 1;
-                    if (this.dragCarry.count <= 0) this.#clearCarry();
-                    else this.#updateCarryVisual();
-                }
-            } else if (down) {
-                if (!this.dragCarry) {
-                    // pick up 1 into carry
-                    const got = this.inventory.split(slot.area, slot.index, 1);
-                    if (got) { this.dragCarry = got; this.#updateCarryVisual(); }
-                } else {
-                    // if same type in slot, siphon 1 more into carry
-                    const arr = slot.area === 'hotbar' ? this.inventory.hotbar : this.inventory.grid;
-                    const s = arr[slot.index];
-                    if (s && s.id === this.dragCarry.id) {
+            // --- Inventory wheel-transfer when panel is open AND hovering a slot ---
+            if (this.inventoryPanel.visible && this.hoveredSlot) {
+                const slot = this.hoveredSlot;
+
+                if (up) {
+                    // place 1 from carried into hovered
+                    if (!this.dragCarry) return;
+                    const one = { id: this.dragCarry.id, count: 1 };
+                    const res = this.inventory.place(slot.area, slot.index, one, 1);
+                    if (!res.leftover) {
+                        this.dragCarry.count -= 1;
+                        if (this.dragCarry.count <= 0) this.#clearCarry();
+                        else this.#updateCarryVisual();
+                    }
+                } else if (down) {
+                    if (!this.dragCarry) {
+                        // pick up 1 into carry
                         const got = this.inventory.split(slot.area, slot.index, 1);
-                        if (got) {
-                            this.dragCarry.count += got.count;
-                            this.#updateCarryVisual();
+                        if (got) { this.dragCarry = got; this.#updateCarryVisual(); }
+                    } else {
+                        // if same type in slot, siphon 1 more into carry
+                        const arr = slot.area === 'hotbar' ? this.inventory.hotbar : this.inventory.grid;
+                        const s = arr[slot.index];
+                        if (s && s.id === this.dragCarry.id) {
+                            const got = this.inventory.split(slot.area, slot.index, 1);
+                            if (got) {
+                                this.dragCarry.count += got.count;
+                                this.#updateCarryVisual();
+                            }
                         }
                     }
                 }
+                return; // handled inventory case
+            }
+
+            // --- Hotbar scrolling when inventory panel is hidden or not hovering a slot ---
+            if (up || down) {
+                const count = INVENTORY_CONFIG.hotbarCount;
+                let idx = this.inventory.selectedHotbarIndex ?? 0;
+                // Wheel up -> next slot, wheel down -> previous slot
+                idx = (idx + (up ? -1 : 1) + count) % count;
+                this.inventory.setSelectedHotbarIndex(idx); // fires inv:hotbarSelected + inv:changed
+                // UI highlight + bottom hotbar text update via existing event handlers
             }
         });
 
-        // Seed demo items (optional)
+        // Puting items in inventory
         this.inventory.addItem('slingshot_rock', 7);
         this.inventory.hotbar[0] = { id: 'slingshot', count: 1 };
+        this.inventory.hotbar[1] = { id: 'crude_bat', count: 1 };
         this.events.emit('inv:changed');
 
-        // React to model changes -> refresh visuals
-        this.events.on('inv:slotChanged', ({ area, index }) => this.#redrawSlot(area, index));
-        this.events.on('inv:changed', () => this.#refreshAllIcons());
+        // React to model changes
+        this.events.on('inv:slotChanged', ({ area, index }) => {
+            // Update only that slot; then refresh bottom HUD (debounced)
+            this.#redrawSlot(area, index);
+            this.#queueBottomHotbarRefresh();
+        });
+        this.events.on('inv:hotbarSelected', () => {
+            this.#highlightBottomHotbar(this.inventory.selectedHotbarIndex);
+            this.#queueBottomHotbarRefresh();
+        });
+        // Keep a light handler for “bulk” changes (e.g., initial paint or mass ops)
+        this.events.on('inv:changed', () => {
+            if (this.inventoryPanel.visible) this.#refreshAllIcons();
+            this.#queueBottomHotbarRefresh();
+        });
 
         // Day/Night mini HUD
         this.dayNightLabel = this.add.text(this.cameras.main.centerX, 12, 'Day 1 — Daytime', {
@@ -226,8 +286,9 @@ export default class UIScene extends Phaser.Scene {
         this.timeBarFill = this.add.rectangle(this.cameras.main.centerX - barW / 2, 30, 0, barH, 0xffff66)
             .setOrigin(0, 0.5).setAlpha(0.9);
 
-        // Initial paint
+        // Initial paint (panel may start hidden, but we prep visuals)
         this.#refreshAllIcons();
+        this.#queueBottomHotbarRefresh();
     }
 
     // -------------------------
@@ -254,9 +315,15 @@ export default class UIScene extends Phaser.Scene {
         if (!visible) this.#refreshAllIcons();
     }
 
-    setInventoryAlpha(v) {
+    setInventoryAlpha() {
         if (!this.inventoryPanel) return;
-        this.inventoryPanel.iterate((child) => child.setAlpha && child.setAlpha(v));
+        if (this.panelBg && this.panelBg.setAlpha) {
+            this.panelBg.setAlpha(INVENTORY_CONFIG.panelAlpha);
+        }
+        this.inventoryPanel.iterate((child) => {
+            if (!child || child === this.panelBg || !child.setAlpha) return;
+            child.setAlpha(INVENTORY_CONFIG.slotAlpha);
+        });
     }
 
     // -------------------------
@@ -310,7 +377,6 @@ export default class UIScene extends Phaser.Scene {
                                 this.dragCarry = res.swapped;
                                 this.#updateCarryVisual();
                             } else {
-                                // nothing placed; keep carrying
                                 this.#updateCarryVisual();
                             }
                         } else {
@@ -320,7 +386,6 @@ export default class UIScene extends Phaser.Scene {
                                 if (this.dragCarry.count <= 0) this.#clearCarry();
                                 else this.#updateCarryVisual();
                             } else {
-                                // couldn't place, keep carrying
                                 this.#updateCarryVisual();
                             }
                         }
@@ -338,24 +403,30 @@ export default class UIScene extends Phaser.Scene {
         for (let i = 0; i < this.uiHotbarSlots.length; i++) this.#redrawSlot('hotbar', i);
         // Panel grid
         for (let i = 0; i < this.uiGridSlots.length; i++) this.#redrawSlot('grid', i);
-        // Bottom HUD
-        this.#updateBottomHotbar();
     }
 
     #redrawSlot(area, index) {
         const slot = area === 'hotbar' ? this.uiHotbarSlots[index] : this.uiGridSlots[index];
         if (!slot) return;
 
-        if (slot.icon) { slot.icon.destroy(); slot.icon = null; }
-        if (slot.countText) { slot.countText.destroy(); slot.countText = null; }
-
         const arr = area === 'hotbar' ? this.inventory.hotbar : this.inventory.grid;
         const s = arr[index];
-        if (!s) return;
 
-        slot.icon = this.add.image(slot.rect.x + this.slotSize / 2, slot.rect.y + this.slotSize / 2, s.id).setDepth(10);
-        this.#fitIconToSlot(slot.icon);
+        if (!s) {
+            // Hide visuals for empty slot
+            slot.icon.setVisible(false);
+            slot.countText.setVisible(false);
+            return;
+        }
 
+        // Update / show icon
+        if (slot.icon.texture?.key !== s.id) {
+            slot.icon.setTexture(s.id);
+            this.#fitIconToSlot(slot.icon);
+        }
+        if (!slot.icon.visible) slot.icon.setVisible(true);
+
+        // Count label (ammo vs stack count)
         let label = `${s.count}`;
         const def = ITEM_DB?.[s.id];
         const showWeaponAmmo = def?.showCountOnIcon === true && def?.weapon?.usesAmmo === true;
@@ -364,13 +435,17 @@ export default class UIScene extends Phaser.Scene {
             label = `${total}`;
         }
 
-        slot.countText = this.add.text(
-            slot.rect.x + this.slotSize - 16, slot.rect.y + this.slotSize - 16, label,
-            { fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace' }
-        ).setDepth(11);
+        if (slot.countText.text !== label) slot.countText.setText(label);
+        if (!slot.countText.visible) slot.countText.setVisible(true);
+    }
 
-        this.inventoryPanel.add(slot.icon);
-        this.inventoryPanel.add(slot.countText);
+    #queueBottomHotbarRefresh() {
+        if (this._hotbarRefreshQueued) return;
+        this._hotbarRefreshQueued = true;
+        this.time.delayedCall(this._hotbarRefreshDelayMs, () => {
+            this._hotbarRefreshQueued = false;
+            this.#updateBottomHotbar();
+        });
     }
 
     #updateBottomHotbar() {
@@ -379,22 +454,23 @@ export default class UIScene extends Phaser.Scene {
             const s = this.inventory.hotbar[i];
 
             if (s) {
-                vis.icon.setTexture(s.id);
-                vis.icon.setVisible(true);
-                this.#fitIconToSlot(vis.icon);
+                if (vis.icon.texture?.key !== s.id) {
+                    vis.icon.setTexture(s.id);
+                    this.#fitIconToSlot(vis.icon);
+                }
+                if (!vis.icon.visible) vis.icon.setVisible(true);
 
                 const def = ITEM_DB?.[s.id];
                 const show = def?.showCountOnIcon === true && def?.weapon?.usesAmmo === true;
-                if (show) {
-                    const { total } = this.inventory.totalOfActiveAmmo(s.id);
-                    vis.countText.setText(`${total}`);
-                } else {
-                    vis.countText.setText(`${s.count}`);
-                }
-                vis.countText.setVisible(true);
+                const label = show
+                    ? `${this.inventory.totalOfActiveAmmo(s.id).total}`
+                    : `${s.count}`;
+
+                if (vis.countText.text !== label) vis.countText.setText(label);
+                if (!vis.countText.visible) vis.countText.setVisible(true);
             } else {
-                vis.icon.setVisible(false);
-                vis.countText.setVisible(false);
+                if (vis.icon.visible) vis.icon.setVisible(false);
+                if (vis.countText.visible) vis.countText.setVisible(false);
             }
         }
 
@@ -413,15 +489,23 @@ export default class UIScene extends Phaser.Scene {
         });
     }
 
-
     #fitIconToSlot(img) {
-        if (!img.texture || !img.texture.key) return;
+        const key = img.texture?.key;
+        if (!key) { img.setScale(0.5); return; }
+
+        // Use cached scale if available
+        const cached = this._iconScaleCache.get(key);
+        if (cached) { img.setScale(cached); return; }
+
         const src = img.texture.getSourceImage?.();
         if (!src || !src.width || !src.height) { img.setScale(0.5); return; }
+
         const pad = 6;
         const maxW = this.slotSize - pad;
         const maxH = this.slotSize - pad;
         const s = Math.min(maxW / src.width, maxH / src.height);
+
+        this._iconScaleCache.set(key, s);
         img.setScale(s);
     }
 
@@ -434,14 +518,12 @@ export default class UIScene extends Phaser.Scene {
         // Icon
         if (!this.dragIcon) {
             this.dragIcon = this.add.image(0, 0, this.dragCarry.id).setDepth(1000);
-        } else {
+        } else if (this.dragIcon.texture?.key !== this.dragCarry.id) {
             this.dragIcon.setTexture(this.dragCarry.id);
         }
         this.#fitIconToSlot(this.dragIcon);
 
         // Decide which number to show:
-        // - For weapons that display ammo, show total usable ammo
-        // - Otherwise, show the carried stack count (normal items)
         const def = ITEM_DB?.[this.dragCarry.id];
         let labelText = `${this.dragCarry.count}`;
         const isWeaponShowingAmmo = def?.showCountOnIcon === true && def?.weapon?.usesAmmo === true;
@@ -458,7 +540,7 @@ export default class UIScene extends Phaser.Scene {
                 fill: '#ffffff',
                 fontFamily: 'monospace'
             }).setDepth(1001);
-        } else {
+        } else if (this.dragText.text !== labelText) {
             this.dragText.setText(labelText);
         }
     }

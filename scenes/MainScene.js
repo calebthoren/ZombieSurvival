@@ -1,5 +1,7 @@
 // scenes/MainScene.js
 import { WORLD_GEN } from '../data/worldGenConfig.js';
+import { ITEM_DB } from '../data/itemDatabase.js'; // NEW
+
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -12,6 +14,7 @@ export default class MainScene extends Phaser.Scene {
         this.waveNumber = 0;            // increments each night
         this.spawnZombieTimer = null;   // day trickle timer
         this.nightWaveTimer = null;     // night waves timer
+        
     }
 
     preload() {
@@ -22,6 +25,7 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('bullet', 'assets/weapons/bullet.png');
         this.load.image('slingshot', 'assets/weapons/slingshot.png');
         this.load.image('slingshot_rock', 'assets/weapons/slingshot_rock.png');
+        this.load.image('crude_bat', 'assets/weapons/crude_bat.png');
     }
 
     create() {
@@ -48,6 +52,10 @@ export default class MainScene extends Phaser.Scene {
             runChildUpdate: true
         });
 
+        // Melee hit circle pool (short-lived sensors)
+        this.meleeHits = this.physics.add.group();
+
+
         // Shooting
         this.shootListener = this.input.on('pointerdown', this.fireBullet, this);
 
@@ -62,6 +70,8 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.overlap(this.player, this.resources, this.collectResource, null, this);
         this.physics.add.overlap(this.player, this.zombies, this.handlePlayerZombieCollision, null, this);
         this.physics.add.overlap(this.bullets, this.zombies, this.handleBulletHit, null, this);
+        this.physics.add.overlap(this.meleeHits, this.zombies, this.handleMeleeHit, null, this);
+
 
         // Night overlay
         const w = this.sys.game.config.width;
@@ -274,48 +284,135 @@ export default class MainScene extends Phaser.Scene {
     }
 
     // --------------------------
-    // Combat / Shooting (uses InventoryModel via UIScene)
+    // Combat (uses InventoryModel via UIScene)
     // --------------------------
     fireBullet(pointer) {
         if (this.isGameOver) return;
 
         const equipped = this.uiScene?.inventory?.getEquipped();
-        if (!equipped || equipped.id !== 'slingshot') {
-            // No slingshot equipped
+        if (!equipped) return;
+
+        // Route by equipped weapon type from item data
+        const def = ITEM_DB[equipped.id];
+        const cat = def?.weapon?.category;
+
+        if (cat === 'ranged' && equipped.id === 'slingshot') {
+            // ---- SLINGSHOT (existing behavior) ----
+            const { ammoId, total } = this.uiScene.inventory.totalOfActiveAmmo('slingshot');
+            if (!ammoId || total <= 0) return;
+
+            const bullet = this.bullets.get(this.player.x, this.player.y, ammoId);
+            if (bullet) {
+                this.uiScene.inventory.consumeAmmo(ammoId, 1);
+
+                bullet.setActive(true).setVisible(true);
+                bullet.body.allowGravity = false;
+                bullet.setCollideWorldBounds(true);
+                bullet.body.onWorldBounds = true;
+
+                const angle = Phaser.Math.Angle.Between(
+                    this.player.x, this.player.y, pointer.worldX, pointer.worldY
+                );
+                const speed = 400;
+                const velocity = this.physics.velocityFromRotation(angle, speed);
+                bullet.setVelocity(velocity.x, velocity.y);
+                bullet.setRotation(angle);
+                bullet.setSize(8, 8);
+                bullet.setScale(0.4);
+            }
             return;
         }
 
-        // Ask the inventory model which ammo type is active and how much exists
-        const { ammoId, total } = this.uiScene.inventory.totalOfActiveAmmo('slingshot');
-        if (!ammoId || total <= 0) {
-            // No usable ammo
+        if (cat === 'melee' && equipped.id === 'crude_bat') {
+            // ---- MELEE BAT ----
+            this.swingBat(pointer, def.weapon);
             return;
         }
 
-        const bullet = this.bullets.get(this.player.x, this.player.y, ammoId);
-        if (bullet) {
-            // Consume 1 ammo of the active type
-            this.uiScene.inventory.consumeAmmo(ammoId, 1);
+        // Otherwise, no primary action for this item (yet)
+    }
 
-            bullet.setActive(true).setVisible(true);
-            bullet.body.allowGravity = false;
-            bullet.setCollideWorldBounds(true);
-            bullet.body.onWorldBounds = true;
+    swingBat(pointer, wpn) {
+        // Per-weapon tuning
+        const swingDurationMs = wpn?.swingDurationMs ?? 160;
+        const swingCooldownMs = wpn?.swingCooldownMs ?? 280;
+        const range = wpn?.range ?? 30;
+        const radius = wpn?.radius ?? 22;
 
-            const angle = Phaser.Math.Angle.Between(
-                this.player.x,
-                this.player.y,
-                pointer.worldX,
-                pointer.worldY
-            );
+        // Cooldown
+        const now = this.time.now;
+        if (!this.lastSwingTime) this.lastSwingTime = 0;
+        if (now - this.lastSwingTime < swingCooldownMs) return;
+        this.lastSwingTime = now;
 
-            const speed = 400;
-            const velocity = this.physics.velocityFromRotation(angle, speed);
-            bullet.setVelocity(velocity.x, velocity.y);
-            bullet.setRotation(angle);
-            bullet.setSize(8, 8);
-            bullet.setScale(0.4);
+        // Aim at cursor
+        let aim = Phaser.Math.Angle.Between(this.player.x, this.player.y, pointer.worldX, pointer.worldY);
+        aim = Phaser.Math.Angle.Normalize(aim);
+
+        // 90° arc centered on aim
+        const halfArc = Phaser.Math.DegToRad(45);
+        let startRot = Phaser.Math.Angle.Normalize(aim - halfArc);
+        let endRot   = Phaser.Math.Angle.Normalize(aim + halfArc);
+        if (endRot < startRot) endRot += Math.PI * 2; // unwrap
+
+        // Bat sprite
+        if (this.batSprite) this.batSprite.destroy();
+
+        // If the bat art is diagonal, add a base offset so it appears vertical at 0 radians
+        const baseOffset = Phaser.Math.DegToRad(45); // adjust this value until the bat looks vertical
+
+        this.batSprite = this.add.image(this.player.x, this.player.y, 'crude_bat')
+            .setDepth(500)
+            .setOrigin(0.1, 0.8)
+            .setRotation(startRot);
+
+        // Hit circle
+        const hit = this.add.circle(this.player.x, this.player.y, radius, 0xff0000, 0);
+        this.physics.add.existing(hit);
+        hit.body.setAllowGravity(false);
+        if (hit.body.setCircle) {
+            hit.body.setCircle(radius);
+            hit.body.setOffset(-radius, -radius);
         }
+        this.meleeHits.add(hit);
+
+        // Drive swing using a tweened t value for precise control
+        const swing = { t: 0 };
+        const deltaRot = endRot - startRot;
+        this.tweens.add({
+            targets: swing,
+            t: 1,
+            duration: swingDurationMs,
+            ease: 'Sine.InOut',
+            onUpdate: () => {
+                const rot = startRot + swing.t * deltaRot;
+                this.batSprite.setPosition(this.player.x, this.player.y).setRotation(rot + baseOffset);
+
+                const hx = this.player.x + Math.cos(rot) * range;
+                const hy = this.player.y + Math.sin(rot) * range;
+                hit.setPosition(hx, hy);
+            },
+            onComplete: () => {
+                if (this.batSprite) { this.batSprite.destroy(); this.batSprite = null; }
+            }
+        });
+
+        this.time.delayedCall(swingDurationMs, () => {
+            if (hit && hit.destroy) hit.destroy();
+        });
+    }
+
+    handleMeleeHit(hit, zombie) {
+        if (!zombie || !zombie.active) return;
+
+        // Simple i-frames to prevent multi-hits within a single swing overlap
+        const now = this.time.now;
+        if (!zombie.lastMeleeTime) zombie.lastMeleeTime = 0;
+        if (now - zombie.lastMeleeTime < 120) return;
+        zombie.lastMeleeTime = now;
+
+        // TODO: When zombies have HP, subtract itemDB damage instead of destroy
+        zombie.destroy();
     }
 
     handleBulletHit(bullet, zombie) {

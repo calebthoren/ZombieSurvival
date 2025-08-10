@@ -4,9 +4,7 @@
 export const ITEM_IDS = {
   SLINGSHOT: 'slingshot',
   SLINGSHOT_ROCK: 'slingshot_rock',
-  // Future:
-  // STEEL_BALL: 'steel_ball',
-  // WOOD_BAT: 'wood_bat',
+  CRUDE_BAT: 'crude_bat',
 };
 
 export const ITEM_TYPES = {
@@ -24,7 +22,12 @@ export const WEAPON_CATEGORIES = {
 };
 
 export const ITEM_DB = {
-  //slingshot
+
+  //-------------------------------
+  // Weapons
+  //-------------------------------
+
+  //slingshot (ranged)
   [ITEM_IDS.SLINGSHOT]: {
     id: ITEM_IDS.SLINGSHOT,
     name: 'Slingshot',
@@ -61,6 +64,45 @@ export const ITEM_DB = {
     tags: ['weapon', 'ranged', 'slingshot'],
     meta: { rarity: 'common' },
   },
+
+  // crude bat (melee)
+  [ITEM_IDS.CRUDE_BAT]: {
+    id: ITEM_IDS.CRUDE_BAT,
+    name: 'Crude Bat',
+    type: ITEM_TYPES.WEAPON,
+    stackable: false,
+    maxStack: 1,
+
+    // visuals
+    icon:  { textureKey: 'crude_bat', scale: 1.0, ox: 0, oy: 0 },
+    world: { textureKey: 'crude_bat', scale: 1.0 },
+
+    showCountOnIcon: false,
+
+    weapon: {
+      category: WEAPON_CATEGORIES.MELEE,
+      usesAmmo: false,
+      swingDurationMs: 160,
+      swingCooldownMs: 280,
+      range: 30,
+      radius: 22,
+      damage: 25,
+    },
+
+    sounds: {
+      swing: 'sfx_swing_wood',
+      equip: 'sfx_equip',
+    },
+
+    tags: ['weapon', 'melee', 'bat'],
+    meta: { rarity: 'common' },
+  },
+
+
+  //-------------------------------
+  // Ammo
+  //-------------------------------
+
   //slingshot rock
   [ITEM_IDS.SLINGSHOT_ROCK]: {
     id: ITEM_IDS.SLINGSHOT_ROCK,
@@ -86,6 +128,6 @@ export const ITEM_DB = {
 };
 
 export const GROUPS = {
-  weapons: [ITEM_IDS.SLINGSHOT /*, ITEM_IDS.WOOD_BAT */],
-  ammo: [ITEM_IDS.SLINGSHOT_ROCK /*, ITEM_IDS.STEEL_BALL */],
+  weapons: [ITEM_IDS.SLINGSHOT, ITEM_IDS.CRUDE_BAT],
+  ammo: [ITEM_IDS.SLINGSHOT_ROCK ],
 };
