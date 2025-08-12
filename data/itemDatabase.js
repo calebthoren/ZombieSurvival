@@ -88,7 +88,7 @@ export const ITEM_DB = {
     maxStack: 1,
 
     // visuals
-    icon:  { textureKey: 'crude_bat', scale: 1.0, ox: 0, oy: 0 },
+    icon:  { textureKey: 'crude_bat', scale: 1.1, ox: 0, oy: 0 },
     world: { textureKey: 'crude_bat', scale: 1.0 },
 
     showCountOnIcon: false,

@@ -6,20 +6,25 @@ import { ITEM_DB } from '../data/itemDatabase.js'; // NEW
 export default class MainScene extends Phaser.Scene {
     constructor() {
         super('MainScene');
-
         // Day/Night state
-        this.dayIndex = 1;              // starts on Day 1
-        this.phase = 'day';             // 'day' | 'night'
-        this.phaseStartTime = 0;        // ms since scene start
-        this.waveNumber = 0;            // increments each night
-        this.spawnZombieTimer = null;   // day trickle timer
-        this.nightWaveTimer = null;     // night waves timer
+        this.dayIndex = 1;
+        this.phase = 'day';
+        this.phaseStartTime = 0;
+        this.waveNumber = 0;
+        this.spawnZombieTimer = null;
+        this.nightWaveTimer = null;
 
         // Charge state (UI only; keeps your current shooting model)
         this.isCharging = false;
         this.chargeStart = 0;
-        this.chargeMaxMs = 1500; // 1.5s max charge for the UI
-        this.lastCharge = 0;     // 0.1 captured on release to scale range
+        this.chargeMaxMs = 1500;
+        this.lastCharge = 0;
+
+        // Melee swing state
+        this.isSwinging = false;   // true only during tween
+        this.cooldownUntil = 0;    // timestamp (ms) when next swing is allowed
+        this.swingEndAt = 0;       // hard stop time for current swing (watchdog)
+
     }
 
     preload() {
@@ -69,6 +74,11 @@ export default class MainScene extends Phaser.Scene {
         // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
         this.keys = this.input.keyboard.addKeys('W,A,S,D');
+        // Bind SHIFT once (don’t create keys in update)
+        this.shiftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+
+        // Restart key (press SPACE after Game Over)
+        this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
         // Projectile pool (used for slingshot rocks)
         this.bullets = this.physics.add.group({
@@ -469,7 +479,7 @@ export default class MainScene extends Phaser.Scene {
 
     update(time, delta) {
         if (this.isGameOver) {
-            if (Phaser.Input.Keyboard.JustDown(this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE))) {
+            if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
                 this.scene.stop('UIScene');
                 this.scene.restart();
             }
@@ -487,10 +497,10 @@ export default class MainScene extends Phaser.Scene {
         const down = (this.keys.S?.isDown) || (this.cursors.down?.isDown);
         const left = (this.keys.A?.isDown) || (this.cursors.left?.isDown);
         const right = (this.keys.D?.isDown) || (this.cursors.right?.isDown);
-        const shift = this.input.keyboard.checkDown(this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT), 0);
+        const shift = this.shiftKey?.isDown === true;
 
         // Determine sprint state (must have stamina > 0)
-        this._isSprinting = !!shift && this.hasStamina(0.001);
+        this._isSprinting = shift && this.hasStamina(0.001);
 
         let speed = walkSpeed * (this._isSprinting ? sprintMult : 1);
 
@@ -543,6 +553,14 @@ export default class MainScene extends Phaser.Scene {
             const percent = (this.chargeMaxMs > 0) ? (held / this.chargeMaxMs) : 1;
             this.uiScene?.events?.emit('weapon:charge', percent);
         }
+
+        // --- Swing watchdog: if somehow stuck past end time, force cleanup ---
+        if (this.isSwinging && this.time.now > (this.swingEndAt || 0)) {
+            this.isSwinging = false;
+            if (this.batSprite) { this.batSprite.destroy(); this.batSprite = null; }
+            if (this.meleeHits) this.meleeHits.clear(true, true);
+        }
+
         
         /*==== RESOURCE HITBOXES =====
         this.debugGraphics.clear();
@@ -579,20 +597,29 @@ export default class MainScene extends Phaser.Scene {
         const duration = this.getPhaseDuration();
 
         let target = 0;
-        if (this.phase === 'night') {
-            if (elapsed <= transitionMs) {
-                target = Phaser.Math.Linear(0, nightOverlayAlpha, elapsed / transitionMs);
-            } else if (elapsed >= duration - transitionMs) {
-                const t = (elapsed - (duration - transitionMs)) / transitionMs;
-                target = Phaser.Math.Linear(nightOverlayAlpha, 0, t);
+
+        if (this.phase === 'day') {
+            // Fade IN during the last transitionMs of day so it's fully dark at night start
+            if (elapsed >= duration - transitionMs) {
+                const t = (elapsed - (duration - transitionMs)) / Math.max(1, transitionMs);
+                target = Phaser.Math.Linear(0, nightOverlayAlpha, Phaser.Math.Clamp(t, 0, 1));
             } else {
-                target = nightOverlayAlpha;
+                target = 0;
             }
         } else {
-            target = 0;
+            // phase === 'night'
+            // Stay fully dark for most of night; fade OUT during the last transitionMs of night
+            if (elapsed < duration - transitionMs) {
+                target = nightOverlayAlpha;
+            } else {
+                const t = (elapsed - (duration - transitionMs)) / Math.max(1, transitionMs);
+                target = Phaser.Math.Linear(nightOverlayAlpha, 0, Phaser.Math.Clamp(t, 0, 1));
+            }
         }
+
         this.nightOverlay.setAlpha(target);
     }
+
 
     updateTimeUi() {
         if (!this.uiScene) return;
@@ -603,6 +630,14 @@ export default class MainScene extends Phaser.Scene {
         const phaseLabel = this.phase === 'day' ? 'Daytime' : 'Night';
         this.uiScene.updateTimeDisplay(this.dayIndex, phaseLabel, progress);
     }
+
+    _restartGame() {
+        // Guard to avoid double triggers
+        if (!this.isGameOver) return;
+        this.scene.stop('UIScene');
+        this.scene.restart();
+    }
+
 
     // --------------------------
     // Input & Combat
@@ -741,19 +776,18 @@ export default class MainScene extends Phaser.Scene {
 
 
     swingBat(pointer, wpn) {
+        // --- Gates: no reentry while swinging; respect cooldown ---
+        const now = this.time.now;
+        if (this.isSwinging) return;
+        if (now < (this.cooldownUntil || 0)) return;
+
         // Per-weapon tuning
         let swingDurationMs = wpn?.swingDurationMs ?? 160;
         let swingCooldownMs = wpn?.swingCooldownMs ?? 280;
-        const range = wpn?.range ?? 30;
+        const range  = wpn?.range  ?? 30;
         const radius = wpn?.radius ?? 22;
 
-        // Cooldown
-        const now = this.time.now;
-        if (!this.lastSwingTime) this.lastSwingTime = 0;
-        if (now - this.lastSwingTime < swingCooldownMs) return;
-        this.lastSwingTime = now;
-
-        // Stamina handling
+        // Stamina FIRST so penalties are known before commit
         const st = wpn?.stamina;
         let lowStamina = false;
         if (st?.cost != null) {
@@ -761,18 +795,20 @@ export default class MainScene extends Phaser.Scene {
                 this.spendStamina(st.cost);
             } else {
                 lowStamina = true;
-                this.spendStamina(this.stamina); // drain whatever remains to 0
+                this.spendStamina(this.stamina); // drain to 0; triggers regen delay
             }
         }
-
-        // Apply penalties when low on stamina
         if (lowStamina && st) {
             swingDurationMs = Math.floor(swingDurationMs * (st.slowMultiplier || 3));
             swingCooldownMs = Math.floor(swingCooldownMs * (st.cooldownMultiplier || 2));
-            // Damage min will be applied when you add HP/damage systems; for now, visual/tempo penalty only
         }
 
-        // Aim at cursor
+        // Commit: set state and fixed cooldown end time now
+        this.isSwinging = true;
+        this.cooldownUntil = now + swingCooldownMs;
+        this.swingEndAt = now + swingDurationMs + 300; // watchdog margin
+
+        // Aim
         let aim = Phaser.Math.Angle.Between(this.player.x, this.player.y, pointer.worldX, pointer.worldY);
         aim = Phaser.Math.Angle.Normalize(aim);
 
@@ -780,29 +816,32 @@ export default class MainScene extends Phaser.Scene {
         const halfArc = Phaser.Math.DegToRad(45);
         let startRot = Phaser.Math.Angle.Normalize(aim - halfArc);
         let endRot   = Phaser.Math.Angle.Normalize(aim + halfArc);
-        if (endRot < startRot) endRot += Math.PI * 2; // unwrap
+        if (endRot < startRot) endRot += Math.PI * 2;
+
+        // Clean any leftovers (paranoid)
+        if (this.batSprite) { this.batSprite.destroy(); this.batSprite = null; }
+        if (this.meleeHits) this.meleeHits.clear(true, true);
 
         // Bat sprite
-        if (this.batSprite) this.batSprite.destroy();
-
-        const baseOffset = Phaser.Math.DegToRad(45); // keep art offset
-
+        const baseOffset = Phaser.Math.DegToRad(45);
         this.batSprite = this.add.image(this.player.x, this.player.y, 'crude_bat')
             .setDepth(500)
             .setOrigin(0.1, 0.8)
             .setRotation(startRot);
 
-        // Hit circle
+        // Hit circle (pure sensor)
         const hit = this.add.circle(this.player.x, this.player.y, radius, 0xff0000, 0);
         this.physics.add.existing(hit);
         hit.body.setAllowGravity(false);
+        hit.body.setImmovable(true);
+        hit.body.moves = false;
         if (hit.body.setCircle) {
             hit.body.setCircle(radius);
             hit.body.setOffset(-radius, -radius);
         }
         this.meleeHits.add(hit);
 
-        // Drive swing using a tweened t value for precise control
+        // Tweened swing
         const swing = { t: 0 };
         const deltaRot = endRot - startRot;
         this.tweens.add({
@@ -813,18 +852,22 @@ export default class MainScene extends Phaser.Scene {
             onUpdate: () => {
                 const rot = startRot + swing.t * deltaRot;
                 this.batSprite.setPosition(this.player.x, this.player.y).setRotation(rot + baseOffset);
-
                 const hx = this.player.x + Math.cos(rot) * range;
                 const hy = this.player.y + Math.sin(rot) * range;
                 hit.setPosition(hx, hy);
             },
             onComplete: () => {
                 if (this.batSprite) { this.batSprite.destroy(); this.batSprite = null; }
+                if (hit?.body) hit.body.enable = false;
+                if (hit && hit.destroy) hit.destroy();
+                this.isSwinging = false;
             }
         });
 
-        this.time.delayedCall(swingDurationMs, () => {
-            if (hit && hit.destroy) hit.destroy();
+        // Safety cleanup in case tween is interrupted
+        this.time.delayedCall(swingDurationMs + 50, () => {
+            if (hit?.body) hit.body.enable = false;
+            if (hit && !hit.destroyed && hit.destroy) hit.destroy();
         });
     }
 
@@ -888,7 +931,7 @@ export default class MainScene extends Phaser.Scene {
             this.gameOverText = this.add.text(
             this.cameras.main.centerX,
             this.cameras.main.centerY,
-            'Game Over!\nPress SPACE to restart',
+            'Game Over!\nPress SPACE (or R) to restart',
             {
                 fontSize: '32px',
                 fill: '#fff',
@@ -897,9 +940,12 @@ export default class MainScene extends Phaser.Scene {
             }
         )
         .setOrigin(0.5)
-        .setScrollFactor(0)   // <— HUD-style: don’t move with camera
+        .setScrollFactor(0)   // HUD-style: fixed to screen
         .setDepth(2000);
         this.gameOverText.setStroke('#720c0c', 3);
+
+        // One-time restart listeners (space)
+        this.input.keyboard.once('keydown-SPACE', this._restartGame, this);
         }
     }
 
