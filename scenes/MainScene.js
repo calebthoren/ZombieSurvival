@@ -14,18 +14,31 @@ export default class MainScene extends Phaser.Scene {
         this.waveNumber = 0;            // increments each night
         this.spawnZombieTimer = null;   // day trickle timer
         this.nightWaveTimer = null;     // night waves timer
-        
+
+        // Charge state (UI only; keeps your current shooting model)
+        this.isCharging = false;
+        this.chargeStart = 0;
+        this.chargeMaxMs = 1500; // 1.5s max charge for the UI
+        this.lastCharge = 0;     // 0.1 captured on release to scale range
     }
 
     preload() {
-        // NOTE: Using standalone images
+        //player
         this.load.image('player', 'https://labs.phaser.io/assets/sprites/phaser-dude.png');
+        //zombies
         this.load.image('zombie', 'assets/enemies/zombie.png');
-        this.load.image('big_rock_node', 'assets/resources/big_rock_node.png');
+        //weapons and ammo
         this.load.image('bullet', 'assets/weapons/bullet.png');
         this.load.image('slingshot', 'assets/weapons/slingshot.png');
         this.load.image('slingshot_rock', 'assets/weapons/slingshot_rock.png');
         this.load.image('crude_bat', 'assets/weapons/crude_bat.png');
+        //rocks
+        this.load.image('rock2A', 'assets/resources/rocks/rock2A.png');
+        this.load.image('rock2B', 'assets/resources/rocks/rock2B.png');
+        this.load.image('rock2C', 'assets/resources/rocks/rock2C.png');
+        this.load.image('rock2D', 'assets/resources/rocks/rock2D.png');
+        this.load.image('rock2E', 'assets/resources/rocks/rock2E.png');
+
     }
 
     create() {
@@ -33,12 +46,24 @@ export default class MainScene extends Phaser.Scene {
         this.health = 100;
         this.isGameOver = false;
 
+        // Stamina state
+        this.staminaMax = 100;
+        this.stamina = this.staminaMax;
+        this._lastStaminaSpendTime = 0;      // timestamp of last spend (for regen delay)
+        this._staminaRegenDelayMs = 1000;    // 1.0s after last spend
+        this._staminaRegenPerSec = 1;        // +1 / second
+        this._sprintDrainPerSec = 2;         // -2 / second
+        this._isSprinting = false;
+
         // Launch UI and keep a reference
-        this.scene.launch('UIScene', { playerData: { health: this.health, ammo: 0 } });
+        this.scene.launch('UIScene', { playerData: { health: this.health, stamina: 100, ammo: 0 } });
         this.uiScene = this.scene.get('UIScene');
 
+    
         // Player
-        this.player = this.physics.add.sprite(400, 300, 'player').setScale(0.5);
+        this.player = this.physics.add.sprite(400, 300, 'player')
+            .setScale(0.5)
+            .setDepth(900); // always on top
         this.player.setCollideWorldBounds(true);
 
         // Controls
@@ -55,23 +80,40 @@ export default class MainScene extends Phaser.Scene {
         // Melee hit circle pool (short-lived sensors)
         this.meleeHits = this.physics.add.group();
 
-
-        // Shooting
-        this.shootListener = this.input.on('pointerdown', this.fireBullet, this);
+        // Input: use press/hold to charge slingshot, release to fire; tap for bat
+        this.input.on('pointerdown', this.onPointerDown, this);
+        this.input.on('pointerup', this.onPointerUp, this);
 
         // Groups
         this.zombies = this.physics.add.group();
         this.resources = this.physics.add.group();
 
-        // Spawn resources using data config
-        this.spawnResourceNodes();
+        // Spawn resources using data config (reads ALL groups in WORLD_GEN.spawns.resources)
+        this.spawnAllResources();
 
-        // Overlaps
-        this.physics.add.overlap(this.player, this.resources, this.collectResource, null, this);
+        // Debug hitbox graphics (can comment out drawing in update)
+        this.debugGraphics = this.add.graphics().setDepth(1000);
+
+        // Overlaps (no player/resources overlap; pickups are right-click with range)
         this.physics.add.overlap(this.player, this.zombies, this.handlePlayerZombieCollision, null, this);
         this.physics.add.overlap(this.bullets, this.zombies, this.handleBulletHit, null, this);
         this.physics.add.overlap(this.meleeHits, this.zombies, this.handleMeleeHit, null, this);
 
+        // Colliders: resources with bullets (ALL resources stop bullets)
+        this.physics.add.collider(this.bullets, this.resources, (bullet, res) => {
+            if (bullet && bullet.destroy) bullet.destroy(); // stop/destroy bullet on impact
+        }, null, this);
+
+        // Colliders: zombies vs resources (only blocking ones cause separation)
+        if (!this._zombieResourceCollider) {
+            this._zombieResourceCollider = this.physics.add.collider(
+                this.zombies,
+                this.resources,
+                null,
+                (zombie, obj) => !!obj.getData('blocking'),
+                this
+            );
+        }
 
         // Night overlay
         const w = this.sys.game.config.width;
@@ -92,21 +134,246 @@ export default class MainScene extends Phaser.Scene {
             callback: () => this.updateTimeUi(),
         });
     }
-
+    
     // --------------------------
-    // World Gen — Resources
+    // World Gen — Generic resources (reads every group in WORLD_GEN.spawns.resources)
     // --------------------------
-    spawnResourceNodes() {
-        const cfg = WORLD_GEN.spawns.resources.big_rock_node;
-        const count = Phaser.Math.Between(cfg.minCount, cfg.maxCount);
+    spawnAllResources() {
+        const all = WORLD_GEN?.spawns?.resources;
+        if (!all) {
+            console.warn('[spawnAllResources] Missing WORLD_GEN.spawns.resources config.');
+            return;
+        }
 
-        for (let i = 0; i < count; i++) {
-            const x = Phaser.Math.Between(100, this.sys.game.config.width - 100);
-            const y = Phaser.Math.Between(100, this.sys.game.config.height - 100);
-            const rock = this.resources.create(x, y, 'big_rock_node');
-            rock.setScale(1);
+        // Spawn each resource group (e.g., "rocks", "berryBush", etc.)
+        for (const [key, groupCfg] of Object.entries(all)) {
+            this._spawnResourceGroup(key, groupCfg);
+        }
+
+        // Ensure player only collides with blocking resources (set once)
+        if (!this._resourcesCollider) {
+            this._resourcesCollider = this.physics.add.collider(
+                this.player,
+                this.resources,
+                null,
+                (player, obj) => !!obj.getData('blocking'),
+                this
+            );
         }
     }
+
+    // Internal: spawn one resource group by config
+    _spawnResourceGroup(groupKey, groupCfg) {
+        const variants = Array.isArray(groupCfg?.variants) ? groupCfg.variants : null;
+        if (!variants || variants.length === 0) {
+            console.warn(`[spawn] Resource group "${groupKey}" missing variants.`);
+            return;
+        }
+
+        const maxActive   = groupCfg.maxActive ?? Phaser.Math.Between(groupCfg.minCount ?? 8, groupCfg.maxCount ?? 12);
+        const minSpacing  = groupCfg.minSpacing ?? 48;
+        const respawnMin  = groupCfg.respawnDelayMs?.min ?? 5000;
+        const respawnMax  = groupCfg.respawnDelayMs?.max ?? 7000;
+        const totalWeight = variants.reduce((s, v) => s + (v.weight || 0), 0);
+
+        const w = this.sys.game.config.width;
+        const h = this.sys.game.config.height;
+        const minX = 100, maxX = w - 100;
+        const minY = 100, maxY = h - 100;
+
+        const tooClose = (x, y) => {
+            return this.resources.getChildren().some(c => {
+                if (!c.active) return false;
+                const dx = c.x - x;
+                const dy = c.y - y;
+                return (dx * dx + dy * dy) < (minSpacing * minSpacing);
+            });
+        };
+
+        const pickVariantId = () => {
+            let r = Math.random() * totalWeight;
+            for (let v of variants) {
+                r -= (v.weight || 0);
+                if (r <= 0) return v.id;
+            }
+            return variants[0].id;
+        };
+
+        const spawnOne = () => {
+            let x, y, tries = 30;
+            do {
+                x = Phaser.Math.Between(minX, maxX);
+                y = Phaser.Math.Between(minY, maxY);
+                tries--;
+            } while (tries > 0 && tooClose(x, y));
+            if (tries <= 0) return;
+
+            const id  = pickVariantId();
+            const def = ITEM_DB[id];
+            if (!def) {
+                console.warn('[spawn] No ITEM_DB entry for', id);
+                return;
+            }
+
+            // Sprite: origin, scale, depth from item DB
+            const originX = def.world?.origin?.x ?? 0.5;
+            const originY = def.world?.origin?.y ?? 0.5;
+            const scale   = def.world?.scale ?? 1;
+
+            const obj = this.resources.create(x, y, def.world?.textureKey || id)
+                .setOrigin(originX, originY)
+                .setScale(scale)
+                .setDepth(def.depth ?? 5);
+
+            // Blocking vs non-blocking
+            const blocking = !!def.blocking;
+            obj.setData('blocking', blocking);
+
+            // --- Apply optional body config (FRAME-SPACE anchor; scale-aware) ---
+            const bodyCfg = def.world?.body;
+            if (obj.body) {
+                obj.body.setAllowGravity(false);
+
+                if (bodyCfg) {
+                    // Use Phaser's frame vs display sizes directly
+                    const frameW = obj.width;          // unscaled texture/frame width
+                    const frameH = obj.height;         // unscaled texture/frame height
+                    const dispW  = obj.displayWidth;   // scaled on-screen width
+                    const dispH  = obj.displayHeight;  // scaled on-screen height
+
+                    // If useScale=true, compute body size in display pixels; else in frame pixels
+                    const scaleX = obj.scaleX || 1;
+                    const scaleY = obj.scaleY || 1;
+                    const useScale = !!bodyCfg.useScale;
+
+                    let bw, bh, br;
+                    if (bodyCfg.kind === 'circle') {
+                        br = useScale ? (bodyCfg.radius * scaleX) : bodyCfg.radius;
+                        bw = bh = 2 * br; // bounds of the circle for anchoring
+                    } else {
+                        bw = useScale ? (bodyCfg.width  * scaleX) : bodyCfg.width;
+                        bh = useScale ? (bodyCfg.height * scaleY) : bodyCfg.height;
+                    }
+
+                    // Choose the space to anchor within: display (scaled) or frame (unscaled)
+                    const anchorSpaceW = useScale ? dispW : frameW;
+                    const anchorSpaceH = useScale ? dispH : frameH;
+
+                    // Base offset inside the texture/frame space (NOT world; origin does not apply here)
+                    const anchor = bodyCfg.anchor || 'topLeft';
+                    let baseX = 0, baseY = 0;
+                    switch (anchor) {
+                        case 'center':
+                            baseX = (anchorSpaceW - bw) * 0.5;
+                            baseY = (anchorSpaceH - bh) * 0.5;
+                            break;
+                        case 'topCenter':
+                            baseX = (anchorSpaceW - bw) * 0.5;
+                            baseY = 0;
+                            break;
+                        case 'bottomCenter':
+                            baseX = (anchorSpaceW - bw) * 0.5;
+                            baseY = anchorSpaceH - bh;
+                            break;
+                        case 'bottomLeft':
+                            baseX = 0;
+                            baseY = anchorSpaceH - bh;
+                            break;
+                        case 'topLeft':
+                        default:
+                            baseX = 0;
+                            baseY = 0;
+                            break;
+                    }
+
+                    // Fine-tune offsets (in same space as body size)
+                    const addX = useScale ? ((bodyCfg.offsetX || 0) * scaleX) : (bodyCfg.offsetX || 0);
+                    const addY = useScale ? ((bodyCfg.offsetY || 0) * scaleY) : (bodyCfg.offsetY || 0);
+                    const ox = baseX + addX;
+                    const oy = baseY + addY;
+
+                    if (bodyCfg.kind === 'circle') {
+                        // setCircle(radius, offsetX, offsetY) — offset is top-left of the circle bounds
+                        obj.body.setCircle(br, ox, oy);
+                    } else {
+                        obj.body.setSize(bw, bh);
+                        obj.body.setOffset(ox, oy);
+                    }
+
+                    obj.body.setImmovable(blocking);
+                } else {
+                    // No explicit body provided
+                    if (blocking) {
+                        obj.body.setImmovable(true);
+                    } else {
+                        // Enable a default, immovable body so bullets can collide with ALL resources
+                        obj.body.setSize(obj.displayWidth, obj.displayHeight);
+                        obj.body.setOffset(0, 0);
+                        obj.body.setImmovable(true);
+                    }
+                }
+
+            }
+
+            // Right-click collectible (distance-gated)
+            if (def.collectible) {
+                obj.setInteractive();
+                obj.on('pointerdown', (pointer) => {
+                    if (!pointer.rightButtonDown()) return;
+
+                    const pickupRange = 40; // px
+                    const distSq = Phaser.Math.Distance.Squared(this.player.x, this.player.y, obj.x, obj.y);
+                    if (distSq > pickupRange * pickupRange) return;
+
+                    if (def.givesItem && this.uiScene?.inventory) {
+                        this.uiScene.inventory.addItem(def.givesItem, def.giveAmount || 1);
+                    }
+                    // TODO: this.sound.play('sfx_pickup_small');
+
+                    obj.destroy();
+                    this.time.delayedCall(Phaser.Math.Between(respawnMin, respawnMax), () => {
+                        if (this.resources.countActive(true) < maxActive) spawnOne();
+                    });
+                });
+            }
+        };
+
+        // Initial batch
+        for (let i = 0; i < maxActive; i++) spawnOne();
+    }
+
+    // ==========================
+    // STAMINA HELPERS
+    // ==========================
+    spendStamina(amount) {
+        if (!amount || amount <= 0) return 0;
+        const spend = Math.min(this.stamina, amount);
+        if (spend > 0) {
+            this.stamina -= spend;
+            this._lastStaminaSpendTime = this.time.now;
+            if (this.uiScene?.updateStamina) this.uiScene.updateStamina(this.stamina);
+        }
+        return spend;
+    }
+
+    hasStamina(amount) {
+        return (this.stamina >= (amount || 0.0001));
+    }
+
+    regenStamina(deltaMs) {
+        // Regen allowed while walking — only blocked by sprinting, charging, or regen delay
+        if (this._isSprinting || this.isCharging) return;
+
+        if (this.time.now - this._lastStaminaSpendTime < this._staminaRegenDelayMs) return;
+
+        const add = (this._staminaRegenPerSec * (deltaMs / 1000));
+        if (add > 0) {
+            this.stamina = Math.min(this.staminaMax, this.stamina + add);
+            if (this.uiScene?.updateStamina) this.uiScene.updateStamina(this.stamina);
+        }
+    }
+
+
 
     // --------------------------
     // Day/Night Cycle Management
@@ -209,8 +476,10 @@ export default class MainScene extends Phaser.Scene {
             return;
         }
 
-        // Movement with normalization (no diagonal speed boost)
-        const speed = 100;
+        // Movement with normalization + sprinting (Shift)
+        const walkSpeed = 100;
+        const sprintMult = 1.75;
+
         const p = this.player.body.velocity;
         p.set(0);
 
@@ -218,6 +487,12 @@ export default class MainScene extends Phaser.Scene {
         const down = (this.keys.S?.isDown) || (this.cursors.down?.isDown);
         const left = (this.keys.A?.isDown) || (this.cursors.left?.isDown);
         const right = (this.keys.D?.isDown) || (this.cursors.right?.isDown);
+        const shift = this.input.keyboard.checkDown(this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT), 0);
+
+        // Determine sprint state (must have stamina > 0)
+        this._isSprinting = !!shift && this.hasStamina(0.001);
+
+        let speed = walkSpeed * (this._isSprinting ? sprintMult : 1);
 
         if (up) p.y = -speed;
         else if (down) p.y = speed;
@@ -228,6 +503,17 @@ export default class MainScene extends Phaser.Scene {
             p.x *= Math.SQRT1_2; // 1/sqrt(2)
             p.y *= Math.SQRT1_2;
         }
+
+        // Sprint drain (continuous)
+        if (this._isSprinting && (p.x !== 0 || p.y !== 0)) {
+            const drain = this._sprintDrainPerSec * (delta / 1000);
+            this.spendStamina(drain);
+            // If we hit 0 mid-frame, stop sprint next tick
+            if (!this.hasStamina(0.001)) this._isSprinting = false;
+        }
+
+        // Stamina regen when eligible
+        this.regenStamina(delta);
 
         // Zombie pursuit
         this.zombies.getChildren().forEach(zombie => {
@@ -250,6 +536,41 @@ export default class MainScene extends Phaser.Scene {
 
         // Update overlay alpha for dusk/dawn feel
         this.updateNightOverlay();
+
+        // --- Charging UI update while holding LMB with slingshot equipped ---
+        if (this.isCharging) {
+            const held = Phaser.Math.Clamp(this.time.now - this.chargeStart, 0, this.chargeMaxMs);
+            const percent = (this.chargeMaxMs > 0) ? (held / this.chargeMaxMs) : 1;
+            this.uiScene?.events?.emit('weapon:charge', percent);
+        }
+        
+        /*==== RESOURCE HITBOXES =====
+        this.debugGraphics.clear();
+        this.debugGraphics.lineStyle(1, 0xff0000, 1);
+        this.debugGraphics.fillStyle(0xff0000, 0.25);
+
+        this.resources.getChildren().forEach(obj => {
+            if (!obj.body) return;
+            const body = obj.body;
+
+            if (body.isCircle) {
+                this.debugGraphics.fillCircle(
+                    body.x + body.halfWidth,
+                    body.y + body.halfHeight,
+                    body.halfWidth
+                );
+                this.debugGraphics.strokeCircle(
+                    body.x + body.halfWidth,
+                    body.y + body.halfHeight,
+                    body.halfWidth
+                );
+            } else {
+                this.debugGraphics.fillRect(body.x, body.y, body.width, body.height);
+                this.debugGraphics.strokeRect(body.x, body.y, body.width, body.height);
+            }
+        });
+        //===== END DEBUG =====*/ 
+
     }
 
     updateNightOverlay() {
@@ -284,22 +605,108 @@ export default class MainScene extends Phaser.Scene {
     }
 
     // --------------------------
-    // Combat (uses InventoryModel via UIScene)
+    // Input & Combat
     // --------------------------
-    fireBullet(pointer) {
+    onPointerDown(pointer) {
+        if (this.isGameOver || pointer.button !== 0) return; // left-only
+        const equipped = this.uiScene?.inventory?.getEquipped?.();
+        if (!equipped) return;
+
+        const def = ITEM_DB[equipped.id];
+        const cat = def?.weapon?.category;
+
+        if (cat === 'melee' && equipped.id === 'crude_bat') {
+            // Melee immediately on press (stamina handled inside swingBat)
+            this.swingBat(pointer, def.weapon);
+            return;
+        }
+
+        if (cat === 'ranged' && equipped.id === 'slingshot') {
+            // Begin charge only if we have ammo
+            const ammo = this.uiScene?.inventory?.totalOfActiveAmmo?.('slingshot');
+            if (!ammo || ammo.total <= 0) return;
+
+            this.isCharging = true;
+            this.chargeStart = this.time.now;
+            this.uiScene?.events?.emit('weapon:charge', 0);
+            return;
+        }
+    }
+
+
+    onPointerUp(pointer) {
+        if (this.isGameOver || pointer.button !== 0) return; // left-only
+
+        if (this.isCharging) {
+            // Capture charge percent
+            const heldMs = Phaser.Math.Clamp(this.time.now - this.chargeStart, 0, this.chargeMaxMs);
+            this.lastCharge = (this.chargeMaxMs > 0) ? (heldMs / this.chargeMaxMs) : 1;
+
+            // End charge -> notify UI
+            this.isCharging = false;
+            this.uiScene?.events?.emit('weapon:chargeEnd');
+
+            // Spend stamina for the shot (scaled by charge). If insufficient, mark low and still shoot with penalties
+            const eq = this.uiScene?.inventory?.getEquipped?.();
+            const wpn = eq ? ITEM_DB[eq.id]?.weapon : null;
+            let lowStamina = false;
+            if (wpn?.stamina && eq?.id === 'slingshot') {
+                const cost = Phaser.Math.Linear(wpn.stamina.baseCost || 0, wpn.stamina.maxCost || 0, Phaser.Math.Clamp(this.lastCharge, 0, 1));
+                if (this.hasStamina(cost)) {
+                    this.spendStamina(cost);
+                } else {
+                    lowStamina = true;
+                    // spend whatever is left to 0 to trigger regen delay cleanly
+                    this.spendStamina(this.stamina);
+                }
+            }
+
+            // Fire using captured charge and whether we were low on stamina
+            this.fireBullet(pointer, lowStamina);
+
+            // Reset after use
+            this.lastCharge = 0;
+        }
+    }
+
+
+    // --------------------------
+    // Combat (existing projectile & melee behavior)
+    // --------------------------
+    fireBullet(pointer, lowStamina = false) {
         if (this.isGameOver) return;
+        if (pointer && pointer.button !== 0) return; // left-only
 
         const equipped = this.uiScene?.inventory?.getEquipped();
         if (!equipped) return;
 
-        // Route by equipped weapon type from item data
         const def = ITEM_DB[equipped.id];
         const cat = def?.weapon?.category;
 
         if (cat === 'ranged' && equipped.id === 'slingshot') {
-            // ---- SLINGSHOT (existing behavior) ----
+            const weapon = def.weapon || {};
             const { ammoId, total } = this.uiScene.inventory.totalOfActiveAmmo('slingshot');
             if (!ammoId || total <= 0) return;
+
+            const angle = Phaser.Math.Angle.Between(
+                this.player.x, this.player.y, pointer.worldX, pointer.worldY
+            );
+
+            // DB-driven tuning
+            const speed = weapon.projectileSpeed ?? 400; // px/sec
+            const minRange = weapon.minRange ?? 180;     // px
+            const maxRange = weapon.maxRange ?? 420;     // px
+
+            // Range scales with charge (0..1); safe clamp
+            let charge = Phaser.Math.Clamp(this.lastCharge ?? 0, 0, 1);
+
+            // Low-stamina penalty: clamp effective charge and (later) use min damage placeholder
+            if (lowStamina && weapon.stamina?.poorChargeClamp != null) {
+                charge = Math.max(charge, weapon.stamina.poorChargeClamp);
+                // Note: damage system TBD; when implemented, apply weapon.stamina.minDamageOnLow
+            }
+
+            const actualRange = Phaser.Math.Linear(minRange, maxRange, charge);
 
             const bullet = this.bullets.get(this.player.x, this.player.y, ammoId);
             if (bullet) {
@@ -309,33 +716,34 @@ export default class MainScene extends Phaser.Scene {
                 bullet.body.allowGravity = false;
                 bullet.setCollideWorldBounds(true);
                 bullet.body.onWorldBounds = true;
+                bullet.setSize(8, 8);
+                bullet.setScale(0.4);
 
-                const angle = Phaser.Math.Angle.Between(
-                    this.player.x, this.player.y, pointer.worldX, pointer.worldY
-                );
-                const speed = 400;
                 const velocity = this.physics.velocityFromRotation(angle, speed);
                 bullet.setVelocity(velocity.x, velocity.y);
                 bullet.setRotation(angle);
-                bullet.setSize(8, 8);
-                bullet.setScale(0.4);
+
+                // Auto-destroy after traveling scaled range
+                const lifetimeMs = Math.max(1, Math.floor((actualRange / Math.max(1, speed)) * 1000));
+                this.time.delayedCall(lifetimeMs, () => {
+                    if (bullet.active) bullet.destroy();
+                });
             }
             return;
         }
 
         if (cat === 'melee' && equipped.id === 'crude_bat') {
-            // ---- MELEE BAT ----
             this.swingBat(pointer, def.weapon);
             return;
         }
-
-        // Otherwise, no primary action for this item (yet)
     }
+
+
 
     swingBat(pointer, wpn) {
         // Per-weapon tuning
-        const swingDurationMs = wpn?.swingDurationMs ?? 160;
-        const swingCooldownMs = wpn?.swingCooldownMs ?? 280;
+        let swingDurationMs = wpn?.swingDurationMs ?? 160;
+        let swingCooldownMs = wpn?.swingCooldownMs ?? 280;
         const range = wpn?.range ?? 30;
         const radius = wpn?.radius ?? 22;
 
@@ -344,6 +752,25 @@ export default class MainScene extends Phaser.Scene {
         if (!this.lastSwingTime) this.lastSwingTime = 0;
         if (now - this.lastSwingTime < swingCooldownMs) return;
         this.lastSwingTime = now;
+
+        // Stamina handling
+        const st = wpn?.stamina;
+        let lowStamina = false;
+        if (st?.cost != null) {
+            if (this.hasStamina(st.cost)) {
+                this.spendStamina(st.cost);
+            } else {
+                lowStamina = true;
+                this.spendStamina(this.stamina); // drain whatever remains to 0
+            }
+        }
+
+        // Apply penalties when low on stamina
+        if (lowStamina && st) {
+            swingDurationMs = Math.floor(swingDurationMs * (st.slowMultiplier || 3));
+            swingCooldownMs = Math.floor(swingCooldownMs * (st.cooldownMultiplier || 2));
+            // Damage min will be applied when you add HP/damage systems; for now, visual/tempo penalty only
+        }
 
         // Aim at cursor
         let aim = Phaser.Math.Angle.Between(this.player.x, this.player.y, pointer.worldX, pointer.worldY);
@@ -358,8 +785,7 @@ export default class MainScene extends Phaser.Scene {
         // Bat sprite
         if (this.batSprite) this.batSprite.destroy();
 
-        // If the bat art is diagonal, add a base offset so it appears vertical at 0 radians
-        const baseOffset = Phaser.Math.DegToRad(45); // adjust this value until the bat looks vertical
+        const baseOffset = Phaser.Math.DegToRad(45); // keep art offset
 
         this.batSprite = this.add.image(this.player.x, this.player.y, 'crude_bat')
             .setDepth(500)
@@ -401,6 +827,7 @@ export default class MainScene extends Phaser.Scene {
             if (hit && hit.destroy) hit.destroy();
         });
     }
+
 
     handleMeleeHit(hit, zombie) {
         if (!zombie || !zombie.active) return;
@@ -454,23 +881,25 @@ export default class MainScene extends Phaser.Scene {
             this.physics.pause();
             player.setTint(0x720c0c);
 
-            if (this.shootListener) {
-                this.input.off('pointerdown', this.fireBullet, this);
-                this.shootListener = null;
-            }
+            // Cleanup input
+            this.input.off('pointerdown', this.onPointerDown, this);
+            this.input.off('pointerup', this.onPointerUp, this);
 
             this.gameOverText = this.add.text(
-                this.cameras.main.centerX,
-                this.cameras.main.centerY,
-                'Game Over!\nPress SPACE to restart',
-                {
-                    fontSize: '32px',
-                    fill: '#fff',
-                    align: 'center',
-                    padding: { x: 20, y: 20 }
-                }
-            ).setOrigin(0.5);
-            this.gameOverText.setStroke('#720c0c', 3);
+            this.cameras.main.centerX,
+            this.cameras.main.centerY,
+            'Game Over!\nPress SPACE to restart',
+            {
+                fontSize: '32px',
+                fill: '#fff',
+                align: 'center',
+                padding: { x: 20, y: 20 }
+            }
+        )
+        .setOrigin(0.5)
+        .setScrollFactor(0)   // <— HUD-style: don’t move with camera
+        .setDepth(2000);
+        this.gameOverText.setStroke('#720c0c', 3);
         }
     }
 

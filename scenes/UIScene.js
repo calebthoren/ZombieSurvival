@@ -11,10 +11,14 @@ export default class UIScene extends Phaser.Scene {
         // Debounce guard for bottom hotbar updates
         this._hotbarRefreshQueued = false;
         this._hotbarRefreshDelayMs = 16; // one frame-ish
+        // Tweens used to pulse the charge bar when fully charged
+        this._chargeGlowTweens = [];
     }
 
     init(data) {
-        this.playerData = data.playerData || { health: 100 };
+        this.playerData = data.playerData || { health: 100, stamina: 100 };
+        if (typeof this.playerData.health !== 'number') this.playerData.health = 100;
+        if (typeof this.playerData.stamina !== 'number') this.playerData.stamina = 100;
     }
 
     create() {
@@ -48,6 +52,31 @@ export default class UIScene extends Phaser.Scene {
         });
         this.updateHealth();
 
+        // --- Stamina Bar (below health) ---
+        this.staminaBarWidth = 180;   // slightly smaller than health
+        this.staminaBarHeight = 12;   // shorter
+        this.staminaBarX = this.healthBarX;
+        this.staminaBarY = this.healthBarY + this.healthBarHeight + 6;
+
+        // background (black/gray like other bars)
+        this.staminaBarBackground = this.add.rectangle(
+            this.staminaBarX, this.staminaBarY, this.staminaBarWidth, this.staminaBarHeight, 0x222222
+        ).setOrigin(0, 0);
+
+        // fill (yellow)
+        this.staminaBarFill = this.add.rectangle(
+            this.staminaBarX, this.staminaBarY, this.staminaBarWidth, this.staminaBarHeight, 0xffff00
+        ).setOrigin(0, 0);
+
+        // number text (dark yellow/orange)
+        this.staminaText = this.add.text(0, 0, '', {
+            fontSize: '10px',
+            fill: '#b8860b', // dark goldenrod-ish
+            fontFamily: 'monospace'
+        });
+        this.updateStamina(this.playerData.stamina);
+
+
         // -------------------------
         // Bottom on-screen hotbar
         // -------------------------
@@ -57,7 +86,7 @@ export default class UIScene extends Phaser.Scene {
         this.slotSize = INVENTORY_CONFIG.slotSize ?? 44;
 
         this.bottomHotbarRects = [];
-        this.bottomHotbarVisuals = []; // [{icon, countText}]
+        this.bottomHotbarVisuals = []; // [{icon, countText, numText, chargeBg, chargeFill}]
         this.selectedSlotIndex = 0;
 
         for (let i = 0; i < INVENTORY_CONFIG.hotbarCount; i++) {
@@ -81,7 +110,18 @@ export default class UIScene extends Phaser.Scene {
                 { fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace' }
             ).setVisible(false).setDepth(11);
 
-            this.bottomHotbarVisuals.push({ icon, countText, numText });
+            // --- Charge bar (inside slot, above icon) ---
+            const barW = Math.floor(this.slotSize * 0.8);
+            const barH = 4;
+            const barX = rect.x + Math.floor((this.slotSize - barW) / 2);
+            const barY = rect.y + Math.floor(this.slotSize * 0.28);
+
+            const chargeBg = this.add.rectangle(barX, barY, barW, barH, 0x000000)
+                .setOrigin(0, 0).setVisible(false).setDepth(12).setAlpha(0.95);
+            const chargeFill = this.add.rectangle(barX, barY, 0, barH, 0xffff00)
+                .setOrigin(0, 0).setVisible(false).setDepth(13).setAlpha(1.0);
+
+            this.bottomHotbarVisuals.push({ icon, countText, numText, chargeBg, chargeFill });
         }
         this.#highlightBottomHotbar(0);
 
@@ -92,7 +132,7 @@ export default class UIScene extends Phaser.Scene {
                 this.selectedSlotIndex = key - 1;
                 this.inventory.setSelectedHotbarIndex(this.selectedSlotIndex);
                 this.#highlightBottomHotbar(this.selectedSlotIndex);
-                // Only the highlight + bottom HUD needs change; slot panels unchanged
+                this.#hideChargeUIForAll();
                 this.#queueBottomHotbarRefresh();
             }
         });
@@ -128,7 +168,7 @@ export default class UIScene extends Phaser.Scene {
         // Left segment — top hotbar row + grid
         const segW = panelW / 3;
         const segX = panelX - 12;
-        const segY = panelY + 20;
+               const segY = panelY + 20;
 
         const cols = INVENTORY_CONFIG.gridCols;
         const rows = INVENTORY_CONFIG.gridRows;
@@ -267,12 +307,23 @@ export default class UIScene extends Phaser.Scene {
         });
         this.events.on('inv:hotbarSelected', () => {
             this.#highlightBottomHotbar(this.inventory.selectedHotbarIndex);
+            this.#hideChargeUIForAll();
             this.#queueBottomHotbarRefresh();
         });
         // Keep a light handler for “bulk” changes (e.g., initial paint or mass ops)
         this.events.on('inv:changed', () => {
             if (this.inventoryPanel.visible) this.#refreshAllIcons();
             this.#queueBottomHotbarRefresh();
+        });
+
+        // Charging UI events from MainScene
+        this.events.on('weapon:charge', (percent) => {
+            this.#updateChargeBar(percent);
+        });
+        this.events.on('weapon:chargeEnd', () => {
+            this.#hideChargeUIForAll();
+            // Restore normal selected highlight (no border glow here anymore)
+            this.#highlightBottomHotbar(this.inventory.selectedHotbarIndex);
         });
 
         // Day/Night mini HUD
@@ -301,9 +352,29 @@ export default class UIScene extends Phaser.Scene {
         const hp = this.playerData.health ?? 0;
         const pct = hp / 100;
         this.healthBarFill.width = this.healthBarWidth * pct;
-        this.healthText.setText(`${hp}`);
+               this.healthText.setText(`${hp}`);
         this.healthText.setVisible(true);
         this.healthText.setPosition(this.healthBarX + 4, this.healthBarY + 4);
+    }
+
+    // -------------------------
+    // Stamina
+    // -------------------------
+    updateStamina(amount) {
+        if (typeof amount === 'number') {
+            this.playerData.stamina = Phaser.Math.Clamp(amount, 0, 100);
+        }
+        const st = this.playerData.stamina ?? 0;
+        const pct = st / 100;
+        if (this.staminaBarFill) {
+            this.staminaBarFill.width = this.staminaBarWidth * pct;
+        }
+        if (this.staminaText) {
+            // Only show whole numbers
+            this.staminaText.setText(`${Math.floor(st)}`);
+            this.staminaText.setVisible(true);
+            this.staminaText.setPosition(this.staminaBarX + 4, this.staminaBarY + 2);
+        }
     }
 
     // -------------------------
@@ -493,10 +564,19 @@ export default class UIScene extends Phaser.Scene {
         const key = img.texture?.key;
         if (!key) { img.setScale(0.5); return; }
 
+        // If DB has a manual icon scale, use it
+        const def = ITEM_DB?.[key];
+        if (def?.icon?.scale !== undefined) {
+            img.setScale(def.icon.scale);
+            this._iconScaleCache.set(key, def.icon.scale);
+            return;
+        }
+
         // Use cached scale if available
         const cached = this._iconScaleCache.get(key);
         if (cached) { img.setScale(cached); return; }
 
+        // Auto-fit logic (default)
         const src = img.texture.getSourceImage?.();
         if (!src || !src.width || !src.height) { img.setScale(0.5); return; }
 
@@ -508,6 +588,81 @@ export default class UIScene extends Phaser.Scene {
         this._iconScaleCache.set(key, s);
         img.setScale(s);
     }
+
+    // -------------------------
+    // Charge bar helpers
+    // -------------------------
+    #hideChargeUIForAll() {
+        for (let i = 0; i < this.bottomHotbarVisuals.length; i++) {
+            const v = this.bottomHotbarVisuals[i];
+            if (!v) continue;
+
+            // stop & clear any pulse tween
+            const tw = this._chargeGlowTweens[i];
+            if (tw && tw.isPlaying()) tw.stop();
+            this._chargeGlowTweens[i] = null;
+
+            // hide bars and reset visuals
+            if (v.chargeBg.visible) v.chargeBg.setVisible(false);
+            if (v.chargeFill.visible) v.chargeFill.setVisible(false);
+            v.chargeFill.setAlpha(1);
+            v.chargeFill.setFillStyle(0xffff00); // standard yellow when visible
+        }
+    }
+
+
+    #updateChargeBar(percent) {
+        const idx = this.inventory.selectedHotbarIndex ?? 0;
+        const vis = this.bottomHotbarVisuals[idx];
+        if (!vis) return;
+
+        // Only show for the currently equipped slingshot
+        const eq = this.inventory.getEquipped?.();
+        if (!eq || eq.id !== 'slingshot') {
+            this.#hideChargeUIForAll();
+            this.#highlightBottomHotbar(idx);
+            return;
+        }
+
+        const p = Phaser.Math.Clamp(percent ?? 0, 0, 1);
+
+        // Show bars
+        if (!vis.chargeBg.visible) vis.chargeBg.setVisible(true);
+        if (!vis.chargeFill.visible) vis.chargeFill.setVisible(true);
+
+        // Size the fill bar
+        const fullW = vis.chargeBg.width;
+        const w = Math.floor(fullW * p);
+        vis.chargeFill.width = Math.max(0, Math.min(fullW, w));
+
+        // Handle glow: pulse the fill when fully charged; otherwise solid
+        const existing = this._chargeGlowTweens[idx];
+        if (p >= 1) {
+            // brighten the fill and start a subtle pulse if not already running
+            vis.chargeFill.setFillStyle(0xffff88);
+            if (!existing || !existing.isPlaying()) {
+                this._chargeGlowTweens[idx] = this.tweens.add({
+                    targets: vis.chargeFill,
+                    alpha: 0.5,
+                    duration: 250,
+                    yoyo: true,
+                    repeat: -1
+                });
+            }
+        } else {
+            // not full: ensure no pulse and normal color/alpha
+            if (existing && existing.isPlaying()) {
+                existing.stop();
+                this._chargeGlowTweens[idx] = null;
+            }
+            vis.chargeFill.setAlpha(1);
+            vis.chargeFill.setFillStyle(0xffff00);
+        }
+
+        // Keep slot border on normal highlight — no border glow anymore
+        this.#highlightBottomHotbar(idx);
+    }
+
 
     // -------------------------
     // Carry (drag) visuals

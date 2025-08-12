@@ -29,10 +29,18 @@ export const WORLD_GEN = {
   spawns: {
     // Resource nodes
     resources: {
-      big_rock_node: {
-        minCount: 8,
-        maxCount: 12,
-        minSpacing: 100, // not enforced yet — placeholder for future scatter
+      // Weighted rock variants A–E (A most common → E rarest)
+      rocks: {
+        maxActive: 15,
+        minSpacing: 48,  // pixels between rock centers
+        respawnDelayMs: { min: 5000, max: 7000 },
+        variants: [
+          { id: 'rock2A', weight: 60 }, // collectible, non-blocking
+          { id: 'rock2B', weight: 20 }, // blocking
+          { id: 'rock2C', weight: 12 }, // blocking
+          { id: 'rock2D', weight: 6 },  // blocking
+          { id: 'rock2E', weight: 2 },  // blocking
+        ],
       },
     },
 
