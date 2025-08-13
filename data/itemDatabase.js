@@ -61,7 +61,7 @@ export const ITEM_DB = {
       maxRange: 500,          // px — fully charged (keep sane for early game)
       spread: 3,              // degrees
       knockback: 80,
-      damage: 12,
+      damage: 5,
       muzzleOffset: { x: 16, y: 6 },
 
       // STAMINA + penalties when stamina is insufficient
@@ -100,14 +100,14 @@ export const ITEM_DB = {
       swingCooldownMs: 80,
       range: 30,
       radius: 22,
-      damage: 25,
+      damage: 15,
 
       // STAMINA + penalties when stamina is insufficient
       stamina: {
         cost: 15,               // per swing
         minDamageOnLow: 8,      // forced damage when low stamina
         slowMultiplier: 3,      // swingDuration ×3
-        cooldownMultiplier: 2,  // swingCooldown ×2
+        cooldownMultiplier: 600,  // swingCooldown ×6
       },
     },
 
@@ -134,7 +134,7 @@ export const ITEM_DB = {
     stackable: true,
     maxStack: 99,
 
-    icon: { textureKey: 'slingshot_rock', scale: .0, ox: 0, oy: 0 },
+    icon: { textureKey: 'slingshot_rock', scale: .5, ox: 0, oy: 0 },
     world: { textureKey: 'slingshot_rock', scale: 1.0 },
 
     showCountOnIcon: true,

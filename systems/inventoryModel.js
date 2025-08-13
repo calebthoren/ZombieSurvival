@@ -87,7 +87,7 @@ export default class InventoryModel {
   }
 
   // ---------- take & place (for drag-and-drop / wheel / right-click)
-  /** Remove the entire stack from a slot. Returns {id,count} or null */
+  // Remove the entire stack from a slot. Returns {id,count} or null 
   takeAll(area, index) {
     const arr = this.#arr(area);
     const s = arr[index];
@@ -98,29 +98,34 @@ export default class InventoryModel {
     return { id: s.id, count: s.count };
   }
 
-  /** Split off amount (default half). Returns {id,count} or null */
-  split(area, index, amount) {
+  // Split off amount (default half)
+  split(area, index, amount, allowEmpty = false) {
     const arr = this.#arr(area);
-    const s = arr[index]; if (!s || s.count <= 1) return null;
-    const take = (amount !== undefined && amount !== null)
-  ? amount
-  : Math.floor(s.count / 2) || 1;
+    const s = arr[index];
+    if (!s) return null;
 
-    const n = Math.min(take, s.count - 1);
+    const take = (amount !== undefined && amount !== null)
+      ? amount
+      : Math.floor(s.count / 2) || 1;
+
+    let n;
+    if (allowEmpty) {
+      // Wheel-pick can empty the slot
+      n = Math.min(take, s.count);
+    } else {
+      // Legacy behavior: always leave at least 1
+      if (s.count <= 1) return null;
+      n = Math.min(take, s.count - 1);
+    }
+
     s.count -= n;
+    if (s.count <= 0) arr[index] = null;
+
     this.events.emit('inv:slotChanged', { area, index });
     this.events.emit('inv:changed');
     return { id: s.id, count: n };
   }
 
-  /**
-   * Place up to `amount` of `item` into a slot.
-   * - If slot empty -> place min(maxStack, amount)
-   * - If same id and stackable -> merge up to maxStack
-   * - If different id -> swap FULL item only when amount === item.count (carry whole stack)
-   *
-   * Returns { leftover: {id,count}|null, swapped: {id,count}|null }
-   */
   place(area, index, item, amount = item.count) {
     const arr = this.#arr(area);
     const dest = arr[index];
@@ -200,5 +205,59 @@ export default class InventoryModel {
     const ok = amount <= 0;
     if (ok) this.events.emit('inv:changed');
     return ok;
+  }
+
+  putBack(item, originArea = null, originIndex = 0) {
+    if (!item || !item.id || item.count <= 0) return true;
+
+    let remaining = item.count;
+    const id = item.id;
+
+    const isEmpty = (slot) => !slot || !slot.id || slot.count <= 0;
+
+    const placeAll = (area, index) => {
+        if (remaining <= 0) return;
+        const res = this.place(area, index, { id, count: remaining }, remaining);
+        remaining = res.leftover?.count || 0;
+    };
+
+    const firstEmptyIndex = (arr) => {
+        for (let i = 0; i < arr.length; i++) {
+            if (isEmpty(arr[i])) return i;
+        }
+        return -1;
+    };
+
+    // 1) Try EXACT origin slot first (empty OR same-id -> merge). Different id? skip (no swap on close).
+    if (originArea === 'grid' || originArea === 'hotbar') {
+        const originArr = originArea === 'hotbar' ? this.hotbar : this.grid;
+        const inBounds = originIndex >= 0 && originIndex < originArr.length;
+        if (inBounds) {
+            const s = originArr[originIndex];
+            if (isEmpty(s) || s.id === id) {
+                placeAll(originArea, originIndex);
+            }
+        }
+    }
+
+    // 2) First empty grid slot
+    if (remaining > 0) {
+        const i = firstEmptyIndex(this.grid);
+        if (i !== -1) placeAll('grid', i);
+    }
+
+    // 3) First empty hotbar slot
+    if (remaining > 0) {
+        const j = firstEmptyIndex(this.hotbar);
+        if (j !== -1) placeAll('hotbar', j);
+    }
+
+    // 4) Fallback (no empties): let model auto-place (may merge)
+    if (remaining > 0) {
+        this.addItem(id, remaining);
+        remaining = 0;
+    }
+
+    return true;
   }
 }

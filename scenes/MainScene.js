@@ -1,30 +1,30 @@
 // scenes/MainScene.js
 import { WORLD_GEN } from '../data/worldGenConfig.js';
-import { ITEM_DB } from '../data/itemDatabase.js'; // NEW
+import { ITEM_DB } from '../data/itemDatabase.js';
+import ZOMBIES from '../data/zombieDatabase.js'; // NEW
 
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
         super('MainScene');
+
         // Day/Night state
-        this.dayIndex = 1;
-        this.phase = 'day';
-        this.phaseStartTime = 0;
-        this.waveNumber = 0;
-        this.spawnZombieTimer = null;
-        this.nightWaveTimer = null;
+        this.dayIndex = 1;              // starts on Day 1
+        this.phase = 'day';             // 'day' | 'night'
+        this.phaseStartTime = 0;        // ms since scene start
+        this.waveNumber = 0;            // increments each night
+        this.spawnZombieTimer = null;   // day trickle timer
+        this.nightWaveTimer = null;     // night waves timer
 
         // Charge state (UI only; keeps your current shooting model)
         this.isCharging = false;
         this.chargeStart = 0;
-        this.chargeMaxMs = 1500;
-        this.lastCharge = 0;
+        this.chargeMaxMs = 1500; // 1.5s max charge for the UI
+        this.lastCharge = 0;     // 0..1 captured on release to scale range
 
         // Melee swing state
-        this.isSwinging = false;   // true only during tween
-        this.cooldownUntil = 0;    // timestamp (ms) when next swing is allowed
-        this.swingEndAt = 0;       // hard stop time for current swing (watchdog)
-
+        this._isSwinging = false;       // true while a swing tween is running
+        this._lastSwingEndTime = 0;     // when the last swing actually finished
     }
 
     preload() {
@@ -74,11 +74,6 @@ export default class MainScene extends Phaser.Scene {
         // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
         this.keys = this.input.keyboard.addKeys('W,A,S,D');
-        // Bind SHIFT once (don’t create keys in update)
-        this.shiftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
-
-        // Restart key (press SPACE after Game Over)
-        this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
         // Projectile pool (used for slingshot rocks)
         this.bullets = this.physics.add.group({
@@ -110,9 +105,15 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.overlap(this.meleeHits, this.zombies, this.handleMeleeHit, null, this);
 
         // Colliders: resources with bullets (ALL resources stop bullets)
-        this.physics.add.collider(this.bullets, this.resources, (bullet, res) => {
-            if (bullet && bullet.destroy) bullet.destroy(); // stop/destroy bullet on impact
-        }, null, this);
+        this.physics.add.collider(
+            this.bullets,
+            this.resources,
+            (bullet, res) => {
+                if (bullet && bullet.destroy) bullet.destroy();
+            },
+            (bullet, res) => !!res.getData('blocking'),
+            this
+        );
 
         // Colliders: zombies vs resources (only blocking ones cause separation)
         if (!this._zombieResourceCollider) {
@@ -425,7 +426,9 @@ export default class MainScene extends Phaser.Scene {
             callback: () => {
                 if (this.phase !== 'day' || this.isGameOver) return;
                 if (Math.random() < dayCfg.chance) {
-                    this.spawnZombie();
+                    const types = this._getEligibleZombieTypesForPhase('day');
+                    const id = this._pickZombieTypeWeighted(types);
+                    this.spawnZombie(id);
                 }
                 this.scheduleDaySpawn();
             },
@@ -451,11 +454,12 @@ export default class MainScene extends Phaser.Scene {
                 for (let i = 0; i < targetCount; i++) {
                     this.time.delayedCall(i * nightCfg.burstIntervalMs, () => {
                         if (this.phase === 'night' && !this.isGameOver) {
-                            this.spawnZombie();
+                            const types = this._getEligibleZombieTypesForPhase('night');
+                            const id = this._pickZombieTypeWeighted(types);
+                            this.spawnZombie(id);
                         }
                     });
                 }
-
                 this.time.delayedCall(nightCfg.waveIntervalMs, () => {
                     if (this.phase === 'night' && !this.isGameOver) {
                         this.scheduleNightWave();
@@ -479,7 +483,7 @@ export default class MainScene extends Phaser.Scene {
 
     update(time, delta) {
         if (this.isGameOver) {
-            if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+            if (Phaser.Input.Keyboard.JustDown(this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE))) {
                 this.scene.stop('UIScene');
                 this.scene.restart();
             }
@@ -497,10 +501,10 @@ export default class MainScene extends Phaser.Scene {
         const down = (this.keys.S?.isDown) || (this.cursors.down?.isDown);
         const left = (this.keys.A?.isDown) || (this.cursors.left?.isDown);
         const right = (this.keys.D?.isDown) || (this.cursors.right?.isDown);
-        const shift = this.shiftKey?.isDown === true;
+        const shift = this.input.keyboard.checkDown(this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT), 0);
 
         // Determine sprint state (must have stamina > 0)
-        this._isSprinting = shift && this.hasStamina(0.001);
+        this._isSprinting = !!shift && this.hasStamina(0.001);
 
         let speed = walkSpeed * (this._isSprinting ? sprintMult : 1);
 
@@ -553,15 +557,26 @@ export default class MainScene extends Phaser.Scene {
             const percent = (this.chargeMaxMs > 0) ? (held / this.chargeMaxMs) : 1;
             this.uiScene?.events?.emit('weapon:charge', percent);
         }
-
-        // --- Swing watchdog: if somehow stuck past end time, force cleanup ---
-        if (this.isSwinging && this.time.now > (this.swingEndAt || 0)) {
-            this.isSwinging = false;
-            if (this.batSprite) { this.batSprite.destroy(); this.batSprite = null; }
-            if (this.meleeHits) this.meleeHits.clear(true, true);
+        
+        // Keep the orbiting slingshot synced while charging
+        if (this.isCharging && this.slingshotGhost) {
+            this._updateSlingshotGhost();
+        } else if (!this.isCharging && this.slingshotGhost) {
+            this._destroySlingshotGhost();
         }
 
-        
+        // Zombie pursuit (and keep HP bars synced if present)
+        this.zombies.getChildren().forEach(zombie => {
+            this.physics.moveToObject(zombie, this.player, zombie.speed || 40);
+
+            if (zombie.body.velocity.x < 0) zombie.setFlipX(true);
+            else if (zombie.body.velocity.x > 0) zombie.setFlipX(false);
+
+            if (zombie.hpBg && zombie.hpFill) {
+                this._updateOneZombieHpBar(zombie);
+            }
+        });
+
         /*==== RESOURCE HITBOXES =====
         this.debugGraphics.clear();
         this.debugGraphics.lineStyle(1, 0xff0000, 1);
@@ -597,29 +612,20 @@ export default class MainScene extends Phaser.Scene {
         const duration = this.getPhaseDuration();
 
         let target = 0;
-
-        if (this.phase === 'day') {
-            // Fade IN during the last transitionMs of day so it's fully dark at night start
-            if (elapsed >= duration - transitionMs) {
-                const t = (elapsed - (duration - transitionMs)) / Math.max(1, transitionMs);
-                target = Phaser.Math.Linear(0, nightOverlayAlpha, Phaser.Math.Clamp(t, 0, 1));
+        if (this.phase === 'night') {
+            if (elapsed <= transitionMs) {
+                target = Phaser.Math.Linear(0, nightOverlayAlpha, elapsed / transitionMs);
+            } else if (elapsed >= duration - transitionMs) {
+                const t = (elapsed - (duration - transitionMs)) / transitionMs;
+                target = Phaser.Math.Linear(nightOverlayAlpha, 0, t);
             } else {
-                target = 0;
+                target = nightOverlayAlpha;
             }
         } else {
-            // phase === 'night'
-            // Stay fully dark for most of night; fade OUT during the last transitionMs of night
-            if (elapsed < duration - transitionMs) {
-                target = nightOverlayAlpha;
-            } else {
-                const t = (elapsed - (duration - transitionMs)) / Math.max(1, transitionMs);
-                target = Phaser.Math.Linear(nightOverlayAlpha, 0, Phaser.Math.Clamp(t, 0, 1));
-            }
+            target = 0;
         }
-
         this.nightOverlay.setAlpha(target);
     }
-
 
     updateTimeUi() {
         if (!this.uiScene) return;
@@ -630,14 +636,6 @@ export default class MainScene extends Phaser.Scene {
         const phaseLabel = this.phase === 'day' ? 'Daytime' : 'Night';
         this.uiScene.updateTimeDisplay(this.dayIndex, phaseLabel, progress);
     }
-
-    _restartGame() {
-        // Guard to avoid double triggers
-        if (!this.isGameOver) return;
-        this.scene.stop('UIScene');
-        this.scene.restart();
-    }
-
 
     // --------------------------
     // Input & Combat
@@ -664,9 +662,14 @@ export default class MainScene extends Phaser.Scene {
             this.isCharging = true;
             this.chargeStart = this.time.now;
             this.uiScene?.events?.emit('weapon:charge', 0);
+
+            // 👇 create and position the orbiting slingshot sprite
+            this._createSlingshotGhost(equipped);
+            this._updateSlingshotGhost();
             return;
         }
     }
+
 
 
     onPointerUp(pointer) {
@@ -681,18 +684,22 @@ export default class MainScene extends Phaser.Scene {
             this.isCharging = false;
             this.uiScene?.events?.emit('weapon:chargeEnd');
 
+            // 👇 hide the ghost immediately on release
+            this._destroySlingshotGhost();
+
             // Spend stamina for the shot (scaled by charge). If insufficient, mark low and still shoot with penalties
             const eq = this.uiScene?.inventory?.getEquipped?.();
             const wpn = eq ? ITEM_DB[eq.id]?.weapon : null;
             let lowStamina = false;
             if (wpn?.stamina && eq?.id === 'slingshot') {
-                const cost = Phaser.Math.Linear(wpn.stamina.baseCost || 0, wpn.stamina.maxCost || 0, Phaser.Math.Clamp(this.lastCharge, 0, 1));
+                const base = wpn.stamina.baseCost ?? 0;
+                const max  = wpn.stamina.maxCost  ?? base;
+                const cost = Phaser.Math.Linear(base, max, Phaser.Math.Clamp(this.lastCharge, 0, 1));
                 if (this.hasStamina(cost)) {
                     this.spendStamina(cost);
                 } else {
                     lowStamina = true;
-                    // spend whatever is left to 0 to trigger regen delay cleanly
-                    this.spendStamina(this.stamina);
+                    this.spendStamina(this.stamina); // drain to 0; keeps regen timing consistent
                 }
             }
 
@@ -703,7 +710,6 @@ export default class MainScene extends Phaser.Scene {
             this.lastCharge = 0;
         }
     }
-
 
     // --------------------------
     // Combat (existing projectile & melee behavior)
@@ -753,6 +759,7 @@ export default class MainScene extends Phaser.Scene {
                 bullet.body.onWorldBounds = true;
                 bullet.setSize(8, 8);
                 bullet.setScale(0.4);
+                bullet.setDepth(600); // draw over resource sprites (resources use low depth like 5)
 
                 const velocity = this.physics.velocityFromRotation(angle, speed);
                 bullet.setVelocity(velocity.x, velocity.y);
@@ -773,42 +780,43 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-
-
     swingBat(pointer, wpn) {
-        // --- Gates: no reentry while swinging; respect cooldown ---
-        const now = this.time.now;
-        if (this.isSwinging) return;
-        if (now < (this.cooldownUntil || 0)) return;
-
         // Per-weapon tuning
         let swingDurationMs = wpn?.swingDurationMs ?? 160;
-        let swingCooldownMs = wpn?.swingCooldownMs ?? 280;
-        const range  = wpn?.range  ?? 30;
+        const swingCooldownMs = wpn?.swingCooldownMs ?? 80; // base cooldown ONLY (DB cooldownMultiplier ignored)
+        const range = wpn?.range ?? 30;
         const radius = wpn?.radius ?? 22;
 
-        // Stamina FIRST so penalties are known before commit
+        // --- MID-SWING PROTECTION: don't allow a new swing during the tween
+        if (this._isSwinging) return;
+
+        // --- COOLDOWN: measured from END of the previous swing
+        const now = this.time.now;
+        if (now - (this._lastSwingEndTime || 0) < swingCooldownMs) return;
+
+        // Stamina handling
         const st = wpn?.stamina;
         let lowStamina = false;
         if (st?.cost != null) {
-            if (this.hasStamina(st.cost)) {
-                this.spendStamina(st.cost);
+            const cost = st.cost;
+            if (this.hasStamina(cost)) {
+                this.spendStamina(cost);
+                // If paying cost leaves us effectively gassed, mark tired (affects swingDuration only)
+                if (this.stamina <= 0 || this.stamina < cost) lowStamina = true;
             } else {
                 lowStamina = true;
-                this.spendStamina(this.stamina); // drain to 0; triggers regen delay
+                this.spendStamina(this.stamina); // drain to 0 for consistent regen timing
             }
         }
+
+        // Apply tired penalty to ANIMATION LENGTH ONLY (no cooldown scaling)
         if (lowStamina && st) {
-            swingDurationMs = Math.floor(swingDurationMs * (st.slowMultiplier || 3));
-            swingCooldownMs = Math.floor(swingCooldownMs * (st.cooldownMultiplier || 2));
+            const slowMult = (st.slowMultiplier ?? st.slowMult ?? 3); // keep slow animation if configured
+            swingDurationMs = Math.floor(swingDurationMs * slowMult);
+            // NOTE: cooldownMultiplier intentionally ignored per Option C
         }
 
-        // Commit: set state and fixed cooldown end time now
-        this.isSwinging = true;
-        this.cooldownUntil = now + swingCooldownMs;
-        this.swingEndAt = now + swingDurationMs + 300; // watchdog margin
-
-        // Aim
+        // Aim at cursor
         let aim = Phaser.Math.Angle.Between(this.player.x, this.player.y, pointer.worldX, pointer.worldY);
         aim = Phaser.Math.Angle.Normalize(aim);
 
@@ -816,32 +824,35 @@ export default class MainScene extends Phaser.Scene {
         const halfArc = Phaser.Math.DegToRad(45);
         let startRot = Phaser.Math.Angle.Normalize(aim - halfArc);
         let endRot   = Phaser.Math.Angle.Normalize(aim + halfArc);
-        if (endRot < startRot) endRot += Math.PI * 2;
-
-        // Clean any leftovers (paranoid)
-        if (this.batSprite) { this.batSprite.destroy(); this.batSprite = null; }
-        if (this.meleeHits) this.meleeHits.clear(true, true);
+        if (endRot < startRot) endRot += Math.PI * 2; // unwrap
 
         // Bat sprite
-        const baseOffset = Phaser.Math.DegToRad(45);
+        if (this.batSprite) this.batSprite.destroy();
+
+        const baseOffset = Phaser.Math.DegToRad(45); // art offset
+
         this.batSprite = this.add.image(this.player.x, this.player.y, 'crude_bat')
             .setDepth(500)
             .setOrigin(0.1, 0.8)
             .setRotation(startRot);
 
-        // Hit circle (pure sensor)
+        // Hit circle
         const hit = this.add.circle(this.player.x, this.player.y, radius, 0xff0000, 0);
         this.physics.add.existing(hit);
         hit.body.setAllowGravity(false);
-        hit.body.setImmovable(true);
-        hit.body.moves = false;
         if (hit.body.setCircle) {
             hit.body.setCircle(radius);
             hit.body.setOffset(-radius, -radius);
         }
         this.meleeHits.add(hit);
 
-        // Tweened swing
+        // Per‑swing registry: ensures each enemy is hit only once per swing
+        hit._hitSet = new Set();
+
+        // --- Lock swing state now
+        this._isSwinging = true;
+
+        // Drive swing using a tweened t value for precise control
         const swing = { t: 0 };
         const deltaRot = endRot - startRot;
         this.tweens.add({
@@ -852,42 +863,126 @@ export default class MainScene extends Phaser.Scene {
             onUpdate: () => {
                 const rot = startRot + swing.t * deltaRot;
                 this.batSprite.setPosition(this.player.x, this.player.y).setRotation(rot + baseOffset);
+
                 const hx = this.player.x + Math.cos(rot) * range;
                 const hy = this.player.y + Math.sin(rot) * range;
                 hit.setPosition(hx, hy);
             },
             onComplete: () => {
+                // Swing finished → record end time for cooldown and unlock
+                this._isSwinging = false;
+                this._lastSwingEndTime = this.time.now;
                 if (this.batSprite) { this.batSprite.destroy(); this.batSprite = null; }
-                if (hit?.body) hit.body.enable = false;
-                if (hit && hit.destroy) hit.destroy();
-                this.isSwinging = false;
             }
         });
 
-        // Safety cleanup in case tween is interrupted
-        this.time.delayedCall(swingDurationMs + 50, () => {
-            if (hit?.body) hit.body.enable = false;
-            if (hit && !hit.destroyed && hit.destroy) hit.destroy();
+        // Destroy the hit sensor when the swing completes
+        this.time.delayedCall(swingDurationMs, () => {
+            if (hit && hit.destroy) hit.destroy();
         });
     }
 
 
+
+
     handleMeleeHit(hit, zombie) {
-        if (!zombie || !zombie.active) return;
+        if (!hit || !zombie || !zombie.active) return;
 
-        // Simple i-frames to prevent multi-hits within a single swing overlap
-        const now = this.time.now;
-        if (!zombie.lastMeleeTime) zombie.lastMeleeTime = 0;
-        if (now - zombie.lastMeleeTime < 120) return;
-        zombie.lastMeleeTime = now;
+        // One-hit-per-swing: use the swing's registry Set on the hit circle
+        const reg = hit._hitSet || (hit._hitSet = new Set());
+        if (reg.has(zombie)) return;  // already hit this enemy during this swing
+        reg.add(zombie);
 
-        // TODO: When zombies have HP, subtract itemDB damage instead of destroy
-        zombie.destroy();
+        // Damage prefers sensor payload, falls back to DB
+        const base = ITEM_DB?.crude_bat?.weapon?.damage ?? 10;
+        const dmg = hit?.getData('damage') ?? base;
+
+        this._applyZombieDamage(zombie, dmg);
     }
 
     handleBulletHit(bullet, zombie) {
-        bullet.destroy();
-        zombie.destroy();
+        if (bullet && bullet.destroy) bullet.destroy();
+        if (!zombie || !zombie.active) return;
+
+        // Damage prefers bullet payload, falls back to DB
+        const base = ITEM_DB?.slingshot?.weapon?.damage ?? 6;
+        const dmg = bullet?.getData('damage') ?? base;
+
+        this._applyZombieDamage(zombie, dmg);
+    }
+
+    // Create the slingshot ghost (above the player)
+    _createSlingshotGhost(eq) {
+        const def = eq ? ITEM_DB[eq.id] : null;
+        const texKey = def?.icon?.textureKey || eq?.id || 'slingshot';
+
+        if (this.slingshotGhost && this.slingshotGhost.texture && this.slingshotGhost.texture.key === texKey) {
+            this.slingshotGhost.setVisible(true);
+            return;
+        }
+        if (this.slingshotGhost) {
+            this.slingshotGhost.destroy();
+            this.slingshotGhost = null;
+        }
+
+        this.slingshotGhost = this.add.image(this.player.x, this.player.y, texKey)
+            .setOrigin(0.5, 0.5)
+            .setDepth((this.player?.depth ?? 900) + 1) // always above player
+            .setScale(0.5)                             // shrink to 50%
+            .setFlipY(false);                          // start upright
+    }
+
+    // Update position/rotation each frame while charging
+    _updateSlingshotGhost() {
+        if (!this.slingshotGhost || !this.isCharging) return;
+
+        // Equipped slingshot weapon data for offset
+        const eq = this.uiScene?.inventory?.getEquipped?.();
+        const wpn = eq ? ITEM_DB[eq.id]?.weapon : null;
+
+        // Support both: number (radial) or object {x,y}
+        const mo = wpn?.muzzleOffset;
+        const ptr = this.input.activePointer;
+        const px = this.player.x;
+        const py = this.player.y;
+        const angle = Phaser.Math.Angle.Between(px, py, ptr.worldX, ptr.worldY); // radians
+
+        let x = px, y = py;
+        if (typeof mo === 'number') {
+            // Radial distance
+            x = px + Math.cos(angle) * mo;
+            y = py + Math.sin(angle) * mo;
+        } else if (mo && typeof mo.x === 'number' && typeof mo.y === 'number') {
+            // Local-space offset (x = forward, y = perpendicular)
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const offX = mo.x * cos - mo.y * sin;
+            const offY = mo.x * sin + mo.y * cos;
+            x = px + offX;
+            y = py + offY;
+        } else {
+            // Fallback radius
+            const r = 20;
+            x = px + Math.cos(angle) * r;
+            y = py + Math.sin(angle) * r;
+        }
+        this.slingshotGhost.setPosition(x, y);
+
+        // Face the aim; flip boundary shifted slightly left so it flips later on the right side
+        const flipY = Math.cos(angle - Phaser.Math.DegToRad(-20)) < 0;
+
+        this.slingshotGhost
+            .setRotation(angle)   // always point at cursor
+            .setFlipY(flipY)      // keep upright when crossing the boundary
+            .setScale(0.5);       // enforce 50% scale
+    }
+
+    // Destroy and clear reference
+    _destroySlingshotGhost() {
+        if (this.slingshotGhost) {
+            this.slingshotGhost.destroy();
+            this.slingshotGhost = null;
+        }
     }
 
     collectResource(player, resource) {
@@ -929,28 +1024,43 @@ export default class MainScene extends Phaser.Scene {
             this.input.off('pointerup', this.onPointerUp, this);
 
             this.gameOverText = this.add.text(
-            this.cameras.main.centerX,
-            this.cameras.main.centerY,
-            'Game Over!\nPress SPACE (or R) to restart',
-            {
-                fontSize: '32px',
-                fill: '#fff',
-                align: 'center',
-                padding: { x: 20, y: 20 }
-            }
-        )
-        .setOrigin(0.5)
-        .setScrollFactor(0)   // HUD-style: fixed to screen
-        .setDepth(2000);
-        this.gameOverText.setStroke('#720c0c', 3);
-
-        // One-time restart listeners (space)
-        this.input.keyboard.once('keydown-SPACE', this._restartGame, this);
+                this.cameras.main.centerX,
+                this.cameras.main.centerY,
+                'Game Over!\nPress SPACE to restart',
+                {
+                    fontSize: '32px',
+                    fill: '#fff',
+                    align: 'center',
+                    padding: { x: 20, y: 20 }
+                }
+            ).setOrigin(0.5);
+            this.gameOverText.setStroke('#720c0c', 3);
         }
     }
 
+    
+    // Pick a zombie type using spawnWeight from the DB (option 1)
+    _pickZombieTypeFromDB() {
+        const entries = Object.entries(ZOMBIES);
+        if (!entries.length) return 'walker';
+        let total = 0;
+        for (const [key, def] of entries) {
+            total += Math.max(0, def?.spawnWeight ?? 1);
+        }
+        if (total <= 0) return entries[0][0];
+        let r = Math.random() * total;
+        for (const [key, def] of entries) {
+            r -= Math.max(0, def?.spawnWeight ?? 1);
+            if (r <= 0) return key;
+        }
+        return entries[0][0];
+    }
+
     // Spawn a zombie at a random screen edge
-    spawnZombie() {
+    spawnZombie(typeKey) {
+        const type = typeKey || this._pickZombieTypeFromDB?.() || 'walker';
+        const def = (window.ZOMBIES && ZOMBIES[type]) ? ZOMBIES[type] : (window.ZOMBIES?.walker || {});
+
         const edge = Phaser.Math.Between(0, 3);
         const maxX = this.sys.game.config.width;
         const maxY = this.sys.game.config.height;
@@ -963,8 +1073,135 @@ export default class MainScene extends Phaser.Scene {
             case 3: x = maxX; y = Phaser.Math.Between(0, maxY); break;
         }
 
-        const zombie = this.zombies.create(x, y, 'zombie');
+        const tex = def.textureKey || 'zombie';
+        const zombie = this.zombies.create(x, y, tex);
+        zombie.setOrigin(0.5, 0.5);
+        zombie.setScale(def.scale ?? 0.1);
+        zombie.setDepth(def.depth ?? 2);
         zombie.lastHitTime = 0;
-        zombie.setScale(0.1);
+        zombie.zType = type;
+
+        // Stats
+        zombie.speed = def.speed ?? 40;
+        zombie.maxHp = def.health ?? 40;
+        zombie.hp = zombie.maxHp;
+        zombie.attackDamage = def.damage ?? 10;
+        zombie.aggroRange = def.aggroRange ?? 99999;
+        zombie.attackCooldownMs = def.attackCooldownMs ?? 800;
+        zombie.resist = Object.assign({ rangedMult: 1, meleeMult: 1, knockback: 0 }, def.resist || {});
+
+        // HP bar placeholders (created on first damage only)
+        zombie.hpBg = null;
+        zombie.hpFill = null;
+        zombie.hpBarW = def.hpBar?.width ?? 18;
+        zombie.hpBarH = def.hpBar?.height ?? 3;
+        zombie.hpYOffset = (typeof def.hpBar?.yOffset === 'number')
+            ? def.hpBar.yOffset
+            : (zombie.displayHeight * (def.hpBar?.yOffsetFactor ?? 0.6));
+
+        return zombie;
     }
+
+    // --- Zombie HP bar & damage helpers ---
+
+    // Create the small red HP bar above the zombie (only created on first damage)
+    _ensureZombieHpBar(zombie) {
+        if (zombie.hpBg && zombie.hpFill) return;
+
+        const barW = zombie.hpBarW ?? 18;
+        const barH = zombie.hpBarH ?? 3;
+        const yOff = zombie.hpYOffset ?? (zombie.displayHeight * 0.6);
+
+        const bg = this.add.rectangle(zombie.x, zombie.y - yOff, barW, barH, 0x000000)
+            .setOrigin(0.5, 1).setDepth(950).setAlpha(0.9).setVisible(true);
+        const fill = this.add.rectangle(bg.x - barW / 2, bg.y, barW, barH, 0xff3333)
+            .setOrigin(0, 1).setDepth(951).setAlpha(1).setVisible(true);
+
+        zombie.hpBg = bg;
+        zombie.hpFill = fill;
+        zombie.hpBarW = barW;
+        zombie.hpBarH = barH;
+        zombie.hpYOffset = yOff;
+    }
+
+    // Keep a zombie's HP bar positioned; hide when full health
+    _updateOneZombieHpBar(zombie) {
+        if (!zombie.hpBg || !zombie.hpFill) return;
+
+        const w = zombie.hpBarW ?? 18;
+        const yOff = zombie.hpYOffset ?? (zombie.displayHeight * 0.6);
+
+        const bx = zombie.x;
+        const by = zombie.y - yOff;
+        zombie.hpBg.setPosition(bx, by);
+        zombie.hpFill.setPosition(bx - w / 2, by);
+
+        const pct = Phaser.Math.Clamp((zombie.hp ?? 0) / (zombie.maxHp || 1), 0, 1);
+        zombie.hpFill.width = Math.max(0, w * pct);
+
+        const show = pct < 1; // only visible after they've taken damage
+        zombie.hpBg.setVisible(show);
+        zombie.hpFill.setVisible(show);
+    }
+
+    // Apply weapon damage and update/destroy as needed
+    _applyZombieDamage(zombie, amount) {
+        if (!zombie || !zombie.active) return;
+
+        const dmg = Math.max(0, amount || 0);
+        zombie.hp = Math.max(0, (zombie.hp ?? zombie.maxHp ?? 1) - dmg);
+
+        if (!zombie.hpBg || !zombie.hpFill) this._ensureZombieHpBar(zombie);
+        this._updateOneZombieHpBar(zombie);
+
+        if (zombie.hp <= 0) this._destroyZombie(zombie);
+    }
+
+    // Cleanly destroy a zombie and its HP bar
+    _destroyZombie(zombie) {
+        if (zombie.hpBg) { zombie.hpBg.destroy(); zombie.hpBg = null; }
+        if (zombie.hpFill) { zombie.hpFill.destroy(); zombie.hpFill = null; }
+        if (zombie.destroy) zombie.destroy();
+    }
+
+    // Return an array of { id, weight } eligible for the given phase ('day' | 'night')
+    _getEligibleZombieTypesForPhase(phase = 'day') {
+        const list = [];
+        for (const id of Object.keys(ZOMBIES)) {
+            const def = ZOMBIES[id];
+            if (!def) continue;
+            const weight = def.spawnWeight ?? 1;
+            if (weight <= 0) continue;
+            if (phase === 'day') {
+                if (def.canSpawnDay === true) {
+                    list.push({ id, weight });
+                }
+            } else {
+                // night: allow all types (even if canSpawnDay is false/missing)
+                list.push({ id, weight });
+            }
+        }
+        // Fallback: if nothing eligible (misconfig), allow 'walker'
+        if (list.length === 0 && ZOMBIES.walker) {
+            list.push({ id: 'walker', weight: ZOMBIES.walker.spawnWeight ?? 1 });
+        }
+        return list;
+    }
+
+    // Weighted random pick from [{id, weight}, ...]
+    _pickZombieTypeWeighted(list) {
+        if (!list || list.length === 0) return 'walker';
+        let total = 0;
+        for (const e of list) total += Math.max(0, e.weight || 0);
+        if (total <= 0) return list[0].id;
+
+        const r = Math.random() * total;
+        let acc = 0;
+        for (const e of list) {
+            acc += Math.max(0, e.weight || 0);
+            if (r <= acc) return e.id;
+        }
+        return list[list.length - 1].id;
+    }
+
 }

@@ -238,9 +238,35 @@ export default class UIScene extends Phaser.Scene {
         this.#wireSlotInput([...this.uiHotbarSlots, ...this.uiGridSlots]);
 
         // Toggle TAB
+        // Make sure the browser doesn't swallow TAB (focus change)
+        this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.TAB);
         this.input.keyboard.on('keydown-TAB', (e) => {
             e.preventDefault();
             this.toggleInventory();
+        });
+
+        // --- Inventory lock after death ---
+        this.inventoryLocked = false;
+
+        this.events.on('ui:lockInventory', (locked = true) => {
+            this.inventoryLocked = !!locked;
+
+            if (this.inventoryLocked) {
+                // If panel is open while locking, snap carried item back and close it
+                if (this.inventoryPanel?.visible) {
+                    if (typeof this.#returnCarryOnClose === 'function') {
+                        this.#returnCarryOnClose();
+                    } else {
+                        // Fallback cleanup if helper isn't present
+                        this.dragCarry = null;
+                        this.dragOrigin = null;
+                        if (this.dragIcon) { this.dragIcon.destroy(); this.dragIcon = null; }
+                        if (this.dragText) { this.dragText.destroy(); this.dragText = null; }
+                        this.events.emit('inv:changed');
+                    }
+                    this.inventoryPanel.setVisible(false);
+                }
+            }
         });
 
         // Scroll wheel (when panel visible)
@@ -263,15 +289,20 @@ export default class UIScene extends Phaser.Scene {
                     }
                 } else if (down) {
                     if (!this.dragCarry) {
-                        // pick up 1 into carry
-                        const got = this.inventory.split(slot.area, slot.index, 1);
-                        if (got) { this.dragCarry = got; this.#updateCarryVisual(); }
+                        // pick up 1 into carry — allow emptying the slot
+                        const got = this.inventory.split(slot.area, slot.index, 1, /* allowEmpty */ true);
+                        if (got) {
+                            this.dragCarry = got;
+                            // (optional) remember origin if you use return-on-close logic
+                            this.dragOrigin = { area: slot.area, index: slot.index };
+                            this.#updateCarryVisual();
+                        }
                     } else {
-                        // if same type in slot, siphon 1 more into carry
+                        // if same type in slot, siphon 1 more into carry — allow emptying the slot
                         const arr = slot.area === 'hotbar' ? this.inventory.hotbar : this.inventory.grid;
                         const s = arr[slot.index];
                         if (s && s.id === this.dragCarry.id) {
-                            const got = this.inventory.split(slot.area, slot.index, 1);
+                            const got = this.inventory.split(slot.area, slot.index, 1, /* allowEmpty */ true);
                             if (got) {
                                 this.dragCarry.count += got.count;
                                 this.#updateCarryVisual();
@@ -373,7 +404,7 @@ export default class UIScene extends Phaser.Scene {
             // Only show whole numbers
             this.staminaText.setText(`${Math.floor(st)}`);
             this.staminaText.setVisible(true);
-            this.staminaText.setPosition(this.staminaBarX + 4, this.staminaBarY + 2);
+            this.staminaText.setPosition(this.staminaBarX + 4, this.staminaBarY + 1 );
         }
     }
 
@@ -381,9 +412,15 @@ export default class UIScene extends Phaser.Scene {
     // Inventory panel
     // -------------------------
     toggleInventory() {
-        const visible = this.inventoryPanel.visible;
-        this.inventoryPanel.setVisible(!visible);
-        if (!visible) this.#refreshAllIcons();
+        if (this.inventoryLocked) return; // <- blocked after death
+
+        const wasVisible = this.inventoryPanel.visible;
+        if (wasVisible) {
+            // Closing: if we’re carrying something, put it back and clear carry state
+            this.#returnCarryOnClose();
+        }
+        this.inventoryPanel.setVisible(!wasVisible);
+        if (!wasVisible) this.#refreshAllIcons();
     }
 
     setInventoryAlpha() {
@@ -416,11 +453,16 @@ export default class UIScene extends Phaser.Scene {
                     // LEFT: full pick/place (with swap)
                     if (!this.dragCarry) {
                         const got = this.inventory.takeAll(s.area, s.index);
-                        if (got) { this.dragCarry = got; this.#updateCarryVisual(); }
+                        if (got) {
+                            this.dragCarry = got;
+                            this.dragOrigin = { area: s.area, index: s.index }; // <— TRACK ORIGIN
+                            this.#updateCarryVisual();
+                        }
                     } else {
                         const res = this.inventory.place(s.area, s.index, { id: this.dragCarry.id, count: this.dragCarry.count }, this.dragCarry.count);
                         if (res.swapped) {
                             this.dragCarry = res.swapped;
+                            // keep original dragOrigin; we still “came from” the first pickup
                             this.#updateCarryVisual();
                         } else if (res.leftover) {
                             this.dragCarry = res.leftover;
@@ -435,7 +477,11 @@ export default class UIScene extends Phaser.Scene {
                     // RIGHT: half logic
                     if (!this.dragCarry) {
                         const got = this.inventory.split(s.area, s.index); // half
-                        if (got) { this.dragCarry = got; this.#updateCarryVisual(); }
+                        if (got) {
+                            this.dragCarry = got;
+                            this.dragOrigin = { area: s.area, index: s.index }; // <— TRACK ORIGIN
+                            this.#updateCarryVisual();
+                        }
                     } else {
                         // place half of carry if empty or same id; if different id, swap full
                         const amount = Math.max(1, Math.floor(this.dragCarry.count / 2));
@@ -465,6 +511,7 @@ export default class UIScene extends Phaser.Scene {
             });
         });
     }
+
 
     // -------------------------
     // Visual refresh
@@ -698,6 +745,35 @@ export default class UIScene extends Phaser.Scene {
         } else if (this.dragText.text !== labelText) {
             this.dragText.setText(labelText);
         }
+    }
+
+    #returnCarryOnClose() {
+        if (!this.dragCarry || !this.dragCarry.id || this.dragCarry.count <= 0) {
+            // Nothing in hand; just be sure the drag state is clean
+            this.dragOrigin = null;
+            if (this.dragIcon) { this.dragIcon.destroy(); this.dragIcon = null; }
+            if (this.dragText) { this.dragText.destroy(); this.dragText = null; }
+            this.dragCarry = null;
+            return;
+        }
+
+        const origin = this.dragOrigin || null; // { area, index } or null
+
+        // Ask the model to put it back with the priority: origin -> first empty grid -> first empty hotbar
+        this.inventory.putBack(
+            { id: this.dragCarry.id, count: this.dragCarry.count },
+            origin?.area || null,
+            origin?.index ?? 0
+        );
+
+        // Clear drag state & visuals — after closing you are NOT holding anything
+        this.dragOrigin = null;
+        if (this.dragIcon) { this.dragIcon.destroy(); this.dragIcon = null; }
+        if (this.dragText) { this.dragText.destroy(); this.dragText = null; }
+        this.dragCarry = null;
+
+        // Refresh UI
+        this.events.emit('inv:changed');
     }
 
     #clearCarry() {
