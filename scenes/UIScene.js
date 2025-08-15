@@ -13,6 +13,10 @@ export default class UIScene extends Phaser.Scene {
         this._hotbarRefreshDelayMs = 16; // one frame-ish
         // Tweens used to pulse the charge bar when fully charged
         this._chargeGlowTweens = [];
+        // NEW: cooldown overlay state
+        this._activeCooldowns = new Map(); // itemId -> { start: ms, end: ms }
+        this._slotOverlays = [];           // [{kind:'bottom'|'hotbar'|'grid', area, index, itemId, rect}]
+
     }
 
     init(data) {
@@ -335,16 +339,19 @@ export default class UIScene extends Phaser.Scene {
             // Update only that slot; then refresh bottom HUD (debounced)
             this.#redrawSlot(area, index);
             this.#queueBottomHotbarRefresh();
+            this.#syncCooldownOverlays();
         });
         this.events.on('inv:hotbarSelected', () => {
             this.#highlightBottomHotbar(this.inventory.selectedHotbarIndex);
             this.#hideChargeUIForAll();
             this.#queueBottomHotbarRefresh();
+            this.#syncCooldownOverlays();
         });
         // Keep a light handler for “bulk” changes (e.g., initial paint or mass ops)
         this.events.on('inv:changed', () => {
             if (this.inventoryPanel.visible) this.#refreshAllIcons();
             this.#queueBottomHotbarRefresh();
+            this.#syncCooldownOverlays();
         });
 
         // Charging UI events from MainScene
@@ -355,6 +362,14 @@ export default class UIScene extends Phaser.Scene {
             this.#hideChargeUIForAll();
             // Restore normal selected highlight (no border glow here anymore)
             this.#highlightBottomHotbar(this.inventory.selectedHotbarIndex);
+        });
+        
+        // NEW: cooldown overlays (e.g., bat swings)
+        this.events.on('weapon:cooldownStart', ({ itemId, durationMs }) => {
+            if (!itemId || !durationMs || durationMs <= 0) return;
+            const now = this.time.now;
+            this._activeCooldowns.set(itemId, { start: now, end: now + durationMs });
+            this.#syncCooldownOverlays();
         });
 
         // Day/Night mini HUD
@@ -663,9 +678,13 @@ export default class UIScene extends Phaser.Scene {
         const vis = this.bottomHotbarVisuals[idx];
         if (!vis) return;
 
-        // Only show for the currently equipped slingshot
+        // ✅ Show charge bar for ANY equipped weapon that supports charging
         const eq = this.inventory.getEquipped?.();
-        if (!eq || eq.id !== 'slingshot') {
+        const canCharge =
+            !!eq &&
+            ITEM_DB?.[eq.id]?.weapon?.canCharge === true;
+
+        if (!canCharge) {
             this.#hideChargeUIForAll();
             this.#highlightBottomHotbar(idx);
             return;
@@ -679,13 +698,12 @@ export default class UIScene extends Phaser.Scene {
 
         // Size the fill bar
         const fullW = vis.chargeBg.width;
-        const w = Math.floor(fullW * p);
-        vis.chargeFill.width = Math.max(0, Math.min(fullW, w));
+        const w = Math.max(0, Math.min(fullW, Math.floor(fullW * p)));
+        vis.chargeFill.width = w;
 
-        // Handle glow: pulse the fill when fully charged; otherwise solid
+        // Handle glow: pulse when fully charged; otherwise solid
         const existing = this._chargeGlowTweens[idx];
         if (p >= 1) {
-            // brighten the fill and start a subtle pulse if not already running
             vis.chargeFill.setFillStyle(0xffff88);
             if (!existing || !existing.isPlaying()) {
                 this._chargeGlowTweens[idx] = this.tweens.add({
@@ -697,7 +715,6 @@ export default class UIScene extends Phaser.Scene {
                 });
             }
         } else {
-            // not full: ensure no pulse and normal color/alpha
             if (existing && existing.isPlaying()) {
                 existing.stop();
                 this._chargeGlowTweens[idx] = null;
@@ -706,10 +723,154 @@ export default class UIScene extends Phaser.Scene {
             vis.chargeFill.setFillStyle(0xffff00);
         }
 
-        // Keep slot border on normal highlight — no border glow anymore
+        // Keep slot border on normal highlight — no border glow
         this.#highlightBottomHotbar(idx);
     }
 
+    // =========================
+    // Cooldown overlay helpers
+    // =========================
+
+    // Create/ensure overlays for any slots showing items currently on cooldown,
+    // and remove overlays that no longer match or have expired.
+    #syncCooldownOverlays() {
+        const now = this.time.now;
+
+        // Remove expired item cooldowns
+        for (const [itemId, cd] of this._activeCooldowns) {
+            if (now >= cd.end) this._activeCooldowns.delete(itemId);
+        }
+
+        // Build quick lookup of which slots show which item
+        const slotsByItem = new Map(); // itemId -> array of { kind, area, index, x, y, w, h }
+        const pushSlot = (itemId, desc) => {
+            if (!itemId) return;
+            if (!slotsByItem.has(itemId)) slotsByItem.set(itemId, []);
+            slotsByItem.get(itemId).push(desc);
+        };
+
+        const slotSize = this.slotSize || 44;
+
+        // Bottom HUD hotbar
+        for (let i = 0; i < this.bottomHotbarRects.length; i++) {
+            const s = this.inventory.hotbar[i];
+            if (!s) continue;
+            const r = this.bottomHotbarRects[i];
+            pushSlot(s.id, {
+                kind: 'bottom', area: 'bottom', index: i,
+                x: r.x, y: r.y, w: r.width, h: r.height
+            });
+        }
+
+        // Panel top hotbar
+        for (let i = 0; i < this.uiHotbarSlots.length; i++) {
+            const s = this.inventory.hotbar[i];
+            if (!s) continue;
+            const r = this.uiHotbarSlots[i].rect;
+            pushSlot(s.id, {
+                kind: 'hotbar', area: 'hotbar', index: i,
+                x: r.x, y: r.y, w: r.width ?? slotSize, h: r.height ?? slotSize
+            });
+        }
+
+        // Panel grid
+        for (let i = 0; i < this.uiGridSlots.length; i++) {
+            const s = this.inventory.grid[i];
+            if (!s) continue;
+            const r = this.uiGridSlots[i].rect;
+            pushSlot(s.id, {
+                kind: 'grid', area: 'grid', index: i,
+                x: r.x, y: r.y, w: r.width ?? slotSize, h: r.height ?? slotSize
+            });
+        }
+
+        // Ensure overlays for active cooldown items
+        const need = new Set();
+        for (const [itemId, cd] of this._activeCooldowns) {
+            const slots = slotsByItem.get(itemId) || [];
+            for (const desc of slots) {
+                const key = `${desc.kind}:${desc.index}:${itemId}`;
+                need.add(key);
+                this.#ensureOverlay(desc, itemId);
+            }
+        }
+
+        // Remove overlays that are no longer needed
+        for (let i = this._slotOverlays.length - 1; i >= 0; i--) {
+            const o = this._slotOverlays[i];
+            const key = `${o.kind}:${o.index}:${o.itemId}`;
+            const cd = this._activeCooldowns.get(o.itemId);
+            const alive = cd && this.time.now < cd.end;
+            if (!alive || !need.has(key)) {
+                this.#removeOverlay(o, i);
+            }
+        }
+    }
+
+    // Create overlay for a specific slot if missing
+    #ensureOverlay(desc, itemId) {
+        const existing = this._slotOverlays.find(o =>
+            o.kind === desc.kind && o.index === desc.index && o.itemId === itemId
+        );
+        if (existing) return;
+
+        const rect = this.add.rectangle(desc.x, desc.y, desc.w, desc.h, 0x808080)
+            .setOrigin(0, 0)
+            .setAlpha(0.4) // 40% opaque grey cover 
+            .setVisible(true);
+
+        // Depth: above icons/counters
+        if (desc.kind === 'bottom') rect.setDepth(14); // icon(10), count(11), chargeFill(13) -> overlay(14)
+        else rect.setDepth(12); // panel: icon(10), count(11) -> overlay(12)
+
+        // If this is inside the inventory panel, attach to panel container for correct draw order
+        if (desc.kind !== 'bottom' && this.inventoryPanel) {
+            this.inventoryPanel.add(rect);
+        }
+
+        this._slotOverlays.push({
+            kind: desc.kind, area: desc.area, index: desc.index, itemId, rect,
+            x: desc.x, y: desc.y, w: desc.w, h: desc.h
+        });
+    }
+
+    // Per-frame: update overlay “flattening” based on the item’s cooldown progress
+    #updateCooldownOverlays() {
+        if (this._slotOverlays.length === 0) return;
+
+        const now = this.time.now;
+        for (let i = this._slotOverlays.length - 1; i >= 0; i--) {
+            const o = this._slotOverlays[i];
+            const cd = this._activeCooldowns.get(o.itemId);
+            if (!cd) { this.#removeOverlay(o, i); continue; }
+
+            const span = Math.max(1, cd.end - cd.start);
+            const t = Phaser.Math.Clamp((now - cd.start) / span, 0, 1);
+
+            // Flatten from full to zero **downward** (bottom anchored)
+            // Keep bottom edge fixed at y + h; move the TOP down as height shrinks.
+            const newHeight = o.h * (1 - t);
+            const newY = o.y + (o.h - newHeight);
+
+            o.rect.height = newHeight;
+            o.rect.y = newY;
+
+            if (now >= cd.end) {
+                this.#removeOverlay(o, i);
+            }
+        }
+    }
+
+    // Remove and destroy overlay (index optional for faster splice)
+    #removeOverlay(o, idx = -1) {
+        if (!o) return;
+        if (o.rect && o.rect.destroy) o.rect.destroy();
+        if (idx >= 0) this._slotOverlays.splice(idx, 1);
+        else {
+            const i = this._slotOverlays.indexOf(o);
+            if (i >= 0) this._slotOverlays.splice(i, 1);
+        }
+    }
 
     // -------------------------
     // Carry (drag) visuals
@@ -788,6 +949,8 @@ export default class UIScene extends Phaser.Scene {
             this.dragIcon.setPosition(p.worldX, p.worldY);
             if (this.dragText) this.dragText.setPosition(p.worldX + 12, p.worldY + 12);
         }
+        // NEW: animate cooldown overlays
+        this.#updateCooldownOverlays();
     }
 
     // -------------------------

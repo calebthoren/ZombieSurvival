@@ -1,5 +1,6 @@
 import MainScene from './scenes/MainScene.js';
 import UIScene from './scenes/UIScene.js';
+import PauseScene from './scenes/PauseScene.js';
 
 const BASE_WIDTH = 800;   // base game width (designed pixel resolution)
 const BASE_HEIGHT = 600;  // base game height
@@ -34,7 +35,7 @@ const config = {
         }
     },
 
-    scene: [MainScene, UIScene]
+    scene: [MainScene, UIScene,PauseScene ]
 };
 
 const game = new Phaser.Game(config);
