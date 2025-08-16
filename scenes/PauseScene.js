@@ -93,12 +93,18 @@ export default class PauseScene extends Phaser.Scene {
       // Placeholder: open settings scene in the future
     }, { fillColor: 0x1f2937, strokeColor: 0xf59e0b, hoverFill: 0x374151 });
 
-    makeButton(rowXRight, row1Y, smallW, smallH, 'Dev Mode', () => {
-      this.sound.play?.('sfx_click', { volume: 0.5 });
-      // Placeholder: toggle a dev flag on MainScene if desired in future
-      // Example dispatch:
-      // this.scene.get('MainScene')?.events?.emit('toggle:devmode');
-    }, { fillColor: 0x1f2937, strokeColor: 0x10b981, hoverFill: 0x374151 });
+    // Open Dev UI and close Pause behind it (keep MainScene paused)
+  makeButton(rowXRight, row1Y, smallW, smallH, 'Dev Mode', () => {
+      // Only play if the audio is actually loaded
+      if (this.cache?.audio?.exists('sfx_click')) {
+          this.sound.play('sfx_click', { volume: 0.5 });
+      }
+      if (!this.scene.isActive('DevUIScene')) {
+          this.scene.launch('DevUIScene');
+      }
+      // Close PauseScene so the UI isn't stacked/cluttered
+      this.scene.stop(); // <- important
+  }, { fillColor: 0x1f2937, strokeColor: 0x10b981, hoverFill: 0x374151 });
 
     // Row 2: placeholders (small buttons)
     makeButton(rowXLeft,  row2Y, smallW, smallH, 'Coming Soon', () => {
@@ -135,5 +141,14 @@ export default class PauseScene extends Phaser.Scene {
       // Fallback: just stop ourselves
       this.scene.stop('PauseScene');
     }
+  }
+
+  // Dev Mode button handler (optional if you call inline; kept for reuse)
+  onDevModeClick() {
+      // Open DevUIScene as a deeper overlay.
+      // Do NOT resume or restart MainScene here.
+      if (!this.scene.isActive('DevUIScene')) {
+          this.scene.launch('DevUIScene');
+      }
   }
 }

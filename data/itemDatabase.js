@@ -38,7 +38,7 @@ export const ITEM_DB = {
 
     // visuals (standalone images by default)
     icon: { textureKey: 'slingshot', scale: 1.0, ox: 0, oy: 0 },
-    world: { textureKey: 'slingshot', scale: 1.0 },
+    world: { textureKey: 'slingshot', scale: 0.5 },
 
     showCountOnIcon: true, // show total ammo on the weapon icon
 

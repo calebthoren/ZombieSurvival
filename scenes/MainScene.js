@@ -2,6 +2,7 @@
 import { WORLD_GEN } from '../data/worldGenConfig.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
+import DevTools from '../systems/DevTools.js';
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -155,8 +156,30 @@ export default class MainScene extends Phaser.Scene {
             .setDepth(999)
             .setAlpha(0);
 
-        // Start at day
-        this.startDay();
+        // --- DevTools integration ---
+// Apply current hitbox flag right away (responds to future toggles too)
+DevTools.applyHitboxFlag(this);
+
+// Listen for dev spawn events
+this.game.events.on('dev:spawn-zombie', ({ type, pos }) => this.spawnZombie(type, pos));
+this.game.events.on('dev:drop-item', ({ id, pos }) => this.spawnWorldItem(id, pos));
+
+// Inventory add hook used by DevTools.spawnItemsSmart()
+this.game.events.on('inv:add', ({ id, qty, where }) => {
+    const added = this.addItemToInventory(id, qty || 1, where || 'inventory') | 0;
+    const prev = this.registry.get('inv:addedCount') || 0;
+    this.registry.set('inv:addedCount', prev + added);
+});
+
+// Clean up listeners when scene shuts down/destroys
+this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    this.game.events.off('dev:spawn-zombie');
+    this.game.events.off('dev:drop-item');
+    this.game.events.off('inv:add');
+});
+
+// Start at day
+this.startDay();
 
         // Update the UI clock periodically (cheap)
         this.time.addEvent({ delay: 250, loop: true, callback: () => this.updateTimeUi() });
@@ -330,6 +353,12 @@ export default class MainScene extends Phaser.Scene {
     // ==========================
     spendStamina(amount) {
         if (!amount || amount <= 0) return 0;
+
+        // DevTools: skip stamina drain entirely when "Don’t Use Stamina" is ON
+        if (DevTools && typeof DevTools.shouldConsumeStamina === 'function' && !DevTools.shouldConsumeStamina()) {
+            return 0;
+        }
+
         const spend = Math.min(this.stamina, amount);
         if (spend > 0) {
             this.stamina -= spend;
@@ -478,6 +507,26 @@ export default class MainScene extends Phaser.Scene {
             }
         }
 
+        // Toggle player collision off/on in Invisible mode
+        const invisibleNow = DevTools.isPlayerInvisible();
+        if (this._wasInvisible !== invisibleNow) {
+            this._wasInvisible = invisibleNow;
+            const b = this.player?.body;
+            if (b) {
+                if (invisibleNow) {
+                    // ignore all collisions/overlaps against the player
+                    b.checkCollision.none = true;
+                } else {
+                    // restore default 4-way checks
+                    b.checkCollision.up = true;
+                    b.checkCollision.down = true;
+                    b.checkCollision.left = true;
+                    b.checkCollision.right = true;
+                    b.checkCollision.none = false;
+                }
+            }
+        }
+
         // Movement + sprinting
         const walkSpeed = 100;
         const sprintMult = 1.75;
@@ -517,7 +566,11 @@ export default class MainScene extends Phaser.Scene {
             if (stunned) {
                 zombie.setVelocity(0, 0);
             } else if (!inKnockback) {
-                this.physics.moveToObject(zombie, this.player, zombie.speed || 40);
+                if (DevTools.isPlayerInvisible()) {
+                    zombie.setVelocity(0, 0);
+                } else {
+                    this.physics.moveToObject(zombie, this.player, zombie.speed || 40);
+                }
             } // else: let existing velocity keep sliding
 
             if (zombie.body.velocity.x < 0) zombie.setFlipX(true);
@@ -528,6 +581,9 @@ export default class MainScene extends Phaser.Scene {
 
         // Visuals
         this.updateNightOverlay();
+
+        // Fast dev hitbox debug (~40 Hz for attacks/enemies/player)
+        DevTools.tickHitboxDebug(this);
 
         // Live charge bar updates
         if (this.isCharging) {
@@ -566,22 +622,22 @@ export default class MainScene extends Phaser.Scene {
             const wpn = def.weapon || {};
             const now = this.time.now;
 
-            // Cooldown gate (from END of previous swing)
+            // Cooldown gate (from END of previous swing) — SKIP when No Cooldown
             const baseCd = wpn?.swingCooldownMs ?? 80;
             const effectiveCd = this._nextSwingCooldownMs ?? baseCd;
             const lastEnd = this._lastSwingEndTime || 0;
-            if (now - lastEnd < effectiveCd) return;
+            if (!DevTools.flags.noCooldown && (now - lastEnd < effectiveCd)) return;
 
             if (wpn.canCharge === true) {
                 // Start charge
                 this.isCharging = true;
                 this.chargeStart = now;
-                this.chargeMaxMs = Math.max(1, wpn?.chargeMaxMs ?? 1500); // ← use per-weapon time
+                this.chargeMaxMs = Math.max(1, wpn?.chargeMaxMs ?? 1500); // per-weapon time
                 this._chargingItemId = equipped.id;
                 this.uiScene?.events?.emit('weapon:charge', 0);
 
-                // Ghost
-                this._createEquippedItemGhost(equipped);
+                // Ghost (optional; helper may not exist; pass ID not object)
+                this._createEquippedItemGhost?.(equipped.id);
                 this._updateEquippedItemGhost();
                 return;
             } else {
@@ -596,9 +652,9 @@ export default class MainScene extends Phaser.Scene {
             const wpn = def.weapon || {};
             const now = this.time.now;
 
-            // ranged cooldown gate
+            // Ranged cooldown gate — SKIP when No Cooldown
             const fireCd = wpn?.fireCooldownMs ?? 0;
-            if (fireCd > 0 && now < (this._nextRangedReadyTime || 0)) return;
+            if (!DevTools.flags.noCooldown && fireCd > 0 && now < (this._nextRangedReadyTime || 0)) return;
 
             // Ammo check (generic, multi-ammo ready)
             const ammoInfo = this.uiScene?.inventory?.totalOfActiveAmmo?.(equipped.id);
@@ -607,12 +663,12 @@ export default class MainScene extends Phaser.Scene {
             // Start charge
             this.isCharging = true;
             this.chargeStart = now;
-            this.chargeMaxMs = Math.max(1, wpn?.chargeMaxMs ?? 1500); // ← use per-weapon time
+            this.chargeMaxMs = Math.max(1, wpn?.chargeMaxMs ?? 1500); // per-weapon time
             this._chargingItemId = equipped.id;
             this.uiScene?.events?.emit('weapon:charge', 0);
 
-            // Ghost
-            this._createEquippedItemGhost(equipped);
+            // Ghost (optional; helper may not exist; pass ID not object)
+            this._createEquippedItemGhost?.(equipped.id);
             this._updateEquippedItemGhost();
             return;
         }
@@ -666,7 +722,12 @@ export default class MainScene extends Phaser.Scene {
         // Per-weapon tuning
         let swingDurationMs = wpn?.swingDurationMs ?? 160;
         const baseCooldownMs = wpn?.swingCooldownMs ?? 80;
-        const range = wpn?.range ?? 30;
+        // Reach tuning: pad the cone a bit so it lines up with the bat *tip* visually.
+        // You can tune per-weapon via ITEM_DB.weapon.meleeRangePad (default +10).
+        const rangeBase = wpn?.range ?? 30;
+        const rangePad  = wpn?.meleeRangePad ?? 10;
+        const range     = Math.max(8, rangeBase + rangePad);
+
         const radius = wpn?.radius ?? 22;
 
         // Mid-swing protection
@@ -747,25 +808,42 @@ export default class MainScene extends Phaser.Scene {
             .setOrigin(0.1, 0.8)
             .setRotation(startRot + baseOffset);
 
-        // Hit circle (sensor)
-        const hit = this.add.circle(this.player.x, this.player.y, radius, 0xff0000, 0);
-        this.physics.add.existing(hit);
-        hit.body.setAllowGravity(false);
-        if (hit.body.setCircle) {
-            hit.body.setCircle(radius);
-            hit.body.setOffset(-radius, -radius);
+        // ─────────────────────────────────────────────────────────────
+        // MELEE SWING — Rotating cone using angle-filtered circle
+        //   • One circle collider centered on player (radius = range).
+        //   • We filter overlaps by current aim ± coneHalf to form a cone.
+        // ─────────────────────────────────────────────────────────────
+        const cone = this.add.circle(this.player.x, this.player.y, range, 0x0000ff, 0);
+        this.physics.add.existing(cone);
+        cone.body.setAllowGravity(false);
+        if (cone.body.setCircle) {
+            cone.body.setCircle(range);
+            cone.body.setOffset(-range, -range);
         }
-        this.meleeHits.add(hit);
+        this.meleeHits.add(cone);
 
-        // Per-swing payload
-        hit.setData('damage', Math.max(0, Math.round(swingDamage)));
-        hit.setData('knockback', Math.max(0, swingKnockback));
-        hit._hitSet = new Set();
+        // Per-swing payload & state (seed aim + timing so debug follows the real swing)
+        cone._hitSet = new Set();
+        cone.setData('damage', Math.max(0, Math.round(swingDamage)));
+        cone.setData('knockback', Math.max(0, swingKnockback));
+        cone.setData('originX', this.player.x);
+        cone.setData('originY', this.player.y);
 
-        // Lock swing state now
+        // Seed aim immediately to prevent any fallback circle frame
+        cone.setData('aimAngle', startRot);
+
+        // Cone shape + reach
+        cone.setData('coneHalfRad', halfArc);
+        cone.setData('maxRange', range);
+
+        // Timing so DevTools animates slices in sync with real swing speed
+        cone.setData('swingStartMs', this.time.now | 0);
+        cone.setData('swingDurationMs', swingDurationMs | 0);
+
+        // Lock swing state
         this._isSwinging = true;
 
-        // Tweened swing motion
+        // Tween progress along swing arc
         const swing = { t: 0 };
         const deltaRot = endRot - startRot;
         this.tweens.add({
@@ -774,20 +852,22 @@ export default class MainScene extends Phaser.Scene {
             duration: swingDurationMs,
             ease: 'Sine.InOut',
             onUpdate: () => {
-                const rot = startRot + swing.t * deltaRot;
-                this.batSprite.setPosition(this.player.x, this.player.y).setRotation(rot + baseOffset);
+                const centerRot = startRot + swing.t * deltaRot;
 
-                const hx = this.player.x + Math.cos(rot) * range;
-                const hy = this.player.y + Math.sin(rot) * range;
-                hit.setPosition(hx, hy);
+                // Update bat sprite visually
+                this.batSprite
+                    .setPosition(this.player.x, this.player.y)
+                    .setRotation(centerRot + baseOffset);
+
+                // Keep collider centered and store current aim angle
+                cone.setPosition(this.player.x, this.player.y);
+                cone.setData('aimAngle', centerRot);
             },
             onComplete: () => {
-                // Swing finished → record end time for cooldown & unlock
                 this._isSwinging = false;
                 this._lastSwingEndTime = this.time.now;
                 if (this.batSprite) { this.batSprite.destroy(); this.batSprite = null; }
 
-                // UI cooldown overlay for bat
                 if (this._nextSwingCooldownMs > 0) {
                     this.uiScene?.events?.emit('weapon:cooldownStart', {
                         itemId: 'crude_bat',
@@ -797,8 +877,9 @@ export default class MainScene extends Phaser.Scene {
             }
         });
 
-        // Destroy the hit sensor after swing
-        this.time.delayedCall(swingDurationMs, () => { if (hit && hit.destroy) hit.destroy(); });
+        // Destroy the cone sensor after swing
+        this.time.delayedCall(swingDurationMs, () => { if (cone && cone.destroy) cone.destroy(); });
+
     }
 
     handleMeleeHit(hit, zombie) {
@@ -807,19 +888,36 @@ export default class MainScene extends Phaser.Scene {
         // One-hit-per-enemy-per-swing
         const reg = hit._hitSet || (hit._hitSet = new Set());
         if (reg.has(zombie)) return;
+
+        // Cone filter — angle & distance from swing origin
+        const ox = hit.getData('originX') ?? this.player.x;
+        const oy = hit.getData('originY') ?? this.player.y;
+        const aim = hit.getData('aimAngle') ?? Phaser.Math.Angle.Between(ox, oy, zombie.x, zombie.y);
+        const coneHalf = hit.getData('coneHalfRad') ?? Phaser.Math.DegToRad(45);
+        const maxRange = hit.getData('maxRange') ?? 30;
+
+        const dx = zombie.x - ox, dy = zombie.y - oy;
+        const dist2 = dx * dx + dy * dy;
+        if (dist2 > maxRange * maxRange) return;
+
+        const angTo = Math.atan2(dy, dx);
+        const delta = Phaser.Math.Angle.Wrap(angTo - aim);
+        if (Math.abs(delta) > coneHalf) return;
+
+        // Mark as hit (dedupe)
         reg.add(zombie);
 
-        const baseD = ITEM_DB?.crude_bat?.weapon?.damage ?? 10;
-        let dmg     = hit?.getData('damage') ?? baseD;
-        const baseKb = ITEM_DB?.crude_bat?.weapon?.knockback ?? 10;
-        const kb      = hit?.getData('knockback') ?? baseKb;
+        // Damage/KB payload
+        const baseD = hit.getData('damage');
+        const baseKb = hit.getData('knockback');
 
         // Apply melee resistance multiplier
         const meleeMult = Math.max(0, zombie?.resist?.meleeMult ?? 1);
-        dmg = Math.max(0, Math.round(dmg * meleeMult));
+        const dmg = Math.max(0, Math.round((baseD ?? (ITEM_DB?.crude_bat?.weapon?.damage ?? 10)) * meleeMult));
+        const kb  = Math.max(0, baseKb ?? (ITEM_DB?.crude_bat?.weapon?.knockback ?? 10));
 
         this._applyZombieDamage(zombie, dmg);
-        this._applyKnockbackAndMaybeStun(zombie, this.player.x, this.player.y, kb);
+        this._applyKnockbackAndMaybeStun(zombie, ox, oy, kb);
     }
 
     handleProjectileHit(bullet, zombie) {
@@ -896,7 +994,7 @@ export default class MainScene extends Phaser.Scene {
         const maxKb  = wpn?.maxChargeKnockback ?? baseKb;
         const shotKb = canCharge ? Phaser.Math.Linear(baseKb, maxKb, effectiveCharge) : baseKb;
 
-        // NEW: When tired, use stamina base cost/cost as a damage floor (replacing minDamageOnLow)
+        // When tired, use stamina base cost/cost as a damage floor (replacing minDamageOnLow)
         const dmgFloor = lowStamina ? ((typeof st.baseCost === 'number') ? st.baseCost : (typeof st.cost === 'number' ? st.cost : null)) : null;
         if (dmgFloor != null) shotDmg = Math.max(dmgFloor, shotDmg);
 
@@ -906,13 +1004,13 @@ export default class MainScene extends Phaser.Scene {
         const maxRange = wpn?.maxRange ?? 420;
         const travel   = Phaser.Math.Linear(minRange, maxRange, effectiveCharge);
 
-        // NEW: tired shots fly slower
+        // tired shots fly slower
         if (lowStamina && typeof st.lowSpeedMultiplier === 'number') {
             speed = Math.max(40, Math.floor(speed * st.lowSpeedMultiplier));
         }
 
         // Consume ammo now that we know we will fire
-        this.uiScene?.inventory?.consumeAmmo?.(ammoChoice.ammoId, 1);
+        if (DevTools.shouldConsumeAmmo()) { this.uiScene?.inventory?.consumeAmmo?.(ammoChoice.ammoId, 1); }
 
         // Spawn / reuse projectile
         const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, pointer.worldX, pointer.worldY);
@@ -942,13 +1040,13 @@ export default class MainScene extends Phaser.Scene {
         // Collide with scenery/resources so shots don’t pass through
         this.physics.add.collider(bullet, this.resources, (bb) => { if (bb && bb.destroy) bb.destroy(); }, null, this);
 
-        // NEW: ranged cooldown (longer when tired)
+        // Ranged cooldown (skip when No Cooldown)
         const baseCd = wpn?.fireCooldownMs ?? 0;
         const cdMs = lowStamina && typeof st.lowCooldownMultiplier === 'number'
             ? Math.floor(baseCd * st.lowCooldownMultiplier)
             : baseCd;
 
-        if (cdMs > 0) {
+        if (!DevTools.flags.noCooldown && cdMs > 0) {
             this._nextRangedReadyTime = this.time.now + cdMs;
             this.uiScene?.events?.emit('weapon:cooldownStart', {
                 itemId: equipped.id,
@@ -960,58 +1058,141 @@ export default class MainScene extends Phaser.Scene {
         this.uiScene?.events?.emit('weapon:chargeEnd');
     }
 
+    // -----------------------------------------------------------------------------
+    // Equipped Item Ghost
+    // -----------------------------------------------------------------------------
+    _createEquippedItemGhost(eqOrId) {
+        // Normalize input to an object with id
+        const eq = (typeof eqOrId === 'string') ? { id: eqOrId } : eqOrId;
+        const def = eq && eq.id ? (ITEM_DB?.[eq.id] || null) : null;
+
+        // Texture & visual from WORLD config (fallback to id)
+        const texKey = def?.world?.textureKey || eq?.id || 'slingshot';
+        const originX = def?.world?.origin?.x ?? 0.5;
+        const originY = def?.world?.origin?.y ?? 0.5;
+        const scale   = def?.world?.scale ?? 0.5;
+
+        // Reuse image if same texture; otherwise (re)create
+        if (this.equippedItemGhost && this.equippedItemGhost.texture && this.equippedItemGhost.texture.key === texKey) {
+            this.equippedItemGhost.setVisible(true);
+        } else {
+            if (this.equippedItemGhost) {
+                this.equippedItemGhost.destroy();
+                this.equippedItemGhost = null;
+            }
+            this.equippedItemGhost = this.add.image(this.player.x, this.player.y, texKey)
+                .setOrigin(originX, originY)
+                .setDepth((this.player?.depth ?? 900) + 1)
+                .setFlipY(false)
+                .setAlpha(1); // not transparent
+        }
+
+        this.equippedItemGhost
+            .setScale(scale)
+            .setVisible(true);
+
+        this._equippedGhostItemId = eq?.id || null;
+
+        // Immediate placement so it doesn’t pop
+        this._updateEquippedItemGhost();
+    }
+
     _updateEquippedItemGhost() {
         if (!this.equippedItemGhost || !this.isCharging) return;
 
         const eq = this.uiScene?.inventory?.getEquipped?.();
-        const wpn = eq ? ITEM_DB[eq.id]?.weapon : null;
-        const isBat = (eq?.id === 'crude_bat');
+        if (!eq) return;
+
+        const def = ITEM_DB?.[eq.id];
+        const wpn = def?.weapon || {};
+        const isMelee  = (wpn.category === 'melee');
+        const isRanged = (wpn.category === 'ranged');
 
         const ptr = this.input.activePointer;
         const px = this.player.x, py = this.player.y;
 
+        // Aim angle from player to mouse
         const aim = Phaser.Math.Angle.Between(px, py, ptr.worldX, ptr.worldY);
 
-        if (isBat) {
-            const startAng = aim - Phaser.Math.DegToRad(45);
+        // ─────────────────────────────────────────────────────────────
+        // RANGED (slingshot): orbit + rotate to mouse, flip across X-axis
+        // ─────────────────────────────────────────────────────────────
+        if (isRanged) {
+            let radius;
+            const mo = wpn.muzzleOffset;
+            if (typeof mo === 'number') {
+                radius = Math.max(1, mo);
+            } else if (mo && typeof mo.x === 'number' && typeof mo.y === 'number') {
+                radius = Math.max(1, Math.hypot(mo.x, mo.y));
+            } else if (typeof wpn.ghostRadius === 'number') {
+                radius = Math.max(1, wpn.ghostRadius);
+            } else {
+                radius = 18;
+            }
+
+            const gx = px + Math.cos(aim) * radius;
+            const gy = py + Math.sin(aim) * radius;
+
+            const flipY = (gx < px); // flip across X-axis when ghost is left of player
+            const overlapNudge = -4;
+
             this.equippedItemGhost
-                .setPosition(px, py)
-                .setRotation(startAng)
-                .setFlipY(false)
-                .setScale(1);
+                .setDepth((this.player?.depth ?? 900) + 1)
+                .setPosition(gx, gy + overlapNudge)
+                .setRotation(aim)
+                .setFlipX(false)
+                .setFlipY(flipY)
+                .setAlpha(1);
             return;
         }
 
-        const mo = wpn?.muzzleOffset;
-        let x = px, y = py;
+        // ─────────────────────────────────────────────────────────────
+        // MELEE (bat): place at the *start of the swing arc* using the SAME values as swingBat()
+        // ─────────────────────────────────────────────────────────────
+        if (isMelee) {
+            // Cone math: swingBat() uses a 90° arc centered on aim (half = 45°)
+            const coneHalf = Phaser.Math.DegToRad((wpn?.coneAngleDeg ?? 90) / 2); // default 45°
+            const startRot = Phaser.Math.Angle.Normalize(aim - coneHalf);
 
-        if (typeof mo === 'number') {
-            x = px + Math.cos(aim) * mo;
-            y = py + Math.sin(aim) * mo;
-        } else if (mo && typeof mo.x === 'number' && typeof mo.y === 'number') {
-            const cos = Math.cos(aim), sin = Math.sin(aim);
-            const offX = mo.x * cos - mo.y * sin;
-            const offY = mo.x * sin + mo.y * cos;
-            x = px + offX; y = py + offY;
-        } else {
-            const r = 20;
-            x = px + Math.cos(aim) * r;
-            y = py + Math.sin(aim) * r;
+            // Visual offset/origin: match swingBat() bat sprite
+            const baseOffset = Phaser.Math.DegToRad(45); // identical to swingBat()
+            const rotWithOffset = startRot + baseOffset;
+
+            // Match swing reach at the very start of the swing (t = 0)
+            const range = wpn?.range ?? 30;
+
+            // Ensure the ghost image uses the same anchor as the bat sprite so they overlap perfectly
+            this.equippedItemGhost
+                .setOrigin(0.1, 0.8) // same as swingBat() batSprite
+                .setDepth((this.player?.depth ?? 900) + 1)
+                .setPosition(this.player.x, this.player.y)
+                .setRotation(rotWithOffset)
+                .setFlipX(false)
+                .setFlipY(false)
+                .setAlpha(1);
+
+            // Optional: if you want the ghost to hint the strike point too, uncomment:
+            // const hx = this.player.x + Math.cos(startRot) * range;
+            // const hy = this.player.y + Math.sin(startRot) * range;
+            // this.equippedItemGhost.setPosition(this.player.x, this.player.y).setRotation(rotWithOffset);
+            // (We keep the image at the player like the actual bat; the hit sensor will travel to hx/hy.)
+            return;
         }
 
-        const flipY = Math.cos(aim - Phaser.Math.DegToRad(-20)) < 0;
-
+        // Fallback
         this.equippedItemGhost
-            .setPosition(x, y)
-            .setRotation(aim)
-            .setFlipY(flipY)
-            .setScale(0.5);
+            .setDepth((this.player?.depth ?? 900) + 1)
+            .setPosition(px, py)
+            .setRotation(0)
+            .setFlipX(false)
+            .setFlipY(false)
+            .setAlpha(1);
     }
 
     _destroyEquippedItemGhost() {
+        // Hide instead of destroy to avoid churn (pool-friendly)
         if (this.equippedItemGhost) {
-            this.equippedItemGhost.destroy();
-            this.equippedItemGhost = null;
+            this.equippedItemGhost.setVisible(false);
         }
     }
 
@@ -1068,29 +1249,33 @@ export default class MainScene extends Phaser.Scene {
     // ==========================
     // Zombie helpers
     // ==========================
-    spawnZombie(typeKey) {
-        const type = typeKey || 'walker';
-        const def = ZOMBIES[type] || ZOMBIES.walker || {};
+    spawnZombie(typeKey = 'walker', pos = null) {
+        const def = ZOMBIES[typeKey] || ZOMBIES.walker || {};
+        const tex = def.texture || 'zombie';
 
-        // Spawn at a random edge
-        const edge = Phaser.Math.Between(0, 3);
-        const maxX = this.sys.game.config.width;
-        const maxY = this.sys.game.config.height;
+        // Pick spawn position (use provided pos or random screen edge)
         let x, y;
-        switch (edge) {
-            case 0: x = Phaser.Math.Between(0, maxX); y = 0; break;
-            case 1: x = Phaser.Math.Between(0, maxX); y = maxY; break;
-            case 2: x = 0; y = Phaser.Math.Between(0, maxY); break;
-            case 3: x = maxX; y = Phaser.Math.Between(0, maxY); break;
+        if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+            x = pos.x; y = pos.y;
+        } else {
+            const cam = this.cameras.main;
+            const x0 = cam.worldView.x,            y0 = cam.worldView.y;
+            const x1 = x0 + cam.worldView.width,   y1 = y0 + cam.worldView.height;
+            const edge = (Math.random() * 4) | 0;
+            if (edge === 0) { x = Phaser.Math.Between(x0, x1); y = y0 - 8; }
+            else if (edge === 1) { x = x1 + 8; y = Phaser.Math.Between(y0, y1); }
+            else if (edge === 2) { x = Phaser.Math.Between(x0, x1); y = y1 + 8; }
+            else { x = x0 - 8; y = Phaser.Math.Between(y0, y1); }
         }
 
-        const tex = def.textureKey || 'zombie';
         const zombie = this.zombies.create(x, y, tex);
+        if (!zombie.body) this.physics.add.existing(zombie);
+        zombie.body.setAllowGravity(false);
         zombie.setOrigin(0.5, 0.5);
         zombie.setScale(def.scale ?? 0.1);
         zombie.setDepth(def.depth ?? 2);
         zombie.lastHitTime = 0;
-        zombie.zType = type;
+        zombie.zType = typeKey;
 
         // Stats
         zombie.speed = def.speed ?? 40;
@@ -1100,22 +1285,19 @@ export default class MainScene extends Phaser.Scene {
         zombie.aggroRange = def.aggroRange ?? 99999;
         zombie.attackCooldownMs = def.attackCooldownMs ?? 800;
         zombie.resist = Object.assign({ rangedMult: 1, meleeMult: 1, knockback: 0 }, def.resist || {});
-        zombie.staggerThreshold = (typeof def.staggerThreshold === 'number') ? def.staggerThreshold : 0;
-        zombie.stunDurationMs = def.stunDurationMs ?? 180;
-        zombie.knockbackUntil = 0;
-        zombie.stunUntil = 0;
+        zombie.staggerThreshold = (typeof def.staggerThreshold === 'number') ? def.staggerThreshold : 8;
+        zombie.stunDurationMs = (typeof def.stunDurationMs === 'number') ? def.stunDurationMs : 300;
 
-
-        // HP bar placeholders
-        zombie.hpBg = null; zombie.hpFill = null;
-        zombie.hpBarW = def.hpBar?.width ?? 18;
-        zombie.hpBarH = def.hpBar?.height ?? 3;
-        zombie.hpYOffset = (typeof def.hpBar?.yOffset === 'number')
-            ? def.hpBar.yOffset
-            : (zombie.displayHeight * (def.hpBar?.yOffsetFactor ?? 0.6));
+        // Lazy HP bar; initialize references cleanly
+        zombie.hpBg = null;
+        zombie.hpFill = null;
+        zombie.hpBarW = def.hpBarW ?? zombie.hpBarW;
+        zombie.hpBarH = def.hpBarH ?? zombie.hpBarH;
+        zombie.hpYOffset = def.hpYOffset ?? zombie.hpYOffset;
 
         return zombie;
     }
+
 
     _ensureZombieHpBar(zombie) {
         if (zombie.hpBg && zombie.hpFill) return;
@@ -1124,16 +1306,38 @@ export default class MainScene extends Phaser.Scene {
         const barH = zombie.hpBarH ?? 3;
         const yOff = zombie.hpYOffset ?? (zombie.displayHeight * 0.6);
 
-        const bg = this.add.rectangle(zombie.x, zombie.y - yOff, barW, barH, 0x000000)
-            .setOrigin(0.5, 1).setDepth(950).setAlpha(0.9).setVisible(true);
-        const fill = this.add.rectangle(bg.x - barW / 2, bg.y, barW, barH, 0xff3333)
-            .setOrigin(0, 1).setDepth(951).setAlpha(1).setVisible(true);
+        const bx = zombie.x;
+        const by = zombie.y - yOff;
 
-        zombie.hpBg = bg; zombie.hpFill = fill;
-        zombie.hpBarW = barW; zombie.hpBarH = barH; zombie.hpYOffset = yOff;
+        // Create fully hidden; we’ll show only when hp < maxHp
+        const bg = this.add.rectangle(bx, by, barW, barH, 0x000000, 1)
+            .setOrigin(0.5, 1).setDepth(950).setAlpha(0).setVisible(false);
+        const fill = this.add.rectangle(bx - barW / 2, by, barW, barH, 0xff3333, 1)
+            .setOrigin(0, 1).setDepth(951).setAlpha(0).setVisible(false);
+
+        zombie.hpBg = bg;
+        zombie.hpFill = fill;
+        zombie.hpBarW = barW;
+        zombie.hpBarH = barH;
+        zombie.hpYOffset = yOff;
     }
 
     _updateOneZombieHpBar(zombie) {
+        const maxHp = zombie.maxHp || 1;
+        const hp = Math.max(0, zombie.hp ?? maxHp);
+        const pct = Phaser.Math.Clamp(hp / maxHp, 0, 1);
+        const show = pct < 1; // show only after first damage
+
+        if (!show) {
+            // If bars exist, keep them hidden and alpha 0 (no draw, no “print”)
+            if (zombie.hpBg) zombie.hpBg.setVisible(false).setAlpha(0);
+            if (zombie.hpFill) zombie.hpFill.setVisible(false).setAlpha(0);
+            return;
+        }
+
+        // Lazily create when we actually need them
+        if (!zombie.hpBg || !zombie.hpFill) this._ensureZombieHpBar(zombie);
+
         if (!zombie.hpBg || !zombie.hpFill) return;
 
         const w = zombie.hpBarW ?? 18;
@@ -1141,15 +1345,13 @@ export default class MainScene extends Phaser.Scene {
 
         const bx = zombie.x;
         const by = zombie.y - yOff;
-        zombie.hpBg.setPosition(bx, by);
-        zombie.hpFill.setPosition(bx - w / 2, by);
 
-        const pct = Phaser.Math.Clamp((zombie.hp ?? 0) / (zombie.maxHp || 1), 0, 1);
+        zombie.hpBg.setPosition(bx, by).setVisible(true).setAlpha(0.9);
+        zombie.hpFill
+            .setPosition(bx - w / 2, by)
+            .setVisible(true)
+            .setAlpha(1);
         zombie.hpFill.width = Math.max(0, w * pct);
-
-        const show = pct < 1;
-        zombie.hpBg.setVisible(show);
-        zombie.hpFill.setVisible(show);
     }
 
     _applyKnockbackAndMaybeStun(zombie, srcX, srcY, baseKb) {
@@ -1238,33 +1440,73 @@ export default class MainScene extends Phaser.Scene {
     handlePlayerZombieCollision(player, zombie) {
         if (this.isGameOver) return;
 
-        const currentTime = this.time.now;
-        const cooldown = 500;
+        // Invisible: zombies don't hit you
+        if (DevTools?.isPlayerInvisible?.() === true) return;
+
+        // Per-zombie contact cooldown (prevents rapid-fire hits)
+        const now = this.time.now | 0;
+        const hitCdMs = 500;
         if (!zombie.lastHitTime) zombie.lastHitTime = 0;
-        if (currentTime - zombie.lastHitTime < cooldown) return;
-        zombie.lastHitTime = currentTime;
+        if (now - zombie.lastHitTime < hitCdMs) return;
+        zombie.lastHitTime = now;
 
+        // Dev invincibility
+        if (DevTools?.shouldBlockPlayerDamage?.() === true) return;
+
+        // Apply damage safely
         const damage = Phaser.Math.Between(5, 10);
-        this.health = Math.max(0, this.health - damage);
-        this.uiScene.updateHealth(this.health);
+        this.health = Math.max(0, (this.health | 0) - damage);
 
+        // 🔒 Hardened: UI call is optional so a missing method never crashes the game
+        this.uiScene?.updateHealth?.(this.health);
+
+        // Dead → show Game Over, pause physics, allow SPACE to respawn in update()
         if (this.health <= 0) {
             this.isGameOver = true;
-            this.physics.pause();
-            player.setTint(0x720c0c);
 
-            // Cleanup input
+            // Pause physics but keep scenes alive
+            this.physics.world.isPaused = true; // safer than this.physics.pause() if other subsystems run
+
+            // Player feedback (guard body)
+            try { player?.setTint?.(0x720c0c); } catch {}
+
+            // Unbind inputs safely (same refs we bound with)
             this.input.off('pointerdown', this.onPointerDown, this);
-            this.input.off('pointerup', this.onPointerUp, this);
+            this.input.off('pointerup',   this.onPointerUp,   this);
 
-            this.gameOverText = this.add.text(
-                this.cameras.main.centerX,
-                this.cameras.main.centerY,
-                'Game Over!\nPress SPACE to restart',
-                { fontSize: '32px', fill: '#fff', align: 'center', padding: { x: 20, y: 20 } }
-            ).setOrigin(0.5).setDepth(1000);
-            this.gameOverText.setStroke('#720c0c', 3);
+            // Clear any swing state so cones stop drawing
+            this._isSwinging = false;
+
+            // Destroy any prior texts to avoid duplicates
+            if (this.gameOverText?.destroy) this.gameOverText.destroy();
+            if (this.respawnPrompt?.destroy) this.respawnPrompt.destroy();
+
+            // Centered texts
+            const cam = this.cameras.main;
+            const cx = cam.worldView.x + cam.worldView.width  * 0.5;
+            const cy = cam.worldView.y + cam.worldView.height * 0.5;
+
+            this.gameOverText = this.add.text(cx, cy - 20, 'GAME OVER', {
+                fontFamily: 'monospace',
+                fontSize: '32px',
+                color: '#ffffff'
+            }).setOrigin(0.5).setDepth(1000);
+            this.gameOverText.setStroke('#720c0c', 4);
+
+            this.respawnPrompt = this.add.text(cx, cy + 20, 'Press SPACE to Respawn', {
+                fontFamily: 'monospace',
+                fontSize: '18px',
+                color: '#ffffff'
+            }).setOrigin(0.5).setDepth(1000);
+
+            return;
         }
+
+        // OPTIONAL: brief hit flash without allocations
+        try {
+            player?.setTintFill?.(0xffaaaa);
+            this.time.delayedCall(90, () => player?.clearTint?.());
+        } catch {}
     }
 
     // ==========================
@@ -1312,18 +1554,21 @@ export default class MainScene extends Phaser.Scene {
 
     // Stop motion and clear key/pointer states (fixes "stuck moving" after tab switch)
     _autoPause() {
-        if (this.isGameOver) return; // don't interfere with game-over flow
+        if (this.isGameOver) return;
 
-        // Prevent redundant work if we've already paused or are inactive
-        // (Pausing an already-paused scene is safe but we short-circuit to avoid churn.)
-        if (!this.scene.isActive('PauseScene')) {
-            this.scene.launch('PauseScene'); // show overlay (no start/restart of MainScene)
+        // Prevent duplicate pause if already in PauseScene or a sub-pause scene
+        const pauseOpen =
+            this.scene.isActive('PauseScene') ||
+            this.scene.isActive('DevUIScene'); // add other sub-pause scenes here if needed
+
+        if (!pauseOpen) {
+            this.scene.launch('PauseScene'); // only open top-level pause if none of them are open
         }
+
         if (this.sys.isActive()) {
-            this.scene.pause(); // pause THIS MainScene
+            this.scene.pause(); // pause gameplay scene
         }
 
-        // Clear inputs so we don’t drift/shoot on return
         this._resetInputAndStop?.();
     }
 
