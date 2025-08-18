@@ -21,7 +21,12 @@ export default class PauseScene extends Phaser.Scene {
       return;
     }
 
-    
+    // Ensure gameplay is actually paused whenever this overlay is open.
+    // This is idempotent and covers ALL entry points (ESC, other scenes, etc.).
+    if (this.scene.isActive('MainScene')) {
+      this.scene.pause('MainScene');
+    }
+
     const { width: W, height: H } = this.scale;
 
     // Block input to scenes underneath

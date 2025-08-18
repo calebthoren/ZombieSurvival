@@ -10,8 +10,8 @@ const DevTools = {
     // ─────────────────────────────────────────────────────────────
     flags: {
         showHitboxes: false,
-        invincible:   false,
         invisible:    false,
+        invincible:   false,
         noAmmo:       false,
         noStamina:    false,
         noCooldown:   false,
@@ -37,6 +37,34 @@ const DevTools = {
     isPlayerInvisible() { return !!this.flags.invisible; },
     shouldConsumeAmmo() { return !this.flags.noAmmo; },
     shouldConsumeStamina() { return !this.flags.noStamina; },
+
+    // gate for player damage (invincible toggle)
+    shouldBlockPlayerDamage() { return !!this.flags.invincible; },
+
+    // simple persistence for Dev UI spawner (lives across DevUI open/close)
+    _getEnemySpawnPrefs() { return this._enemySpawnPrefs || null; },
+    _setEnemySpawnPrefs(p) {
+        if (!p) return;
+        // Store minimal fields; keep "count" as string so your number box shows exactly what user typed
+        this._enemySpawnPrefs = {
+            key:  p.key  || p.selectedKey || p.typeKey,
+            name: p.name || p.selectedName,
+            count: (p.count == null ? '1' : String(p.count))
+        };
+    },
+
+    // reset dev toggles to defaults (used on death)
+    resetToDefaults(scene = null) {
+        this.flags.showHitboxes   = false;
+        this.flags.invincible     = false;
+        this.flags.invisible      = false;
+        this.flags.noAmmo         = false;
+        this.flags.noStamina      = false;
+        this.flags.noCooldown     = false;
+        this.flags.meleeSliceBatch = 1;
+        // Re-apply hitbox visibility immediately (hides layers if they were on)
+        try { this.applyHitboxFlag(scene || this._lastScene); } catch {}
+    },
 
     // Public API: change between 1 or 2 slices per tick at runtime
     setMeleeSliceBatch(n = 1) {
@@ -269,8 +297,6 @@ const DevTools = {
         for (let i = 0; i < count; i++) {
             const pos = pickEdge();
             scene.time.delayedCall(i * 30, () => {
-                // MainScene already wires this.spawnZombie(type, pos)
-                // via dev:spawn-zombie listener—call the scene API directly here.
                 if (typeof scene.spawnZombie === 'function') {
                     scene.spawnZombie(type, pos);
                 } else if (scene.game && scene.game.events) {

@@ -4,6 +4,7 @@
 const ZOMBIES = {
     // Basic walker
     walker: {
+        name: 'Walker',
         textureKey: 'zombie',
         scale: 0.1,
         depth: 2,

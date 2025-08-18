@@ -157,29 +157,32 @@ export default class MainScene extends Phaser.Scene {
             .setAlpha(0);
 
         // --- DevTools integration ---
-// Apply current hitbox flag right away (responds to future toggles too)
-DevTools.applyHitboxFlag(this);
+        // Apply current hitbox flag right away (responds to future toggles too)
+        DevTools.applyHitboxFlag(this);
 
-// Listen for dev spawn events
-this.game.events.on('dev:spawn-zombie', ({ type, pos }) => this.spawnZombie(type, pos));
-this.game.events.on('dev:drop-item', ({ id, pos }) => this.spawnWorldItem(id, pos));
+        // Listen for dev spawn events
+        this.game.events.on('dev:spawn-zombie', ({ type, pos }) => this.spawnZombie(type, pos));
+        this.game.events.on('dev:drop-item', ({ id, pos }) => this.spawnWorldItem(id, pos));
 
-// Inventory add hook used by DevTools.spawnItemsSmart()
-this.game.events.on('inv:add', ({ id, qty, where }) => {
-    const added = this.addItemToInventory(id, qty || 1, where || 'inventory') | 0;
-    const prev = this.registry.get('inv:addedCount') || 0;
-    this.registry.set('inv:addedCount', prev + added);
-});
+        // Inventory add hook used by DevTools.spawnItemsSmart()
+        this.game.events.on('inv:add', ({ id, qty, where }) => {
+            const added = this.addItemToInventory(id, qty || 1, where || 'inventory') | 0;
+            const prev = this.registry.get('inv:addedCount') || 0;
+            this.registry.set('inv:addedCount', prev + added);
+        });
 
-// Clean up listeners when scene shuts down/destroys
-this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-    this.game.events.off('dev:spawn-zombie');
-    this.game.events.off('dev:drop-item');
-    this.game.events.off('inv:add');
-});
+        // Clean up listeners when scene shuts down/destroys
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this.game.events.off('dev:spawn-zombie');
+            this.game.events.off('dev:drop-item');
+            this.game.events.off('inv:add');
+        });
 
-// Start at day
-this.startDay();
+        // Start at day
+        this.startDay();
+
+        // Use update(delta) to track phase time so it naturally freezes when paused.
+        this._phaseElapsedMs = this._phaseElapsedMs | 0; // ensure exists
 
         // Update the UI clock periodically (cheap)
         this.time.addEvent({ delay: 250, loop: true, callback: () => this.updateTimeUi() });
@@ -387,7 +390,8 @@ this.startDay();
     // ==========================
     startDay() {
         this.phase = 'day';
-        this.phaseStartTime = this.time.now;
+        this.phaseStartTime = this.time.now; // kept for reference, not used for progress
+        this._phaseElapsedMs = 0;            // ← progress counts from 0 via update(delta)
         if (this.nightWaveTimer) { this.nightWaveTimer.remove(false); this.nightWaveTimer = null; }
         this.waveNumber = 0;
         this.scheduleDaySpawn();
@@ -396,7 +400,8 @@ this.startDay();
 
     startNight() {
         this.phase = 'night';
-        this.phaseStartTime = this.time.now;
+        this.phaseStartTime = this.time.now; // kept for reference, not used for progress
+        this._phaseElapsedMs = 0;            // ← reset phase progress at night start
         if (this.spawnZombieTimer) { this.spawnZombieTimer.remove(false); this.spawnZombieTimer = null; }
         this.waveNumber = 0;
         this.scheduleNightWave();
@@ -452,7 +457,7 @@ this.startDay();
         });
     }
 
-    getPhaseElapsed() { return this.time.now - this.phaseStartTime; }
+    getPhaseElapsed() { return this._phaseElapsedMs | 0; }
     getPhaseDuration() { return this.phase === 'day' ? WORLD_GEN.dayNight.dayMs : WORLD_GEN.dayNight.nightMs; }
 
     updateNightOverlay() {
@@ -496,6 +501,9 @@ this.startDay();
             }
             return;
         }
+
+        // Advance phase clock by delta; this halts automatically while paused.
+        this._phaseElapsedMs = (this._phaseElapsedMs || 0) + (delta | 0);
 
         // Auto switch phases when duration elapses
         if (this.getPhaseElapsed() >= this.getPhaseDuration()) {
@@ -818,7 +826,9 @@ this.startDay();
         cone.body.setAllowGravity(false);
         if (cone.body.setCircle) {
             cone.body.setCircle(range);
-            cone.body.setOffset(-range, -range);
+            // Center the physics circle on the cone’s position.
+            // With origin 0.5,0.5 and display size = 2*range, the correct offset is (0, 0).
+            cone.body.setOffset(0, 0);
         }
         this.meleeHits.add(cone);
 
@@ -861,18 +871,23 @@ this.startDay();
 
                 // Keep collider centered and store current aim angle
                 cone.setPosition(this.player.x, this.player.y);
-                cone.setData('aimAngle', centerRot);
+                // Store a normalized aim so downstream checks never see >π values
+                cone.setData('aimAngle', Phaser.Math.Angle.Normalize(centerRot));
             },
             onComplete: () => {
                 this._isSwinging = false;
                 this._lastSwingEndTime = this.time.now;
                 if (this.batSprite) { this.batSprite.destroy(); this.batSprite = null; }
 
-                if (this._nextSwingCooldownMs > 0) {
+                // Respect Dev Mode "No Cooldown": skip both logic & UI
+                if (!DevTools.flags.noCooldown && this._nextSwingCooldownMs > 0) {
                     this.uiScene?.events?.emit('weapon:cooldownStart', {
                         itemId: 'crude_bat',
                         durationMs: this._nextSwingCooldownMs
                     });
+                } else {
+                    // Optional: clear any lingering cooldown UI if the flag was toggled mid-run
+                    this.uiScene?.events?.emit('weapon:cooldownClear', { itemId: 'crude_bat' });
                 }
             }
         });
@@ -889,20 +904,27 @@ this.startDay();
         const reg = hit._hitSet || (hit._hitSet = new Set());
         if (reg.has(zombie)) return;
 
-        // Cone filter — angle & distance from swing origin
+        // angle filter (normalized, wrap-safe)
         const ox = hit.getData('originX') ?? this.player.x;
         const oy = hit.getData('originY') ?? this.player.y;
-        const aim = hit.getData('aimAngle') ?? Phaser.Math.Angle.Between(ox, oy, zombie.x, zombie.y);
-        const coneHalf = hit.getData('coneHalfRad') ?? Phaser.Math.DegToRad(45);
-        const maxRange = hit.getData('maxRange') ?? 30;
 
-        const dx = zombie.x - ox, dy = zombie.y - oy;
-        const dist2 = dx * dx + dy * dy;
-        if (dist2 > maxRange * maxRange) return;
+        // get zombie center robustly
+        const bx = (zombie.body && zombie.body.center && zombie.body.center.x) ? zombie.body.center.x : zombie.x;
+        const by = (zombie.body && zombie.body.center && zombie.body.center.y) ? zombie.body.center.y : zombie.y;
 
-        const angTo = Math.atan2(dy, dx);
-        const delta = Phaser.Math.Angle.Wrap(angTo - aim);
-        if (Math.abs(delta) > coneHalf) return;
+        const dx = bx - ox;
+        const dy = by - oy;
+
+        // Normalize both angles to [-π, π], then wrap their difference to the same range.
+        // This makes comparisons correct in all quadrants (right/down included).
+        const aimAngle = Phaser.Math.Angle.Normalize(hit.getData('aimAngle') || 0);
+        const angTo    = Phaser.Math.Angle.Normalize(Math.atan2(dy, dx));
+        const coneHalf = hit.getData('coneHalfRad') || (Math.PI / 4);
+
+        // Trig-based shortest-arc difference (robust across the ±π seam)
+        const diff = Math.abs(Math.atan2(Math.sin(angTo - aimAngle), Math.cos(angTo - aimAngle)));
+
+        if (diff > coneHalf + 1e-4) return;
 
         // Mark as hit (dedupe)
         reg.add(zombie);
@@ -1038,7 +1060,13 @@ this.startDay();
         this.time.delayedCall(lifetimeMs, () => { if (bullet.active && bullet.destroy) bullet.destroy(); });
 
         // Collide with scenery/resources so shots don’t pass through
-        this.physics.add.collider(bullet, this.resources, (bb) => { if (bb && bb.destroy) bb.destroy(); }, null, this);
+        this.physics.add.collider(
+            bullet,
+            this.resources,
+            (bb, r) => { if (bb && bb.destroy) bb.destroy(); },
+            (_b, r) => !!(r && typeof r.getData === 'function' && r.getData('blocking') === true),
+            this
+        );
 
         // Ranged cooldown (skip when No Cooldown)
         const baseCd = wpn?.fireCooldownMs ?? 0;
@@ -1462,6 +1490,9 @@ this.startDay();
 
         // Dead → show Game Over, pause physics, allow SPACE to respawn in update()
         if (this.health <= 0) {
+            // Reset Dev Mode toggles to defaults for a clean restart
+            try { DevTools.resetToDefaults(this); } catch {}
+
             this.isGameOver = true;
 
             // Pause physics but keep scenes alive
