@@ -1,0 +1,36 @@
+Mapping by upload order (groups of 3):
+Groups 1-6 → bush1..bush6 (A,B,C)
+Group 7 → berry_bushA1..3
+Group 8 → berry_bushB1..3
+Group 9 → cotton_bush1..3
+Then dead_bush1..2
+
+bush7A.png -> bush1A.png
+bush7B.png -> bush1B.png
+bush7C.png -> bush1C.png
+bush1B.png -> bush2A.png
+bush2A.png -> bush2B.png
+bush3A.png -> bush2C.png
+bush4B.png -> bush3A.png
+bush5A.png -> bush3B.png
+bush6A.png -> bush3C.png
+bush1C.png -> bush4A.png
+bush2B.png -> bush4B.png
+bush3C.png -> bush4C.png
+bush4A.png -> bush5A.png
+bush5C.png -> bush5B.png
+bush6C.png -> bush5C.png
+bush8A.png -> bush6A.png
+bush8B.png -> bush6B.png
+bush8C.png -> bush6C.png
+bush4C.png -> berry_bushA1.png
+bush5B.png -> berry_bushA2.png
+bush6B.png -> berry_bushA3.png
+bush1A.png -> berry_bushB1.png
+bush2C.png -> berry_bushB2.png
+bush3B.png -> berry_bushB3.png
+bush9C.png -> cotton_bush1.png
+bush9A.png -> cotton_bush2.png
+bush9B.png -> cotton_bush3.png
+bush13D.png -> dead_bush1.png
+bush13C.png -> dead_bush2.png
