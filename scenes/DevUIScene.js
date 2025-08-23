@@ -64,6 +64,8 @@ export default class DevUIScene extends Phaser.Scene {
             // amount model (string so user can blank it)
             count: startCount,
         };
+
+        this._time = { scale: String(DevTools.flags.timeScale || 1) };
     }
 
     create() {
@@ -133,6 +135,9 @@ export default class DevUIScene extends Phaser.Scene {
         y = this._sectionTitle('Spawners', y);
         y = this._enemySpawnerRow(y);
 
+        y = this._sectionTitle('Control', y);
+        y = this._timeControlRow(y);
+
         // Keyboard handling
         this.input.keyboard.on('keydown', (ev) => this._onKey(ev));
 
@@ -147,8 +152,9 @@ export default class DevUIScene extends Phaser.Scene {
             }
         });
 
-        // Make sure hitbox render reacts immediately
+        // Make sure hitbox render and time scale react immediately
         DevTools.applyHitboxFlag(this.scene.get('MainScene'));
+        DevTools.applyTimeScale(this);
     }
 
     // ---------- Section builders ----------
@@ -198,6 +204,19 @@ export default class DevUIScene extends Phaser.Scene {
         const spawn = this._makeButton(this.scale.width - 140, y + 7, 120, 30, 'Spawn', () => this._spawnEnemies(), 2, UI.okColor);
 
         this.content.add([card, label, typeLbl, this._typeBox.box, minus, this._countText.box, plus, countLbl, spawn]);
+        return y + UI.rowH;
+    }
+
+    _timeControlRow(y) {
+        const card = this._card(y);
+        const label = this.add.text(UI.pad + 6, y + 12, 'Time Scale', UI.font).setDepth(2);
+
+        const minusX = this.scale.width - 220;
+        const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpTimeScale(-1), 2);
+        this._timeText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._time.scale, (s) => { this._time.scale = s; this._commitTimeScale(); });
+        const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpTimeScale(1), 2);
+
+        this.content.add([card, label, minus, this._timeText.box, plus]);
         return y + UI.rowH;
     }
 
@@ -707,6 +726,27 @@ export default class DevUIScene extends Phaser.Scene {
         if (!main) return;
 
         DevTools.spawnEnemiesAtScreenEdge(main, typeKey, count);
+    }
+
+    // ---------- Time control logic ----------
+
+    _commitTimeScale() {
+        let raw = this._timeText?.get?.() ?? String(this._time.scale || '').trim();
+        if (raw === '') raw = '0';
+        let val = parseFloat(raw);
+        if (!Number.isFinite(val)) val = 0;
+        val = Phaser.Math.Clamp(val, 0, 10);
+        this._time.scale = String(val);
+        this._timeText?.set?.(this._time.scale);
+        DevTools.setTimeScale(val, this.game);
+    }
+
+    _bumpTimeScale(delta) {
+        let val = parseFloat(this._time.scale) || 0;
+        val = Phaser.Math.Clamp(val + delta, 0, 10);
+        this._time.scale = String(val);
+        this._timeText?.set?.(this._time.scale);
+        DevTools.setTimeScale(val, this.game);
     }
 
     _goBack() {
