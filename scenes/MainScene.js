@@ -225,6 +225,7 @@ export default class MainScene extends Phaser.Scene {
         // --- DevTools integration ---
         // Apply current hitbox flag right away (responds to future toggles too)
         DevTools.applyHitboxFlag(this);
+        DevTools.applyTimeScale(this);
 
         // Listen for dev spawn events
         this.game.events.on('dev:spawn-zombie', ({ type, pos }) =>
