@@ -94,6 +94,7 @@ export default class MainScene extends Phaser.Scene {
         // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
         this.keys = this.input.keyboard.addKeys('W,A,S,D');
+        this.shiftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
         this.input.on('pointerdown', this.onPointerDown, this);
         this.input.on('pointerup', this.onPointerUp, this);
 
