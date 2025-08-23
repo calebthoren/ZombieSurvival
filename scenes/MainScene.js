@@ -52,12 +52,37 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('slingshot', 'assets/weapons/slingshot.png');
         this.load.image('slingshot_rock', 'assets/weapons/slingshot_rock.png');
         this.load.image('crude_bat', 'assets/weapons/crude_bat.png');
-        // resources (examples)
+        // resources
         this.load.image('rock2A', 'assets/resources/rocks/rock2A.png');
         this.load.image('rock2B', 'assets/resources/rocks/rock2B.png');
         this.load.image('rock2C', 'assets/resources/rocks/rock2C.png');
         this.load.image('rock2D', 'assets/resources/rocks/rock2D.png');
         this.load.image('rock2E', 'assets/resources/rocks/rock2E.png');
+        // trees
+        this.load.image('tree1A', 'assets/resources/trees/tree1A.png');
+        this.load.image('tree1B', 'assets/resources/trees/tree1B.png');
+        this.load.image('tree1C', 'assets/resources/trees/tree1C.png');
+        this.load.image('tree2A', 'assets/resources/trees/tree2A.png');
+        this.load.image('tree2B', 'assets/resources/trees/tree2B.png');
+        this.load.image('tree2C', 'assets/resources/trees/tree2C.png');
+        // bushes
+        this.load.image('bush1A', 'assets/resources/bushes/bush1A.png');
+        this.load.image('bush1B', 'assets/resources/bushes/bush1B.png');
+        this.load.image('bush1C', 'assets/resources/bushes/bush1C.png');
+        this.load.image('bush3A', 'assets/resources/bushes/bush3A.png');
+        this.load.image('bush3B', 'assets/resources/bushes/bush3B.png');
+        this.load.image('bush3C', 'assets/resources/bushes/bush3C.png');
+        // berry bushes
+        this.load.image('berry_bushA1', 'assets/resources/bushes/berry_bushA1.png');
+        this.load.image('berry_bushA2', 'assets/resources/bushes/berry_bushA2.png');
+        this.load.image('berry_bushA3', 'assets/resources/bushes/berry_bushA3.png');
+        this.load.image('berry_bushB1', 'assets/resources/bushes/berry_bushB1.png');
+        this.load.image('berry_bushB2', 'assets/resources/bushes/berry_bushB2.png');
+        this.load.image('berry_bushB3', 'assets/resources/bushes/berry_bushB3.png');
+        // cotton bushes
+        this.load.image('cotton_bush1', 'assets/resources/bushes/cotton_bush1.png');
+        this.load.image('cotton_bush2', 'assets/resources/bushes/cotton_bush2.png');
+        this.load.image('cotton_bush3', 'assets/resources/bushes/cotton_bush3.png');
     }
 
     create() {
