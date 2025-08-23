@@ -21,7 +21,7 @@ export default function createInputSystem(scene) {
             const baseCd = wpn?.swingCooldownMs ?? 80;
             const effectiveCd = scene._nextSwingCooldownMs ?? baseCd;
             const lastEnd = scene._lastSwingEndTime || 0;
-            if (!DevTools.flags.noCooldown && now - lastEnd < effectiveCd)
+            if (!DevTools.cheats.noCooldown && now - lastEnd < effectiveCd)
                 return;
 
             if (wpn.canCharge === true) {
@@ -44,7 +44,7 @@ export default function createInputSystem(scene) {
             const now = scene.time.now;
             const fireCd = wpn?.fireCooldownMs ?? 0;
             if (
-                !DevTools.flags.noCooldown &&
+                !DevTools.cheats.noCooldown &&
                 fireCd > 0 &&
                 now < (scene._nextRangedReadyTime || 0)
             )

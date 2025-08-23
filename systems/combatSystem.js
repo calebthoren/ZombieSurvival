@@ -259,7 +259,7 @@ export default function createCombatSystem(scene) {
             lowStamina && typeof st.lowCooldownMultiplier === 'number'
                 ? Math.floor(baseCd * st.lowCooldownMultiplier)
                 : baseCd;
-        if (!DevTools.flags.noCooldown && cdMs > 0) {
+        if (!DevTools.cheats.noCooldown && cdMs > 0) {
             scene._nextRangedReadyTime = scene.time.now + cdMs;
             scene.uiScene?.events?.emit('weapon:cooldownStart', {
                 itemId: equipped.id,
@@ -400,7 +400,7 @@ export default function createCombatSystem(scene) {
                     scene.batSprite = null;
                 }
                 if (
-                    !DevTools.flags.noCooldown &&
+                    !DevTools.cheats.noCooldown &&
                     scene._nextSwingCooldownMs > 0
                 ) {
                     scene.uiScene?.events?.emit('weapon:cooldownStart', {
