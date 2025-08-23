@@ -65,7 +65,7 @@ export default class DevUIScene extends Phaser.Scene {
             count: startCount,
         };
 
-        this._time = { scale: String(DevTools.flags.timeScale || 1) };
+        this._time = { scale: String(DevTools.cheats.timeScale || 1) };
     }
 
     create() {
@@ -105,11 +105,11 @@ export default class DevUIScene extends Phaser.Scene {
         this.content = this.add.container(0, 54).setDepth(1);
 
         let y = 0;
-        y = this._sectionTitle('Flags', y);
-        y = this._rowToggle('Show Hitboxes', () => DevTools.flags.showHitboxes, v => DevTools.setShowHitboxes(v), y);
-        y = this._rowToggle('Invisible',      () => DevTools.flags.invisible,    v => DevTools.flags.invisible = v, y);
-        y = this._rowToggle('Infinite Health',() => DevTools.flags.invincible,   v => {
-            DevTools.flags.invincible = v;
+        y = this._sectionTitle('Cheats', y);
+        y = this._rowToggle('Show Hitboxes', () => DevTools.cheats.showHitboxes, v => DevTools.setShowHitboxes(v), y);
+        y = this._rowToggle('Invisible',      () => DevTools.cheats.invisible,    v => DevTools.cheats.invisible = v, y);
+        y = this._rowToggle('Infinite Health',() => DevTools.cheats.invincible,   v => {
+            DevTools.cheats.invincible = v;
             if (v) {
                 const mainScene = this.scene.get('MainScene');
                 if (mainScene) {
@@ -119,8 +119,8 @@ export default class DevUIScene extends Phaser.Scene {
                 }
             }
         }, y);
-        y = this._rowToggle('Infinite Stamina',() => DevTools.flags.noStamina,    v => {
-            DevTools.flags.noStamina = v;
+        y = this._rowToggle('Infinite Stamina',() => DevTools.cheats.noStamina,    v => {
+            DevTools.cheats.noStamina = v;
             if (v) {
                 const mainScene = this.scene.get('MainScene');
                 if (mainScene) {
@@ -129,8 +129,8 @@ export default class DevUIScene extends Phaser.Scene {
                 }
             }
         }, y);
-        y = this._rowToggle('No Cooldown',     () => DevTools.flags.noCooldown,   v => DevTools.flags.noCooldown = v, y);
-        y = this._rowToggle('Infinite Ammo',   () => DevTools.flags.noAmmo,       v => DevTools.flags.noAmmo = v, y);
+        y = this._rowToggle('No Cooldown',     () => DevTools.cheats.noCooldown,   v => DevTools.cheats.noCooldown = v, y);
+        y = this._rowToggle('Infinite Ammo',   () => DevTools.cheats.noAmmo,       v => DevTools.cheats.noAmmo = v, y);
 
         y = this._sectionTitle('Spawners', y);
         y = this._enemySpawnerRow(y);
@@ -153,7 +153,7 @@ export default class DevUIScene extends Phaser.Scene {
         });
 
         // Make sure hitbox render and time scale react immediately
-        DevTools.applyHitboxFlag(this.scene.get('MainScene'));
+        DevTools.applyHitboxCheat(this.scene.get('MainScene'));
         DevTools.applyTimeScale(this);
     }
 
@@ -212,9 +212,9 @@ export default class DevUIScene extends Phaser.Scene {
         const label = this.add.text(UI.pad + 6, y + 12, 'Time Scale', UI.font).setDepth(2);
 
         const minusX = this.scale.width - 220;
-        const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpTimeScale(-1), 2);
+        const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpTimeScale(-0.1), 2);
         this._timeText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._time.scale, (s) => { this._time.scale = s; this._commitTimeScale(); });
-        const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpTimeScale(1), 2);
+        const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpTimeScale(0.1), 2);
 
         this.content.add([card, label, minus, this._timeText.box, plus]);
         return y + UI.rowH;
@@ -735,17 +735,22 @@ export default class DevUIScene extends Phaser.Scene {
         if (raw === '') raw = '0';
         let val = parseFloat(raw);
         if (!Number.isFinite(val)) val = 0;
+        val = Math.round(val * 10) / 10;
         val = Phaser.Math.Clamp(val, 0, 10);
-        this._time.scale = String(val);
-        this._timeText?.set?.(this._time.scale);
+        this._time.scale = val.toFixed(1).replace(/\.0$/, '');
+        if (this._timeText?.txt) this._timeText.txt.setText(this._time.scale);
+        this._timeText?.stopEdit?.(false);
         DevTools.setTimeScale(val, this.game);
     }
 
+
     _bumpTimeScale(delta) {
         let val = parseFloat(this._time.scale) || 0;
-        val = Phaser.Math.Clamp(val + delta, 0, 10);
-        this._time.scale = String(val);
-        this._timeText?.set?.(this._time.scale);
+        val = Math.round((val + delta) * 10) / 10;
+        val = Phaser.Math.Clamp(val, 0, 10);
+        this._time.scale = val.toFixed(1).replace(/\.0$/, '');
+        if (this._timeText?.txt) this._timeText.txt.setText(this._time.scale);
+        this._timeText?.stopEdit?.(false);
         DevTools.setTimeScale(val, this.game);
     }
 

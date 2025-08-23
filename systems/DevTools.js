@@ -6,9 +6,9 @@
 
 const DevTools = {
     // ─────────────────────────────────────────────────────────────
-    // FLAGS (wired from Dev UI)
+    // CHEATS (wired from Dev UI)
     // ─────────────────────────────────────────────────────────────
-    flags: {
+    cheats: {
         showHitboxes: false,
         invisible:    false,
         invincible:   false,
@@ -37,12 +37,12 @@ const DevTools = {
     _lastScene: null,
 
     // Public helpers used by scenes
-    isPlayerInvisible() { return !!this.flags.invisible; },
-    shouldConsumeAmmo() { return !this.flags.noAmmo; },
-    shouldConsumeStamina() { return !this.flags.noStamina; },
+    isPlayerInvisible() { return !!this.cheats.invisible; },
+    shouldConsumeAmmo() { return !this.cheats.noAmmo; },
+    shouldConsumeStamina() { return !this.cheats.noStamina; },
 
     // gate for player damage (invincible toggle)
-    shouldBlockPlayerDamage() { return !!this.flags.invincible; },
+    shouldBlockPlayerDamage() { return !!this.cheats.invincible; },
 
     // simple persistence for Dev UI spawner (lives across DevUI open/close)
     _getEnemySpawnPrefs() { return this._enemySpawnPrefs || null; },
@@ -58,16 +58,16 @@ const DevTools = {
 
     // reset dev toggles to defaults (used on death)
     resetToDefaults(scene = null) {
-        this.flags.showHitboxes   = false;
-        this.flags.invincible     = false;
-        this.flags.invisible      = false;
-        this.flags.noAmmo         = false;
-        this.flags.noStamina      = false;
-        this.flags.noCooldown     = false;
-        this.flags.meleeSliceBatch = 1;
-        this.flags.timeScale       = 1;
+        this.cheats.showHitboxes   = false;
+        this.cheats.invincible     = false;
+        this.cheats.invisible      = false;
+        this.cheats.noAmmo         = false;
+        this.cheats.noStamina      = false;
+        this.cheats.noCooldown     = false;
+        this.cheats.meleeSliceBatch = 1;
+        this.cheats.timeScale       = 1;
         // Re-apply hitbox visibility immediately (hides layers if they were on)
-        try { this.applyHitboxFlag(scene || this._lastScene); } catch {}
+        try { this.applyHitboxCheat(scene || this._lastScene); } catch {}
         // Reset global time scale
         try { this.setTimeScale(1, (scene || this._lastScene)?.game); } catch {}
     },
@@ -75,7 +75,7 @@ const DevTools = {
     // Public API: change between 1 or 2 slices per tick at runtime
     setMeleeSliceBatch(n = 1) {
         const v = (n | 0);
-        this.flags.meleeSliceBatch = (v <= 1) ? 1 : 2;
+        this.cheats.meleeSliceBatch = (v <= 1) ? 1 : 2;
     },
 
     // Set global time scale (0..10) and apply to all scenes
@@ -84,7 +84,7 @@ const DevTools = {
         if (!Number.isFinite(v)) v = 1;
         if (v < 0) v = 0;
         if (v > 10) v = 10;
-        this.flags.timeScale = v;
+        this.cheats.timeScale = v;
 
         const mgr = game?.scene;
         if (mgr && Array.isArray(mgr.scenes)) {
@@ -99,7 +99,7 @@ const DevTools = {
     },
 
     applyTimeScale(scene) {
-        const v = this.flags.timeScale;
+        const v = this.cheats.timeScale;
         if (!scene) return;
         try {
             if (scene.time) scene.time.timeScale = v;
@@ -109,14 +109,14 @@ const DevTools = {
 
     // Toggle entry point used by Dev UI
     setShowHitboxes(value, scene) {
-        this.flags.showHitboxes = !!value;
+        this.cheats.showHitboxes = !!value;
         if (scene) this._lastScene = scene;
-        if (this._lastScene) this.applyHitboxFlag(this._lastScene);
+        if (this._lastScene) this.applyHitboxCheat(this._lastScene);
     },
 
-    applyHitboxFlag(scene) {
+    applyHitboxCheat(scene) {
         this._ensureLayers(scene);
-        const vis = !!this.flags.showHitboxes;
+        const vis = !!this.cheats.showHitboxes;
         this._gfx.enemies.setVisible(vis);
         this._gfx.attacks.setVisible(vis);
         this._gfx.resources.setVisible(vis);
@@ -136,7 +136,7 @@ const DevTools = {
 
     // Call this once per frame from MainScene.update()
     tickHitboxDebug(scene) {
-        if (!this.flags.showHitboxes) return;
+        if (!this.cheats.showHitboxes) return;
         this._ensureLayers(scene);
 
         const now = scene.time.now | 0;
@@ -233,7 +233,7 @@ const DevTools = {
         const mh = scene.meleeHits;
         if (mh && mh.children?.iterate) {
             const N     = Math.max(1, (this._MELEE_SUBDIV | 0));                 // total slices across cone
-            const batch = Math.max(1, (this.flags.meleeSliceBatch | 0)) > 1 ? 2 : 1; // 1 or 2
+            const batch = Math.max(1, (this.cheats.meleeSliceBatch | 0)) > 1 ? 2 : 1; // 1 or 2
             const now   = scene.time.now | 0;
 
             mh.children.iterate((hit) => {

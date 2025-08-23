@@ -248,8 +248,8 @@ export default class MainScene extends Phaser.Scene {
             .setAlpha(0);
 
         // --- DevTools integration ---
-        // Apply current hitbox flag right away (responds to future toggles too)
-        DevTools.applyHitboxFlag(this);
+        // Apply current hitbox cheat right away (responds to future toggles too)
+        DevTools.applyHitboxCheat(this);
         DevTools.applyTimeScale(this);
 
         // Listen for dev spawn events
