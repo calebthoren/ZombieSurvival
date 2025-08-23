@@ -2,6 +2,7 @@
 import InventoryModel from '../systems/inventoryModel.js';
 import { INVENTORY_CONFIG } from '../data/inventoryConfig.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
+import DevTools from '../systems/DevTools.js';
 
 export default class UIScene extends Phaser.Scene {
     constructor() {
@@ -30,6 +31,7 @@ export default class UIScene extends Phaser.Scene {
         // Inventory model (logic)
         // -------------------------
         this.inventory = new InventoryModel(this.events);
+        DevTools.applyTimeScale(this);
 
         // -------------------------
         // Basic HUD

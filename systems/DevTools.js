@@ -17,7 +17,10 @@ const DevTools = {
         noCooldown:   false,
 
         // NEW: how many slices to draw per fast tick (1 or 2)
-        meleeSliceBatch: 1
+        meleeSliceBatch: 1,
+
+        // Global time scale (0..10, 1 = normal)
+        timeScale: 1
     },
 
     // ─────────────────────────────────────────────────────────────
@@ -62,14 +65,46 @@ const DevTools = {
         this.flags.noStamina      = false;
         this.flags.noCooldown     = false;
         this.flags.meleeSliceBatch = 1;
+        this.flags.timeScale       = 1;
         // Re-apply hitbox visibility immediately (hides layers if they were on)
         try { this.applyHitboxFlag(scene || this._lastScene); } catch {}
+        // Reset global time scale
+        try { this.setTimeScale(1, (scene || this._lastScene)?.game); } catch {}
     },
 
     // Public API: change between 1 or 2 slices per tick at runtime
     setMeleeSliceBatch(n = 1) {
         const v = (n | 0);
         this.flags.meleeSliceBatch = (v <= 1) ? 1 : 2;
+    },
+
+    // Set global time scale (0..10) and apply to all scenes
+    setTimeScale(scale = 1, game = null) {
+        let v = Number(scale);
+        if (!Number.isFinite(v)) v = 1;
+        if (v < 0) v = 0;
+        if (v > 10) v = 10;
+        this.flags.timeScale = v;
+
+        const mgr = game?.scene;
+        if (mgr && Array.isArray(mgr.scenes)) {
+            for (let i = 0; i < mgr.scenes.length; i++) {
+                const sc = mgr.scenes[i];
+                try {
+                    if (sc.time) sc.time.timeScale = v;
+                    if (sc.physics && sc.physics.world) sc.physics.world.timeScale = v;
+                } catch {}
+            }
+        }
+    },
+
+    applyTimeScale(scene) {
+        const v = this.flags.timeScale;
+        if (!scene) return;
+        try {
+            if (scene.time) scene.time.timeScale = v;
+            if (scene.physics && scene.physics.world) scene.physics.world.timeScale = v;
+        } catch {}
     },
 
     // Toggle entry point used by Dev UI

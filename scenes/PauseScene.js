@@ -7,6 +7,8 @@
 //   [ Coming Soon ] [ Coming Soon ] (two small buttons, second row, placeholders)
 //   [ Return to Menu ] (wide button at bottom; currently non-functional)
 
+import DevTools from '../systems/DevTools.js';
+
 export default class PauseScene extends Phaser.Scene {
   constructor() {
     super('PauseScene');
@@ -26,6 +28,8 @@ export default class PauseScene extends Phaser.Scene {
     if (this.scene.isActive('MainScene')) {
       this.scene.pause('MainScene');
     }
+
+    DevTools.applyTimeScale(this);
 
     const { width: W, height: H } = this.scale;
 
