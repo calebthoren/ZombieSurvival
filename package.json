@@ -1,0 +1,13 @@
+{
+    "name": "zombiesurvival",
+    "version": "1.0.0",
+    "description": "Phaser 3 top-down zombie survival game.",
+    "main": "bootstrap.js",
+    "type": "module",
+    "scripts": {
+        "test": "node --test"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC"
+}
