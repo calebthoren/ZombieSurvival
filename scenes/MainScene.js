@@ -80,6 +80,7 @@ export default class MainScene extends Phaser.Scene {
         // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
         this.keys = this.input.keyboard.addKeys('W,A,S,D');
+        this.shiftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
         this.input.on('pointerdown', this.onPointerDown, this);
         this.input.on('pointerup', this.onPointerUp, this);
 
@@ -545,7 +546,7 @@ export default class MainScene extends Phaser.Scene {
         const down = (this.keys.S?.isDown) || (this.cursors.down?.isDown);
         const left = (this.keys.A?.isDown) || (this.cursors.left?.isDown);
         const right = (this.keys.D?.isDown) || (this.cursors.right?.isDown);
-        const shift = this.input.keyboard.checkDown(this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT), 0);
+        const shift = this.shiftKey?.isDown;
 
         this._isSprinting = !!shift && this.hasStamina(0.001);
         let speed = walkSpeed * (this._isSprinting ? sprintMult : 1);
