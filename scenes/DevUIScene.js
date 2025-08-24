@@ -215,8 +215,9 @@ export default class DevUIScene extends Phaser.Scene {
         const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpTimeScale(-0.1), 2);
         this._timeText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._time.scale, (s) => { this._time.scale = s; this._commitTimeScale(); });
         const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpTimeScale(0.1), 2);
+        const set = this._makeButton(minusX + 130, y + 7, 60, 30, 'Set', () => this._commitTimeScale(), 2, UI.okColor);
 
-        this.content.add([card, label, minus, this._timeText.box, plus]);
+        this.content.add([card, label, minus, this._timeText.box, plus, set]);
         return y + UI.rowH;
     }
 

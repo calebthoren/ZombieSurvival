@@ -111,6 +111,15 @@ const DevTools = {
         } catch {}
     },
 
+    // Get scaled time in ms honoring the dev time multiplier
+    now(scene) {
+        const base = scene?.time?.now || 0;
+        const applied = scene?.time?.timeScale || 1;
+        const scale = this.cheats.timeScale || 1;
+        if (applied <= 0) return base;
+        return (base / applied) * scale;
+    },
+
     // Toggle entry point used by Dev UI
     setShowHitboxes(value, scene) {
         this.cheats.showHitboxes = !!value;
@@ -143,7 +152,7 @@ const DevTools = {
         if (!this.cheats.showHitboxes) return;
         this._ensureLayers(scene);
 
-        const now = scene.time.now | 0;
+        const now = this.now(scene) | 0;
         if (now - this._lastFastDraw >= this._FAST_MS) {
             this._drawFast(scene);
             this._lastFastDraw = now;
@@ -238,7 +247,7 @@ const DevTools = {
         if (mh && mh.children?.iterate) {
             const N     = Math.max(1, (this._MELEE_SUBDIV | 0));                 // total slices across cone
             const batch = Math.max(1, (this.cheats.meleeSliceBatch | 0)) > 1 ? 2 : 1; // 1 or 2
-            const now   = scene.time.now | 0;
+            const now   = this.now(scene) | 0;
 
             mh.children.iterate((hit) => {
                 if (!hit || !hit.active) return;
