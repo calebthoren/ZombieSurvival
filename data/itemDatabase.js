@@ -184,6 +184,104 @@ export const ITEM_DB = {
 
   //rocks
   //-----
+  rock1A: {
+    id: 'rock1A',
+    name: 'Small Grassy Rock',
+    type: ITEM_TYPES.RESOURCE,
+    stackable: false,
+    maxStack: 1,
+    icon:  { textureKey: 'rock1A', scale: 1.0, ox: 0, oy: 0 },
+    world: { textureKey: 'rock1A', scale: .65 },
+    collectible: true,          // custom flag for pickup
+    blocking: false,            // walk-through
+    givesItem: ITEM_IDS.SLINGSHOT_ROCK,
+    giveAmount: 1,
+    depth: 1,
+    tags: ['resource', 'rock'],
+    meta: { rarity: 'common' },
+  },
+
+  rock1B: {
+    id: 'rock1B',
+    name: 'Medium Grassy Rock',
+    type: ITEM_TYPES.RESOURCE,
+    stackable: false,
+    maxStack: 1,
+    icon:  { textureKey: 'rock1B', scale: 1.0, ox: 0, oy: 0 },
+    world: {
+      textureKey: 'rock1B',
+      scale: 1.0,
+      origin: { x: 0.5, y: 1 },
+      body: { kind: 'circle', radius: 8, offsetX: 0, offsetY: -11, useScale: true, anchor: 'bottomCenter' }
+
+    },
+    collectible: false,
+    blocking: true,
+    depth: 1,
+    tags: ['resource', 'rock'],
+    meta: { rarity: 'uncommon' },
+  },
+
+  rock1C: {
+    id: 'rock1C',
+    name: 'Large Grassy Rock',
+    type: ITEM_TYPES.RESOURCE,
+    stackable: false,
+    maxStack: 1,
+    icon:  { textureKey: 'rock1C', scale: 1.0, ox: 0, oy: 0 },
+    world: {
+      textureKey: 'rock1C',
+      scale: 1.0,
+      origin: { x: 0.5, y: 1 },
+      body: { kind: 'circle', radius: 12, offsetX: 0, offsetY: -11, useScale: true, anchor: 'bottomCenter' }
+    },
+    collectible: false,
+    blocking: true,
+    depth: 1,
+    tags: ['resource', 'rock'],
+    meta: { rarity: 'rare' },
+  },
+
+  rock1D: {
+    id: 'rock1D',
+    name: 'Huge Grassy Rock',
+    type: ITEM_TYPES.RESOURCE,
+    stackable: false,
+    maxStack: 1,
+    icon:  { textureKey: 'rock1D', scale: 1.0, ox: 0, oy: 0 },
+    world: {
+      textureKey: 'rock1D',
+      scale: 1.0,
+      origin: { x: 0.5, y: 1 },
+      body: { kind: 'circle', radius: 18, offsetX: 0, offsetY: -12, useScale: true, anchor: 'bottomCenter' }
+    },
+    collectible: false,
+    blocking: true,
+    depth: 1,
+    tags: ['resource', 'rock'],
+    meta: { rarity: 'very_rare' },
+  },
+
+  rock1E: {
+    id: 'rock1E',
+    name: 'Giant Grassy Rock',
+    type: ITEM_TYPES.RESOURCE,
+    stackable: false,
+    maxStack: 1,
+    icon:  { textureKey: 'rock1E', scale: 1.0, ox: 0, oy: 0 },
+    world: {
+      textureKey: 'rock1E',
+      scale: 1.0,
+      origin: { x: 0.5, y: 1 },
+      body: { kind: 'circle', radius: 24, offsetX: 0, offsetY: -13, useScale: true, anchor: 'bottomCenter' }
+    },
+    collectible: false,
+    blocking: true,
+    depth: 1,
+    tags: ['resource', 'rock'],
+    meta: { rarity: 'legendary' },
+  },
+
   rock2A: {
     id: 'rock2A',
     name: 'Small Grassy Rock',
@@ -271,6 +369,104 @@ export const ITEM_DB = {
     icon:  { textureKey: 'rock2E', scale: 1.0, ox: 0, oy: 0 },
     world: {
       textureKey: 'rock2E',
+      scale: 1.0,
+      origin: { x: 0.5, y: 1 },
+      body: { kind: 'circle', radius: 24, offsetX: 0, offsetY: -13, useScale: true, anchor: 'bottomCenter' }
+    },
+    collectible: false,
+    blocking: true,
+    depth: 1,
+    tags: ['resource', 'rock'],
+    meta: { rarity: 'legendary' },
+  },
+
+  rock4A: {
+    id: 'rock4A',
+    name: 'Small Grassy Rock',
+    type: ITEM_TYPES.RESOURCE,
+    stackable: false,
+    maxStack: 1,
+    icon:  { textureKey: 'rock4A', scale: 1.0, ox: 0, oy: 0 },
+    world: { textureKey: 'rock4A', scale: .65 },
+    collectible: true,          // custom flag for pickup
+    blocking: false,            // walk-through
+    givesItem: ITEM_IDS.SLINGSHOT_ROCK,
+    giveAmount: 1,
+    depth: 1,
+    tags: ['resource', 'rock'],
+    meta: { rarity: 'common' },
+  },
+
+  rock4B: {
+    id: 'rock4B',
+    name: 'Medium Grassy Rock',
+    type: ITEM_TYPES.RESOURCE,
+    stackable: false,
+    maxStack: 1,
+    icon:  { textureKey: 'rock4B', scale: 1.0, ox: 0, oy: 0 },
+    world: {
+      textureKey: 'rock4B',
+      scale: 1.0,
+      origin: { x: 0.5, y: 1 },
+      body: { kind: 'circle', radius: 8, offsetX: 0, offsetY: -11, useScale: true, anchor: 'bottomCenter' }
+
+    },
+    collectible: false,
+    blocking: true,
+    depth: 1,
+    tags: ['resource', 'rock'],
+    meta: { rarity: 'uncommon' },
+  },
+
+  rock4C: {
+    id: 'rock4C',
+    name: 'Large Grassy Rock',
+    type: ITEM_TYPES.RESOURCE,
+    stackable: false,
+    maxStack: 1,
+    icon:  { textureKey: 'rock4C', scale: 1.0, ox: 0, oy: 0 },
+    world: {
+      textureKey: 'rock4C',
+      scale: 1.0,
+      origin: { x: 0.5, y: 1 },
+      body: { kind: 'circle', radius: 12, offsetX: 0, offsetY: -11, useScale: true, anchor: 'bottomCenter' }
+    },
+    collectible: false,
+    blocking: true,
+    depth: 1,
+    tags: ['resource', 'rock'],
+    meta: { rarity: 'rare' },
+  },
+
+  rock4D: {
+    id: 'rock4D',
+    name: 'Huge Grassy Rock',
+    type: ITEM_TYPES.RESOURCE,
+    stackable: false,
+    maxStack: 1,
+    icon:  { textureKey: 'rock4D', scale: 1.0, ox: 0, oy: 0 },
+    world: {
+      textureKey: 'rock4D',
+      scale: 1.0,
+      origin: { x: 0.5, y: 1 },
+      body: { kind: 'circle', radius: 18, offsetX: 0, offsetY: -12, useScale: true, anchor: 'bottomCenter' }
+    },
+    collectible: false,
+    blocking: true,
+    depth: 1,
+    tags: ['resource', 'rock'],
+    meta: { rarity: 'very_rare' },
+  },
+
+  rock4E: {
+    id: 'rock4E',
+    name: 'Giant Grassy Rock',
+    type: ITEM_TYPES.RESOURCE,
+    stackable: false,
+    maxStack: 1,
+    icon:  { textureKey: 'rock4E', scale: 1.0, ox: 0, oy: 0 },
+    world: {
+      textureKey: 'rock4E',
       scale: 1.0,
       origin: { x: 0.5, y: 1 },
       body: { kind: 'circle', radius: 24, offsetX: 0, offsetY: -13, useScale: true, anchor: 'bottomCenter' }

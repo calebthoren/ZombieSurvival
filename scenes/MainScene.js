@@ -53,11 +53,21 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('slingshot_rock', 'assets/weapons/slingshot_rock.png');
         this.load.image('crude_bat', 'assets/weapons/crude_bat.png');
         // resources
+        this.load.image('rock1A', 'assets/resources/rocks/rock1A.png');
+        this.load.image('rock1B', 'assets/resources/rocks/rock1B.png');
+        this.load.image('rock1C', 'assets/resources/rocks/rock1C.png');
+        this.load.image('rock1D', 'assets/resources/rocks/rock1D.png');
+        this.load.image('rock1E', 'assets/resources/rocks/rock1E.png');
         this.load.image('rock2A', 'assets/resources/rocks/rock2A.png');
         this.load.image('rock2B', 'assets/resources/rocks/rock2B.png');
         this.load.image('rock2C', 'assets/resources/rocks/rock2C.png');
         this.load.image('rock2D', 'assets/resources/rocks/rock2D.png');
         this.load.image('rock2E', 'assets/resources/rocks/rock2E.png');
+        this.load.image('rock4A', 'assets/resources/rocks/rock4A.png');
+        this.load.image('rock4B', 'assets/resources/rocks/rock4B.png');
+        this.load.image('rock4C', 'assets/resources/rocks/rock4C.png');
+        this.load.image('rock4D', 'assets/resources/rocks/rock4D.png');
+        this.load.image('rock4E', 'assets/resources/rocks/rock4E.png');
         // trees
         this.load.image('tree1A', 'assets/resources/trees/tree1A.png');
         this.load.image('tree1B', 'assets/resources/trees/tree1B.png');

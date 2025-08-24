@@ -35,11 +35,21 @@ export const WORLD_GEN = {
           minSpacing: 48,  // pixels between rock centers
           respawnDelayMs: { min: 5000, max: 7000 },
           variants: [
+            { id: 'rock1A', weight: 60 }, // collectible, non-blocking
+            { id: 'rock1B', weight: 20 }, // blocking
+            { id: 'rock1C', weight: 12 }, // blocking
+            { id: 'rock1D', weight: 6 },  // blocking
+            { id: 'rock1E', weight: 2 },  // blocking
             { id: 'rock2A', weight: 60 }, // collectible, non-blocking
             { id: 'rock2B', weight: 20 }, // blocking
             { id: 'rock2C', weight: 12 }, // blocking
             { id: 'rock2D', weight: 6 },  // blocking
             { id: 'rock2E', weight: 2 },  // blocking
+            { id: 'rock4A', weight: 60 }, // collectible, non-blocking
+            { id: 'rock4B', weight: 20 }, // blocking
+            { id: 'rock4C', weight: 12 }, // blocking
+            { id: 'rock4D', weight: 6 },  // blocking
+            { id: 'rock4E', weight: 2 },  // blocking
           ],
         },
         // Weighted tree variants
