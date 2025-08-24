@@ -65,6 +65,27 @@ export default class DevUIScene extends Phaser.Scene {
             count: startCount,
         };
 
+        // Build item index for inventory spawning
+        this._iIndex = this._buildItemIndex();
+        const firstItem = this._iIndex.sortedEntries.length
+            ? this._iIndex.sortedEntries[0]
+            : { key: '', name: '', lower: '', maxStack: 1 };
+
+        this._item = {
+            selectedKey: firstItem.key,
+            selectedName: firstItem.name,
+            lastConfirmedKey: firstItem.key,
+            lastConfirmedName: firstItem.name,
+            maxStack: firstItem.maxStack || 1,
+
+            query: firstItem.name,
+            results: this._iIndex.sortedEntries,
+            resStart: 0,
+            resHL: 0,
+
+            count: '1',
+        };
+
         this._time = { scale: String(DevTools.cheats.timeScale || 1) };
     }
 
@@ -134,6 +155,7 @@ export default class DevUIScene extends Phaser.Scene {
 
         y = this._sectionTitle('Spawners', y);
         y = this._enemySpawnerRow(y);
+        y = this._itemSpawnerRow(y);
 
         y = this._sectionTitle('Control', y);
         y = this._timeControlRow(y);
@@ -145,11 +167,11 @@ export default class DevUIScene extends Phaser.Scene {
         this.input.on('wheel', (pointer, _dx, dy) => {
             let consumed = false;
             if (this._typeDD && this._typeDD.visible && this._isPointerInside(pointer, this._typeDDBounds)) {
-                consumed = this._scrollDropdownBy(dy);  // returns true if it actually scrolled
+                consumed = this._scrollDropdownBy(dy);  // enemy dropdown
+            } else if (this._itemTypeDD && this._itemTypeDD.visible && this._isPointerInside(pointer, this._itemDDBounds)) {
+                consumed = this._scrollItemDropdownBy(dy); // item dropdown
             }
-            if (!consumed) {
-                this._scrollBy(dy); // otherwise scroll the whole panel
-            }
+            if (!consumed) this._scrollBy(dy); // otherwise scroll the whole panel
         });
 
         // Make sure hitbox render and time scale react immediately
@@ -204,6 +226,30 @@ export default class DevUIScene extends Phaser.Scene {
         const spawn = this._makeButton(this.scale.width - 140, y + 7, 120, 30, 'Spawn', () => this._spawnEnemies(), 2, UI.okColor);
 
         this.content.add([card, label, typeLbl, this._typeBox.box, minus, this._countText.box, plus, countLbl, spawn]);
+        return y + UI.rowH;
+    }
+
+    _itemSpawnerRow(y) {
+        const card = this._card(y);
+        const label = this.add.text(UI.pad + 6, y + 12, 'Spawn Item', UI.font).setDepth(2);
+
+        const typeLabelX = 135;
+        const typeLbl = this.add.text(typeLabelX, y + 12, 'Item:', UI.font).setDepth(2);
+        const typeInputX = typeLabelX + typeLbl.displayWidth + 8;
+        const typeInputW = 180;
+
+        this._makeItemTypeaheadBox(typeInputX, y + 9, typeInputW, 26);
+
+        const countLabelX = typeInputX + typeInputW + 18;
+        const countLbl = this.add.text(countLabelX, y + 12, 'Amount:', UI.font).setDepth(2);
+        const minusX = countLabelX + countLbl.displayWidth + 8;
+        const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpItemCount(-1), 2);
+        this._itemCountText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._item.count, (s) => { this._item.count = s; });
+        const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpItemCount(1), 2);
+
+        const spawn = this._makeButton(this.scale.width - 140, y + 7, 120, 30, 'Spawn', () => this._spawnItems(), 2, UI.okColor);
+
+        this.content.add([card, label, typeLbl, this._itemTypeBox.box, minus, this._itemCountText.box, plus, countLbl, spawn]);
         return y + UI.rowH;
     }
 
@@ -434,6 +480,114 @@ export default class DevUIScene extends Phaser.Scene {
         return api;
     }
 
+    _makeItemTypeaheadBox(x, y, w, h) {
+        const rect = this.add.rectangle(x, y, w, h, 0x000000, 0.4)
+            .setOrigin(0, 0)
+            .setStrokeStyle(1, 0xffffff, 0.6)
+            .setDepth(2)
+            .setInteractive({ useHandCursor: true });
+
+        const txt = this.add.text(x + 6, y + 5, this._item.query, UI.font).setDepth(3);
+
+        this._itemTypeDD = this.add.container(0, 0).setVisible(false);
+        this.content.add(this._itemTypeDD);
+
+        const listX = x;
+        const listYBelow = y + h + 10;
+        const listW = w;
+        const rowH = 24;
+        const dropH = (rowH * MAX_DROPDOWN_ITEMS) + 8;
+
+        this._itemDDMetrics = { listX, listYBelow, listW, rowH, dropH, inputY: y, inputH: h };
+
+        const bg = this.add.rectangle(listX, listYBelow, listW, dropH, 0x000000, 0.92)
+            .setOrigin(0, 0)
+            .setStrokeStyle(1, 0xffffff, 0.5)
+            .setDepth(3);
+        this._itemTypeDD.add(bg);
+
+        this._itemTypeRows = [];
+        for (let i = 0; i < MAX_DROPDOWN_ITEMS; i++) {
+            const rx = listX + 4;
+            const ry = listYBelow + 4 + i * rowH;
+
+            const hlRect = this.add.rectangle(listX + 2, ry - 2, listW - 4, rowH, 0xffffff, 0.08)
+                .setOrigin(0, 0)
+                .setDepth(3)
+                .setVisible(false);
+            const pre  = this.add.text(rx, ry, '', UI.font).setDepth(4);
+            const mid  = this.add.text(rx, ry, '', { ...UI.font, fontStyle: 'bold' }).setDepth(4);
+            const post = this.add.text(rx, ry, '', UI.font).setDepth(4);
+
+            const rowC = this.add.container(0, 0, [hlRect, pre, mid, post]).setDepth(3);
+            rowC.setSize(listW - 4, rowH);
+            rowC.setInteractive(new Phaser.Geom.Rectangle(listX + 2, ry - 2, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
+            rowC._hlRect = hlRect; rowC._pre = pre; rowC._mid = mid; rowC._post = post;
+            rowC._index = i;
+
+            rowC.on('pointerover', () => {
+                this._item.resHL = i;
+                this._renderItemDropdown();
+            });
+            rowC.on('pointerdown', () => {
+                const sel = this._visibleItemDropdownItem(i);
+                if (sel) this._confirmItemSelection(sel.name, true);
+            });
+
+            this._itemTypeRows.push(rowC);
+            this._itemTypeDD.add(rowC);
+        }
+
+        this._itemDDBounds = new Phaser.Geom.Rectangle(listX, listYBelow, listW, dropH);
+
+        const api = {
+            box: this.add.container(0, 0, [rect, txt]).setDepth(2),
+            rect, txt,
+            startEdit: () => {
+                if (this._editing && this._editing !== api && this._editing.stopEdit) this._editing.stopEdit(true);
+                rect.setFillStyle(0xffff00, 0.25);
+                rect.setStrokeStyle(2, 0xffff00, 1);
+                txt.setColor('#fff176');
+                this._editing = api;
+
+                this._openItemDropdown();
+            },
+            stopEdit: (apply = true) => {
+                if (this._editing !== api) return;
+
+                rect.setFillStyle(0x000000, 0.4);
+                rect.setStrokeStyle(1, 0xffffff, 0.6);
+                txt.setColor(UI.font.color);
+
+                if (apply) {
+                    this._confirmItemSelection(txt.text, false);
+                } else {
+                    txt.setText(this._item.lastConfirmedName);
+                }
+
+                this._closeItemDropdown();
+                this._editing = null;
+            },
+            get: () => txt.text,
+            set: (s) => { txt.setText(s); },
+            _kind: 'typeahead'
+        };
+
+        rect.on('pointerdown', api.startEdit);
+        txt.on('pointerdown', api.startEdit);
+
+        this.input.on('pointerdown', (pointer, objs) => {
+            if (this._editing === api) {
+                const inInput = objs.includes(rect) || objs.includes(txt);
+                const inDD = this._isPointerInside(pointer, this._itemDDBounds);
+                if (!inInput && !inDD) api.stopEdit(true);
+            }
+        });
+
+        this._itemTypeBox = api;
+        return api;
+    }
+
     // ---------- Interaction logic ----------
 
     _onKey(ev) {
@@ -452,23 +606,24 @@ export default class DevUIScene extends Phaser.Scene {
 
         if (!this._editing) return;
 
-        // Typeahead editor
-        if (this._editing._kind === 'typeahead') {
+        // Typeahead editors
+        if (this._editing === this._typeBox) {
             const t = this._typeBox.txt;
-            if (ev.key === 'Backspace') {
-                t.setText(t.text.length ? t.text.slice(0, -1) : '');
-                this._updateTypeResults(t.text);
-                return;
-            }
+            if (ev.key === 'Backspace') { t.setText(t.text.length ? t.text.slice(0, -1) : ''); this._updateTypeResults(t.text); return; }
             if (ev.key === 'ArrowDown') { this._moveDropdownHL(1); return; }
             if (ev.key === 'ArrowUp')   { this._moveDropdownHL(-1); return; }
-
-            // Accept common characters (letters, digits, space, hyphen, underscore, apostrophe)
             if (/^[a-z0-9 \-_'"]$/i.test(ev.key)) {
-                if (t.text.length < 32) {
-                    t.setText(t.text + ev.key);
-                    this._updateTypeResults(t.text);
-                }
+                if (t.text.length < 32) { t.setText(t.text + ev.key); this._updateTypeResults(t.text); }
+            }
+            return;
+        }
+        if (this._editing === this._itemTypeBox) {
+            const t = this._itemTypeBox.txt;
+            if (ev.key === 'Backspace') { t.setText(t.text.length ? t.text.slice(0, -1) : ''); this._updateItemResults(t.text); return; }
+            if (ev.key === 'ArrowDown') { this._moveItemDropdownHL(1); return; }
+            if (ev.key === 'ArrowUp')   { this._moveItemDropdownHL(-1); return; }
+            if (/^[a-z0-9 \-_'"]$/i.test(ev.key)) {
+                if (t.text.length < 32) { t.setText(t.text + ev.key); this._updateItemResults(t.text); }
             }
             return;
         }
@@ -689,6 +844,179 @@ export default class DevUIScene extends Phaser.Scene {
         }
     }
 
+    _openItemDropdown() {
+        this._itemTypeDD.setVisible(true);
+        if (this.content?.bringToTop) this.content.bringToTop(this._itemTypeDD);
+
+        const M = this._itemDDMetrics;
+        if (M) {
+            const screenBottomYOfInput = (this.content.y | 0) + 54 + (M.inputY + M.inputH + 10);
+            const screenSpaceBelow = (this.scale.height - 24) - screenBottomYOfInput;
+            const fitsBelow = screenSpaceBelow >= M.dropH;
+            if (fitsBelow) {
+                this._itemTypeDD.y = 0;
+                this._itemDDBounds.y = M.listYBelow;
+                this._itemDDFlip = false;
+            } else {
+                const listYAbove = M.inputY - 10 - M.dropH;
+                const delta = listYAbove - M.listYBelow;
+                this._itemTypeDD.y = delta;
+                this._itemDDBounds.y = listYAbove;
+                this._itemDDFlip = true;
+            }
+        }
+
+        this._updateItemResults(this._itemTypeBox.txt.text);
+        this._scrollBy(0);
+    }
+
+    _closeItemDropdown() {
+        this._itemTypeDD.setVisible(false);
+        this._scrollBy(0);
+    }
+
+    _updateItemResults(inputStr) {
+        const q = (inputStr || '').trim().toLowerCase();
+        let results;
+
+        if (q === '') {
+            results = this._iIndex.sortedEntries;
+        } else {
+            const prefix = [];
+            const contain = [];
+            for (let i = 0; i < this._iIndex.entries.length; i++) {
+                const e = this._iIndex.entries[i];
+                const idx = e.lower.indexOf(q);
+                if (idx === 0) prefix.push(e);
+                else if (idx > 0) contain.push(e);
+            }
+            prefix.sort((a, b) => (a.lower < b.lower ? -1 : a.lower > b.lower ? 1 : 0));
+            contain.sort((a, b) => (a.lower < b.lower ? -1 : a.lower > b.lower ? 1 : 0));
+            results = prefix.concat(contain);
+        }
+
+        this._item.results = results;
+        this._item.resStart = 0;
+        this._item.resHL = 0;
+        this._renderItemDropdown();
+    }
+
+    _renderItemDropdown() {
+        if (!this._itemTypeDD.visible) return;
+
+        const list = this._item.results;
+        const start = this._item.resStart;
+        const max = MAX_DROPDOWN_ITEMS;
+        const q = (this._itemTypeBox.txt.text || '').trim().toLowerCase();
+
+        for (let i = 0; i < this._itemTypeRows.length; i++) {
+            const row = this._itemTypeRows[i];
+            const e = list[start + i];
+            const visible = !!e;
+            row.setVisible(visible);
+            row._hlRect.setVisible(visible && i === this._item.resHL);
+            if (!visible) continue;
+
+            const name = e.name;
+            const lower = e.lower;
+            let m = -1, len = 0;
+            if (q.length) {
+                m = lower.indexOf(q);
+                len = q.length;
+            }
+            const preStr = (m >= 0) ? name.slice(0, m) : name;
+            const midStr = (m >= 0) ? name.slice(m, m + len) : '';
+            const postStr = (m >= 0) ? name.slice(m + len) : '';
+
+            const rx = row._pre.x; const ry = row._pre.y;
+            row._pre.setText(preStr);
+            row._mid.setText(midStr);
+            row._post.setText(postStr);
+
+            row._mid.setX(rx + row._pre.displayWidth);
+            row._post.setX(rx + row._pre.displayWidth + row._mid.displayWidth);
+            row._pre.setY(ry); row._mid.setY(ry); row._post.setY(ry);
+
+            const isHL = (i === this._item.resHL);
+            const colorHL = isHL ? '#ffffff' : UI.font.color;
+            row._pre.setColor(colorHL);
+            row._mid.setColor(colorHL);
+            row._post.setColor(colorHL);
+        }
+    }
+
+    _visibleItemDropdownItem(rowIndex) {
+        const idx = this._item.resStart + rowIndex;
+        return this._item.results[idx];
+    }
+
+    _moveItemDropdownHL(dir) {
+        const total = this._item.results.length;
+        if (!total) return;
+
+        const maxVis = Math.min(total, MAX_DROPDOWN_ITEMS);
+        let hl = this._item.resHL + dir;
+
+        if (hl < 0) {
+            if (this._item.resStart > 0) {
+                this._item.resStart = Math.max(0, this._item.resStart - 1);
+                hl = 0;
+            } else {
+                hl = 0;
+            }
+        } else if (hl >= maxVis) {
+            if (this._item.resStart + maxVis < total) {
+                this._item.resStart += 1;
+                hl = maxVis - 1;
+            } else {
+                hl = maxVis - 1;
+            }
+        }
+
+        this._item.resHL = hl;
+        this._renderItemDropdown();
+    }
+
+    _scrollItemDropdownBy(dy) {
+        const prevStart = this._item.resStart | 0;
+        const step = dy > 0 ? 1 : -1;
+        const total = this._item.results.length;
+        const maxStart = Math.max(0, total - MAX_DROPDOWN_ITEMS);
+
+        const nextStart = Phaser.Math.Clamp(prevStart + step, 0, maxStart);
+        this._item.resStart = nextStart;
+
+        const maxVis = Math.min(MAX_DROPDOWN_ITEMS, total - this._item.resStart);
+        this._item.resHL = Phaser.Math.Clamp(this._item.resHL, 0, Math.max(0, maxVis - 1));
+        this._renderItemDropdown();
+
+        return nextStart !== prevStart;
+    }
+
+    _confirmItemSelection(inputText, selectingFromRow) {
+        const q = (inputText || '').trim().toLowerCase();
+
+        let chosen = null;
+        for (let i = 0; i < this._iIndex.entries.length; i++) {
+            const e = this._iIndex.entries[i];
+            if (e.lower === q) { chosen = e; break; }
+        }
+        if (!chosen && this._item.results.length > 0) {
+            chosen = selectingFromRow ? this._visibleItemDropdownItem(this._item.resHL) : this._item.results[0];
+        }
+
+        if (chosen) {
+            this._item.selectedKey = chosen.key;
+            this._item.selectedName = chosen.name;
+            this._item.lastConfirmedKey = chosen.key;
+            this._item.lastConfirmedName = chosen.name;
+            this._item.maxStack = chosen.maxStack || 1;
+            this._itemTypeBox.set(chosen.name);
+        } else {
+            this._itemTypeBox.set(this._item.lastConfirmedName);
+        }
+    }
+
     _isPointerInside(pointer, rect) {
         if (!rect) return false;
         const x = pointer.x, y = pointer.y - 54 + this._scroll; // content container offset
@@ -709,6 +1037,14 @@ export default class DevUIScene extends Phaser.Scene {
             name: this._enemy.selectedName,
             count: this._enemy.count
         });
+    }
+
+    _bumpItemCount(delta) {
+        const val = this._item.count.trim() === '' ? 1 : parseInt(this._item.count, 10) || 1;
+        const max = this._item.maxStack || 1;
+        let next = Phaser.Math.Clamp(val + delta, 1, max);
+        this._item.count = String(next);
+        if (this._itemCountText) this._itemCountText.set(this._item.count);
     }
 
     _spawnEnemies() {
@@ -736,6 +1072,25 @@ export default class DevUIScene extends Phaser.Scene {
         if (!main) return;
 
         DevTools.spawnEnemiesAtScreenEdge(main, typeKey, count);
+    }
+
+    _spawnItems() {
+        if (this._editing && this._editing.stopEdit) this._editing.stopEdit(true);
+
+        let raw = this._itemCountText?.txt?.text?.trim?.() ?? String(this._item.count || '').trim();
+        if (raw === '') raw = '1';
+        let qty = parseInt(raw, 10);
+        if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+        const max = this._item.maxStack || 1;
+        qty = Phaser.Math.Clamp(qty, 1, max);
+        this._item.count = String(qty);
+        this._itemCountText?.set?.(this._item.count);
+
+        const itemKey = this._item.selectedKey;
+        const main = this.scene.get('MainScene');
+        if (!main) return;
+
+        DevTools.spawnItemsSmart(main, itemKey, qty);
     }
 
     // ---------- Time control logic ----------
@@ -797,9 +1152,11 @@ export default class DevUIScene extends Phaser.Scene {
         // Base content height
         let base = this._rows.length * UI.rowH + 2 * UI.rowH;
 
-        // If the typeahead dropdown is open, extend the page so the user can scroll to see it
+        // If a dropdown is open, extend the page so the user can scroll to see it
         if (this._typeDD && this._typeDD.visible && this._typeDDBounds) {
-            base += this._typeDDBounds.height + 40; // extra slack
+            base += this._typeDDBounds.height + 40;
+        } else if (this._itemTypeDD && this._itemTypeDD.visible && this._itemDDBounds) {
+            base += this._itemDDBounds.height + 40;
         }
         return base;
     }
@@ -825,6 +1182,23 @@ export default class DevUIScene extends Phaser.Scene {
             }
         }
         // Sorted list by A→Z (used for empty query)
+        const sortedEntries = entries.slice().sort((a, b) => (a.lower < b.lower ? -1 : a.lower > b.lower ? 1 : 0));
+        return { entries, sortedEntries };
+    }
+
+    _buildItemIndex() {
+        const db = IDB.ITEM_DB || IDB;
+        const entries = [];
+        if (db && typeof db === 'object') {
+            const keys = Object.keys(db);
+            for (let i = 0; i < keys.length; i++) {
+                const k = keys[i];
+                const it = db[k] || {};
+                const name = it.name || k;
+                const max = it.maxStack || 1;
+                entries.push({ key: k, name, lower: name.toLowerCase(), maxStack: max });
+            }
+        }
         const sortedEntries = entries.slice().sort((a, b) => (a.lower < b.lower ? -1 : a.lower > b.lower ? 1 : 0));
         return { entries, sortedEntries };
     }
