@@ -193,10 +193,21 @@ export default function createResourceSystem(scene) {
                     }
                     obj.body.setImmovable(blocking);
                 } else {
-                    if (blocking) obj.body.setImmovable(true);
-                    else {
-                        obj.body.setSize(obj.displayWidth, obj.displayHeight);
-                        obj.body.setOffset(0, 0);
+                    if (blocking) {
+                        obj.body.setImmovable(true);
+                    } else {
+                        if (obj.getData('bush')) {
+                            const r = Math.min(
+                                obj.displayWidth,
+                                obj.displayHeight,
+                            ) * 0.5;
+                            const ox = obj.displayWidth * 0.5 - r;
+                            const oy = obj.displayHeight * 0.5 - r;
+                            obj.body.setCircle(r, ox, oy);
+                        } else {
+                            obj.body.setSize(obj.displayWidth, obj.displayHeight);
+                            obj.body.setOffset(0, 0);
+                        }
                         obj.body.setImmovable(true);
                     }
                 }
