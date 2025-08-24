@@ -17,7 +17,7 @@ export default function createInputSystem(scene) {
 
         if (cat === 'melee' && equipped.id === 'crude_bat') {
             const wpn = def.weapon || {};
-            const now = scene.time.now;
+            const now = DevTools.now(scene);
             const baseCd = wpn?.swingCooldownMs ?? 80;
             const effectiveCd = scene._nextSwingCooldownMs ?? baseCd;
             const lastEnd = scene._lastSwingEndTime || 0;
@@ -41,7 +41,7 @@ export default function createInputSystem(scene) {
 
         if (cat === 'ranged' && equipped.id === 'slingshot') {
             const wpn = def.weapon || {};
-            const now = scene.time.now;
+            const now = DevTools.now(scene);
             const fireCd = wpn?.fireCooldownMs ?? 0;
             if (
                 !DevTools.cheats.noCooldown &&
@@ -76,7 +76,7 @@ export default function createInputSystem(scene) {
         }
 
         const heldMs = Phaser.Math.Clamp(
-            scene.time.now - scene.chargeStart,
+            DevTools.now(scene) - scene.chargeStart,
             0,
             scene.chargeMaxMs,
         );

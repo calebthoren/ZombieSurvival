@@ -1,12 +1,13 @@
 // systems/dayNightSystem.js
 // Day/Night cycle logic isolated from Phaser scene for reuse.
 import { WORLD_GEN } from '../data/worldGenConfig.js';
+import DevTools from './DevTools.js';
 
 export default function createDayNightSystem(scene) {
     // ----- Phase Transitions -----
     function startDay() {
         scene.phase = 'day';
-        scene.phaseStartTime = scene.time.now;
+        scene.phaseStartTime = DevTools.now(scene);
         scene._phaseElapsedMs = 0;
         if (scene.nightWaveTimer) {
             scene.nightWaveTimer.remove(false);
@@ -19,7 +20,7 @@ export default function createDayNightSystem(scene) {
 
     function startNight() {
         scene.phase = 'night';
-        scene.phaseStartTime = scene.time.now;
+        scene.phaseStartTime = DevTools.now(scene);
         scene._phaseElapsedMs = 0;
         if (scene.spawnZombieTimer) {
             scene.spawnZombieTimer.remove(false);

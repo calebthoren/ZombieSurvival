@@ -369,7 +369,7 @@ export default class UIScene extends Phaser.Scene {
         // NEW: cooldown overlays (e.g., bat swings)
         this.events.on('weapon:cooldownStart', ({ itemId, durationMs }) => {
             if (!itemId || !durationMs || durationMs <= 0) return;
-            const now = this.time.now;
+            const now = DevTools.now(this);
             this._activeCooldowns.set(itemId, { start: now, end: now + durationMs });
             this.#syncCooldownOverlays();
         });
@@ -736,7 +736,7 @@ export default class UIScene extends Phaser.Scene {
     // Create/ensure overlays for any slots showing items currently on cooldown,
     // and remove overlays that no longer match or have expired.
     #syncCooldownOverlays() {
-        const now = this.time.now;
+        const now = DevTools.now(this);
 
         // Remove expired item cooldowns
         for (const [itemId, cd] of this._activeCooldowns) {
@@ -802,7 +802,7 @@ export default class UIScene extends Phaser.Scene {
             const o = this._slotOverlays[i];
             const key = `${o.kind}:${o.index}:${o.itemId}`;
             const cd = this._activeCooldowns.get(o.itemId);
-            const alive = cd && this.time.now < cd.end;
+            const alive = cd && DevTools.now(this) < cd.end;
             if (!alive || !need.has(key)) {
                 this.#removeOverlay(o, i);
             }
@@ -840,7 +840,7 @@ export default class UIScene extends Phaser.Scene {
     #updateCooldownOverlays() {
         if (this._slotOverlays.length === 0) return;
 
-        const now = this.time.now;
+        const now = DevTools.now(this);
         for (let i = this._slotOverlays.length - 1; i >= 0; i--) {
             const o = this._slotOverlays[i];
             const cd = this._activeCooldowns.get(o.itemId);
