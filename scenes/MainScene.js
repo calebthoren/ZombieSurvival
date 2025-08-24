@@ -126,6 +126,9 @@ export default class MainScene extends Phaser.Scene {
             .setDepth(900)
             .setCollideWorldBounds(true);
 
+        this.player._speedMult = 1;
+        this.player._inBush = false;
+
         // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
         this.keys = this.input.keyboard.addKeys('W,A,S,D');
@@ -432,7 +435,10 @@ export default class MainScene extends Phaser.Scene {
         );
 
         this._isSprinting = !!shift && this.hasStamina(0.001);
-        let speed = walkSpeed * (this._isSprinting ? sprintMult : 1);
+        let speed =
+            walkSpeed *
+            (this._isSprinting ? sprintMult : 1) *
+            (this.player._speedMult || 1);
 
         if (up) p.y = -speed;
         else if (down) p.y = speed;
@@ -469,7 +475,7 @@ export default class MainScene extends Phaser.Scene {
                     this.physics.moveToObject(
                         zombie,
                         this.player,
-                        zombie.speed || 40,
+                        (zombie.speed || 40) * (zombie._speedMult || 1),
                     );
                 }
             } // else: let existing velocity keep sliding
