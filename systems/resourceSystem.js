@@ -177,6 +177,93 @@ export default function createResourceSystem(scene) {
                 }
             }
 
+            // Precompute leaf overlap rectangle for transparency
+            const leavesCfg = def.world?.leaves;
+            if (leavesCfg) {
+                const frameW = obj.width;
+                const frameH = obj.height;
+                const dispW = obj.displayWidth;
+                const dispH = obj.displayHeight;
+
+                const scaleX = obj.scaleX || 1;
+                const scaleY = obj.scaleY || 1;
+                const useScale = !!leavesCfg.useScale;
+
+                const lw = useScale ? leavesCfg.width * scaleX : leavesCfg.width;
+                const lh = useScale
+                    ? leavesCfg.height * scaleY
+                    : leavesCfg.height;
+
+                const anchorSpaceW = useScale ? dispW : frameW;
+                const anchorSpaceH = useScale ? dispH : frameH;
+
+                const anchor = leavesCfg.anchor || 'topLeft';
+                let baseX = 0,
+                    baseY = 0;
+                switch (anchor) {
+                    case 'center':
+                        baseX = (anchorSpaceW - lw) * 0.5;
+                        baseY = (anchorSpaceH - lh) * 0.5;
+                        break;
+                    case 'topCenter':
+                        baseX = (anchorSpaceW - lw) * 0.5;
+                        baseY = 0;
+                        break;
+                    case 'bottomCenter':
+                        baseX = (anchorSpaceW - lw) * 0.5;
+                        baseY = anchorSpaceH - lh;
+                        break;
+                    case 'bottomLeft':
+                        baseX = 0;
+                        baseY = anchorSpaceH - lh;
+                        break;
+                    case 'topLeft':
+                    default:
+                        baseX = 0;
+                        baseY = 0;
+                        break;
+                }
+
+                const addX = useScale
+                    ? (leavesCfg.offsetX || 0) * scaleX
+                    : leavesCfg.offsetX || 0;
+                const addY = useScale
+                    ? (leavesCfg.offsetY || 0) * scaleY
+                    : leavesCfg.offsetY || 0;
+
+                const topLeftX = obj.x - dispW * obj.originX;
+                const topLeftY = obj.y - dispH * obj.originY;
+
+                const rect = new Phaser.Geom.Rectangle(
+                    topLeftX + baseX + addX,
+                    topLeftY + baseY + addY,
+                    lw,
+                    lh,
+                );
+
+                scene._treeLeaves = scene._treeLeaves || [];
+                scene._treeLeaves.push({ tree: obj, rect });
+                if (!scene._treeLeavesUpdate) {
+                    scene._treeLeavesUpdate = () => {
+                        const pb = scene.player.body;
+                        for (const data of scene._treeLeaves) {
+                            const overlap =
+                                Phaser.Geom.Intersects.RectangleToRectangle(
+                                    pb,
+                                    data.rect,
+                                );
+                            data.tree.setAlpha(overlap ? 0.5 : 1);
+                        }
+                    };
+                    scene.events.on('update', scene._treeLeavesUpdate);
+                    scene.events.once('shutdown', () => {
+                        scene.events.off('update', scene._treeLeavesUpdate);
+                        scene._treeLeaves = [];
+                        scene._treeLeavesUpdate = null;
+                    });
+                }
+            }
+
             if (def.collectible) {
                 obj.setInteractive();
                 obj.on('pointerdown', (pointer) => {
