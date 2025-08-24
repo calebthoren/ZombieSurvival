@@ -480,7 +480,16 @@ export default class DevUIScene extends Phaser.Scene {
                 return;
             }
             if (/^[0-9]$/.test(ev.key)) {
-                if (t.text.length < 3) t.setText(t.text + ev.key);
+                const max = t.text.includes('.') ? 4 : 3;
+                if (t.text.length < max) t.setText(t.text + ev.key);
+                return;
+            }
+            if (
+                ev.key === '.' &&
+                this._editing === this._timeText &&
+                !t.text.includes('.')
+            ) {
+                if (t.text.length < 4) t.setText(t.text + '.');
             }
         }
     }
