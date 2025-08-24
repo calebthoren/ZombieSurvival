@@ -1,8 +1,8 @@
 // systems/resourceSystem.js
 // Handles world resource spawning in a Phaser-agnostic way.
 import { WORLD_GEN } from '../data/worldGenConfig.js';
-import { ITEM_DB } from '../data/itemDatabase.js';
 import { DESIGN_RULES } from '../data/designRules.js';
+import { RESOURCE_DB } from '../data/resourceDatabase.js';
 
 export default function createResourceSystem(scene) {
     // ----- Public API -----
@@ -322,7 +322,7 @@ export default function createResourceSystem(scene) {
 
         const spawnCluster = () => {
             const id = pickVariantId();
-            const def = ITEM_DB[id];
+            const def = RESOURCE_DB[id];
             if (!def) return 0;
 
             const tex = scene.textures.get(def.world?.textureKey || id);
@@ -378,7 +378,7 @@ export default function createResourceSystem(scene) {
 
     // ----- Dev Helpers -----
     function spawnWorldItem(id, pos) {
-        const def = ITEM_DB[id];
+        const def = RESOURCE_DB[id];
         if (!def) return;
         const obj = scene.add
             .image(pos.x, pos.y, def.world?.textureKey || id)
