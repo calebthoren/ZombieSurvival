@@ -13,4 +13,9 @@ export const DESIGN_RULES = {
   counts: {
     clampToMaxStack: true,
   },
+
+  // Resource interaction modifiers
+  movement: {
+    bushSlowMultiplier: 0.5,
+  },
 };

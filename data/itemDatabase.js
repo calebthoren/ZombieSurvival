@@ -177,6 +177,7 @@ export const ITEM_DB = {
     tags: ['ammo', 'rock', 'slingshot'],
     meta: { rarity: 'common' },
   },
+
 };
 
 export const GROUPS = {

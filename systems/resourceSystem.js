@@ -1,6 +1,7 @@
 // systems/resourceSystem.js
 // Handles world resource spawning in a Phaser-agnostic way.
 import { WORLD_GEN } from '../data/worldGenConfig.js';
+import { DESIGN_RULES } from '../data/designRules.js';
 import { RESOURCE_DB } from '../data/resourceDatabase.js';
 
 export default function createResourceSystem(scene) {
@@ -20,6 +21,35 @@ export default function createResourceSystem(scene) {
                 (player, obj) => !!obj.getData('blocking'),
                 scene,
             );
+        }
+
+        if (!scene._bushSlowOverlap) {
+            const markBush = (ent, obj) => {
+                if (obj.getData('bush')) ent._inBush = true;
+            };
+            scene._bushSlowOverlap = [
+                scene.physics.add.overlap(scene.player, scene.resources, markBush, null, scene),
+                scene.physics.add.overlap(scene.zombies, scene.resources, markBush, null, scene),
+            ];
+            const slow = DESIGN_RULES.movement?.bushSlowMultiplier ?? 0.5;
+            scene._bushSlowUpdate = () => {
+                const p = scene.player;
+                if (p) {
+                    p._speedMult = p._inBush ? slow : 1;
+                    p._inBush = false;
+                }
+                const zs = scene.zombies.getChildren();
+                for (let i = 0; i < zs.length; i++) {
+                    const z = zs[i];
+                    z._speedMult = z._inBush ? slow : 1;
+                    z._inBush = false;
+                }
+            };
+            scene.events.on('update', scene._bushSlowUpdate);
+            scene.events.once('shutdown', () => {
+                scene.events.off('update', scene._bushSlowUpdate);
+                scene._bushSlowUpdate = null;
+            });
         }
     }
 
@@ -86,6 +116,8 @@ export default function createResourceSystem(scene) {
 
             const blocking = !!def.blocking;
             obj.setData('blocking', blocking);
+
+            if (def.tags?.includes('bush')) obj.setData('bush', true);
 
             const bodyCfg = def.world?.body;
             if (obj.body) {

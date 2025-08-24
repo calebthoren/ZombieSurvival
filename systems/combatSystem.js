@@ -454,6 +454,8 @@ export default function createCombatSystem(scene) {
         zombie.setOrigin(0.5, 0.5);
         zombie.setScale(def.scale ?? 0.1);
         zombie.setDepth(def.depth ?? 2);
+        zombie._speedMult = 1;
+        zombie._inBush = false;
         zombie.lastHitTime = 0;
         zombie.zType = typeKey;
         zombie.speed = def.speed ?? 40;
