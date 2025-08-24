@@ -39,6 +39,8 @@ export default function createResourceSystem(scene) {
         const minSpacing = groupCfg.minSpacing ?? 48;
         const respawnMin = groupCfg.respawnDelayMs?.min ?? 5000;
         const respawnMax = groupCfg.respawnDelayMs?.max ?? 7000;
+        const clusterMax = groupCfg.clusterMax ?? 3;
+        const clusterRadius = groupCfg.clusterRadius ?? minSpacing * 2;
         const totalWeight = variants.reduce((s, v) => s + (v.weight || 0), 0);
 
         const w = scene.sys.game.config.width;
@@ -48,13 +50,18 @@ export default function createResourceSystem(scene) {
             minY = 100,
             maxY = h - 100;
 
-        const tooClose = (x, y) => {
-            return scene.resources.getChildren().some((c) => {
-                if (!c.active) return false;
-                const dx = c.x - x,
-                    dy = c.y - y;
-                return dx * dx + dy * dy < minSpacing * minSpacing;
-            });
+        const tooClose = (x, y, w, h) => {
+            const children = scene.resources.getChildren();
+            for (let i = 0; i < children.length; i++) {
+                const c = children[i];
+                if (!c.active) continue;
+                const halfW = (c.displayWidth + w) * 0.5;
+                const halfH = (c.displayHeight + h) * 0.5;
+                const dx = c.x - x;
+                const dy = c.y - y;
+                if (Math.abs(dx) < halfW && Math.abs(dy) < halfH) return true;
+            }
+            return false;
         };
 
         const pickVariantId = () => {
@@ -66,21 +73,7 @@ export default function createResourceSystem(scene) {
             return variants[0].id;
         };
 
-        const spawnOne = () => {
-            let x,
-                y,
-                tries = 30;
-            do {
-                x = Phaser.Math.Between(minX, maxX);
-                y = Phaser.Math.Between(minY, maxY);
-                tries--;
-            } while (tries > 0 && tooClose(x, y));
-            if (tries <= 0) return;
-
-            const id = pickVariantId();
-            const def = ITEM_DB[id];
-            if (!def) return;
-
+        const createResourceAt = (id, def, x, y) => {
             const originX = def.world?.origin?.x ?? 0.5;
             const originY = def.world?.origin?.y ?? 0.5;
             const scale = def.world?.scale ?? 1;
@@ -288,14 +281,67 @@ export default function createResourceSystem(scene) {
                         Phaser.Math.Between(respawnMin, respawnMax),
                         () => {
                             if (scene.resources.countActive(true) < maxActive)
-                                spawnOne();
+                                spawnCluster();
                         },
                     );
                 });
             }
         };
 
-        for (let i = 0; i < maxActive; i++) spawnOne();
+        const spawnCluster = () => {
+            const id = pickVariantId();
+            const def = ITEM_DB[id];
+            if (!def) return 0;
+
+            const tex = scene.textures.get(def.world?.textureKey || id);
+            const src = tex.getSourceImage();
+            const scale = def.world?.scale ?? 1;
+            const width = src.width * scale;
+            const height = src.height * scale;
+
+            let x,
+                y,
+                tries = 30;
+            do {
+                x = Phaser.Math.Between(minX, maxX);
+                y = Phaser.Math.Between(minY, maxY);
+                tries--;
+            } while (tries > 0 && tooClose(x, y, width, height));
+            if (tries <= 0) return 0;
+
+            createResourceAt(id, def, x, y);
+            let spawned = 1;
+
+            const clusterCount = Phaser.Math.Between(1, clusterMax);
+            for (
+                let i = 1;
+                i < clusterCount && scene.resources.countActive(true) < maxActive;
+                i++
+            ) {
+                let x2,
+                    y2,
+                    t2 = 10;
+                do {
+                    x2 =
+                        x + Phaser.Math.Between(-clusterRadius, clusterRadius);
+                    y2 =
+                        y + Phaser.Math.Between(-clusterRadius, clusterRadius);
+                    t2--;
+                } while (t2 > 0 && tooClose(x2, y2, width, height));
+                if (t2 <= 0) continue;
+                createResourceAt(id, def, x2, y2);
+                spawned++;
+            }
+
+            return spawned;
+        };
+
+        let spawned = 0,
+            attempts = 0;
+        while (spawned < maxActive && attempts < maxActive * 10) {
+            spawned += spawnCluster();
+            attempts++;
+        }
     }
 
     // ----- Dev Helpers -----

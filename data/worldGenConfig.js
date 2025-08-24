@@ -31,8 +31,9 @@ export const WORLD_GEN = {
     resources: {
         // Weighted rock variants A–E (A most common → E rarest)
         rocks: {
-          maxActive: 15,
+          maxActive: 10,
           minSpacing: 48,  // pixels between rock centers
+          clusterMax: 3,
           respawnDelayMs: { min: 5000, max: 7000 },
           variants: [
             { id: 'rock1A', weight: 60 }, // collectible, non-blocking
@@ -54,8 +55,9 @@ export const WORLD_GEN = {
         },
         // Weighted tree variants
         trees: {
-          maxActive: 20,
+          maxActive: 13,
           minSpacing: 100,
+          clusterMax: 3,
           variants: [
             { id: 'tree1A', weight: 25 },
             { id: 'tree1B', weight: 20 },
@@ -67,8 +69,9 @@ export const WORLD_GEN = {
         },
         // Weighted bush variants
         bushes: {
-          maxActive: 30,
+          maxActive: 20,
           minSpacing: 50,
+          clusterMax: 3,
           variants: [
             { id: 'bush1A', weight: 15 },
             { id: 'bush1B', weight: 15 },
