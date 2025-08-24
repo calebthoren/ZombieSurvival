@@ -1,6 +1,8 @@
 // data/worldGenConfig.js
 // PURE DATA ONLY — no logic. Tunable world gen + day/night + spawn settings.
 
+import { RESOURCE_IDS } from './resourceDatabase.js';
+
 export const WORLD_GEN = {
   // -----------------------------
   // World bounds / scale (future)
@@ -36,21 +38,21 @@ export const WORLD_GEN = {
           clusterMax: 3,
           respawnDelayMs: { min: 5000, max: 7000 },
           variants: [
-            { id: 'rock1A', weight: 60 }, // collectible, non-blocking
-            { id: 'rock1B', weight: 20 }, // blocking
-            { id: 'rock1C', weight: 12 }, // blocking
-            { id: 'rock1D', weight: 6 },  // blocking
-            { id: 'rock1E', weight: 2 },  // blocking
-            { id: 'rock2A', weight: 60 }, // collectible, non-blocking
-            { id: 'rock2B', weight: 20 }, // blocking
-            { id: 'rock2C', weight: 12 }, // blocking
-            { id: 'rock2D', weight: 6 },  // blocking
-            { id: 'rock2E', weight: 2 },  // blocking
-            { id: 'rock4A', weight: 60 }, // collectible, non-blocking
-            { id: 'rock4B', weight: 20 }, // blocking
-            { id: 'rock4C', weight: 12 }, // blocking
-            { id: 'rock4D', weight: 6 },  // blocking
-            { id: 'rock4E', weight: 2 },  // blocking
+            { id: RESOURCE_IDS.ROCK1A, weight: 60 }, // collectible, non-blocking
+            { id: RESOURCE_IDS.ROCK1B, weight: 20 }, // blocking
+            { id: RESOURCE_IDS.ROCK1C, weight: 12 }, // blocking
+            { id: RESOURCE_IDS.ROCK1D, weight: 6 },  // blocking
+            { id: RESOURCE_IDS.ROCK1E, weight: 2 },  // blocking
+            { id: RESOURCE_IDS.ROCK2A, weight: 60 }, // collectible, non-blocking
+            { id: RESOURCE_IDS.ROCK2B, weight: 20 }, // blocking
+            { id: RESOURCE_IDS.ROCK2C, weight: 12 }, // blocking
+            { id: RESOURCE_IDS.ROCK2D, weight: 6 },  // blocking
+            { id: RESOURCE_IDS.ROCK2E, weight: 2 },  // blocking
+            { id: RESOURCE_IDS.ROCK4A, weight: 60 }, // collectible, non-blocking
+            { id: RESOURCE_IDS.ROCK4B, weight: 20 }, // blocking
+            { id: RESOURCE_IDS.ROCK4C, weight: 12 }, // blocking
+            { id: RESOURCE_IDS.ROCK4D, weight: 6 },  // blocking
+            { id: RESOURCE_IDS.ROCK4E, weight: 2 },  // blocking
           ],
         },
         // Weighted tree variants
@@ -59,12 +61,12 @@ export const WORLD_GEN = {
           minSpacing: 100,
           clusterMax: 3,
           variants: [
-            { id: 'tree1A', weight: 25 },
-            { id: 'tree1B', weight: 20 },
-            { id: 'tree1C', weight: 20 },
-            { id: 'tree2A', weight: 15 },
-            { id: 'tree2B', weight: 10 },
-            { id: 'tree2C', weight: 10 },
+            { id: RESOURCE_IDS.TREE1A, weight: 25 },
+            { id: RESOURCE_IDS.TREE1B, weight: 20 },
+            { id: RESOURCE_IDS.TREE1C, weight: 20 },
+            { id: RESOURCE_IDS.TREE2A, weight: 15 },
+            { id: RESOURCE_IDS.TREE2B, weight: 10 },
+            { id: RESOURCE_IDS.TREE2C, weight: 10 },
           ],
         },
         // Weighted bush variants
@@ -73,21 +75,21 @@ export const WORLD_GEN = {
           minSpacing: 50,
           clusterMax: 3,
           variants: [
-            { id: 'bush1A', weight: 15 },
-            { id: 'bush1B', weight: 15 },
-            { id: 'bush1C', weight: 15 },
-            { id: 'bush3A', weight: 10 },
-            { id: 'bush3B', weight: 10 },
-            { id: 'bush3C', weight: 10 },
-            { id: 'berry_bushA1', weight: 6 },
-            { id: 'berry_bushA2', weight: 6 },
-            { id: 'berry_bushA3', weight: 6 },
-            { id: 'berry_bushB1', weight: 6 },
-            { id: 'berry_bushB2', weight: 6 },
-            { id: 'berry_bushB3', weight: 6 },
-            { id: 'cotton_bush1', weight: 3 },
-            { id: 'cotton_bush2', weight: 3 },
-            { id: 'cotton_bush3', weight: 3 },
+            { id: RESOURCE_IDS.BUSH1A, weight: 15 },
+            { id: RESOURCE_IDS.BUSH1B, weight: 15 },
+            { id: RESOURCE_IDS.BUSH1C, weight: 15 },
+            { id: RESOURCE_IDS.BUSH3A, weight: 10 },
+            { id: RESOURCE_IDS.BUSH3B, weight: 10 },
+            { id: RESOURCE_IDS.BUSH3C, weight: 10 },
+            { id: RESOURCE_IDS.BERRY_BUSHA1, weight: 6 },
+            { id: RESOURCE_IDS.BERRY_BUSHA2, weight: 6 },
+            { id: RESOURCE_IDS.BERRY_BUSHA3, weight: 6 },
+            { id: RESOURCE_IDS.BERRY_BUSHB1, weight: 6 },
+            { id: RESOURCE_IDS.BERRY_BUSHB2, weight: 6 },
+            { id: RESOURCE_IDS.BERRY_BUSHB3, weight: 6 },
+            { id: RESOURCE_IDS.COTTON_BUSH1, weight: 3 },
+            { id: RESOURCE_IDS.COTTON_BUSH2, weight: 3 },
+            { id: RESOURCE_IDS.COTTON_BUSH3, weight: 3 },
           ],
         },
       },
