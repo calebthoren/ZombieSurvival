@@ -86,13 +86,16 @@ const DevTools = {
         if (v > 10) v = 10;
         this.cheats.timeScale = v;
 
+        // Engine treats smaller values as faster; invert so higher is faster
+        const applied = (v <= 0) ? 0 : 1 / v;
+
         const mgr = game?.scene;
         if (mgr && Array.isArray(mgr.scenes)) {
             for (let i = 0; i < mgr.scenes.length; i++) {
                 const sc = mgr.scenes[i];
                 try {
-                    if (sc.time) sc.time.timeScale = v;
-                    if (sc.physics && sc.physics.world) sc.physics.world.timeScale = v;
+                    if (sc.time) sc.time.timeScale = applied;
+                    if (sc.physics && sc.physics.world) sc.physics.world.timeScale = applied;
                 } catch {}
             }
         }
@@ -100,10 +103,11 @@ const DevTools = {
 
     applyTimeScale(scene) {
         const v = this.cheats.timeScale;
+        const applied = (v <= 0) ? 0 : 1 / v;
         if (!scene) return;
         try {
-            if (scene.time) scene.time.timeScale = v;
-            if (scene.physics && scene.physics.world) scene.physics.world.timeScale = v;
+            if (scene.time) scene.time.timeScale = applied;
+            if (scene.physics && scene.physics.world) scene.physics.world.timeScale = applied;
         } catch {}
     },
 
