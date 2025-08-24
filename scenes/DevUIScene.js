@@ -221,9 +221,10 @@ export default class DevUIScene extends Phaser.Scene {
         const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpCount(-1), 2);
         this._countText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._enemy.count, (s) => { this._enemy.count = s; });
         const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpCount(1), 2);
-
         // Spawn button
-        const spawn = this._makeButton(this.scale.width - 140, y + 7, 120, 30, 'Spawn', () => this._spawnEnemies(), 2, UI.okColor);
+        this._spawnBtnX = this.scale.width - 140;
+        this._spawnMinusX = minusX;
+        const spawn = this._makeButton(this._spawnBtnX, y + 7, 120, 30, 'Spawn', () => this._spawnEnemies(), 2, UI.okColor);
 
         this.content.add([card, label, typeLbl, this._typeBox.box, minus, this._countText.box, plus, countLbl, spawn]);
         return y + UI.rowH;
@@ -257,11 +258,12 @@ export default class DevUIScene extends Phaser.Scene {
         const card = this._card(y);
         const label = this.add.text(UI.pad + 6, y + 12, 'Time Scale', UI.font).setDepth(2);
 
-        const minusX = this.scale.width - 220;
+        const minusX = this._spawnMinusX ?? (this.scale.width - 220);
         const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpTimeScale(-0.1), 2);
         this._timeText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._time.scale, (s) => { this._time.scale = s; this._commitTimeScale(); });
         const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpTimeScale(0.1), 2);
-        const set = this._makeButton(minusX + 130, y + 7, 60, 30, 'Set', () => this._commitTimeScale(), 2, UI.okColor);
+        const setX = this._spawnBtnX ?? (this.scale.width - 140);
+        const set = this._makeButton(setX, y + 7, 120, 30, 'Set', () => this._commitTimeScale(), 2, UI.okColor);
 
         this.content.add([card, label, minus, this._timeText.box, plus, set]);
         return y + UI.rowH;
