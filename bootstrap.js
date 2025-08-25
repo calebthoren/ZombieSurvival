@@ -6,7 +6,16 @@ import DevUIScene from './scenes/DevUIScene.js';
 const BASE_WIDTH = 800;   // base game width (designed pixel resolution)
 const BASE_HEIGHT = 600;  // base game height
 
+// 🖼️ Explicit canvas with willReadFrequently to avoid readback warnings
+const canvas = (typeof document !== 'undefined')
+    ? document.createElement('canvas')
+    : null;
+if (canvas) {
+    canvas.setAttribute('willReadFrequently', 'true');
+}
+
 const config = {
+    ...(canvas ? { canvas } : {}),
     type: Phaser.WEBGL, // Force WebGL renderer
     width: BASE_WIDTH,
     height: BASE_HEIGHT,

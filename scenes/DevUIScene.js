@@ -44,9 +44,9 @@ export default class DevUIScene extends Phaser.Scene {
         // Load saved prefs (if any) from DevTools
         const saved = (DevTools._getEnemySpawnPrefs && DevTools._getEnemySpawnPrefs()) || null;
 
-        const startKey   = saved?.key   || first.key;
-        const startName  = saved?.name  || first.name;
-        const startCount = (saved?.count != null ? String(saved.count) : '1');
+        const startKey       = saved?.key   || first.key;
+        const startName      = saved?.name  || first.name;
+        const startEnemyCount = (saved?.count != null ? String(saved.count) : '1');
 
         this._enemy = {
             // selection model
@@ -62,7 +62,7 @@ export default class DevUIScene extends Phaser.Scene {
             resHL: 0,                                // highlighted result in view
 
             // amount model (string so user can blank it)
-            count: startCount,
+            count: startEnemyCount,
         };
 
         // Build item index for inventory spawning
@@ -71,10 +71,10 @@ export default class DevUIScene extends Phaser.Scene {
             ? this._iIndex.sortedEntries[0]
             : { key: '', name: '', lower: '', maxStack: 1 };
         const savedItem = (DevTools._getItemSpawnPrefs && DevTools._getItemSpawnPrefs()) || null;
-        const startItemKey = savedItem?.key || firstItem.key;
-        const startItemName = savedItem?.name || firstItem.name;
-        const entry = this._iIndex.entries.find(e => e.key === startItemKey) || firstItem;
-        const startCount = savedItem?.count != null ? String(savedItem.count) : '1';
+        const startItemKey   = savedItem?.key   || firstItem.key;
+        const startItemName  = savedItem?.name  || firstItem.name;
+        const entry          = this._iIndex.entries.find(e => e.key === startItemKey) || firstItem;
+        const startItemCount = savedItem?.count != null ? String(savedItem.count) : '1';
 
         this._item = {
             selectedKey: startItemKey,
@@ -88,7 +88,7 @@ export default class DevUIScene extends Phaser.Scene {
             resStart: 0,
             resHL: 0,
 
-            count: startCount,
+            count: startItemCount,
         };
 
         this._time = { scale: String(DevTools.cheats.timeScale || 1) };
