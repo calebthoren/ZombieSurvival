@@ -251,7 +251,18 @@ export default class DevUIScene extends Phaser.Scene {
         const countLbl = this.add.text(countLabelX, y + 12, 'Amount:', UI.font).setDepth(2);
         const minusX = countLabelX + countLbl.displayWidth + 8;
         const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpItemCount(-1), 2);
-        this._itemCountText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._item.count, (s) => { this._item.count = s; });
+        this._itemCountText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._item.count, (s) => {
+            const max = this._item.maxStack || 1;
+            let v = s.trim() === '' ? 1 : parseInt(s, 10) || 1;
+            v = Phaser.Math.Clamp(v, 1, max);
+            this._item.count = String(v);
+            DevTools._setItemSpawnPrefs && DevTools._setItemSpawnPrefs({
+                key: this._item.selectedKey,
+                name: this._item.selectedName,
+                count: this._item.count
+            });
+            return this._item.count;
+        });
         const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpItemCount(1), 2);
 
         const spawn = this._makeButton(this.scale.width - 140, y + 7, 120, 30, 'Spawn', () => this._spawnItems(), 2, UI.okColor);
@@ -346,8 +357,8 @@ export default class DevUIScene extends Phaser.Scene {
             if (apply) {
                 let val = txt.text.trim();
                 if (val === '') val = '1';
-                txt.setText(val);
-                setText(val);
+                const res = setText(val);
+                txt.setText(typeof res === 'string' ? res : val);
             } else {
                 txt.setText(getText());
             }

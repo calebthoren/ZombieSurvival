@@ -278,6 +278,7 @@ export default class UIScene extends Phaser.Scene {
         this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.TAB);
         this.input.keyboard.on('keydown-TAB', (e) => {
             e.preventDefault();
+            if (this.scene.isActive('PauseScene')) return;
             this.toggleInventory();
         });
 
@@ -474,6 +475,7 @@ export default class UIScene extends Phaser.Scene {
     // -------------------------
     toggleInventory() {
         if (this.inventoryLocked) return; // <- blocked after death
+        if (this.scene.isActive('PauseScene')) return;
 
         const wasVisible = this.inventoryPanel.visible;
         if (wasVisible) {
