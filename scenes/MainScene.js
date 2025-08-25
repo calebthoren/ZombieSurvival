@@ -66,11 +66,11 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('rock2C', 'assets/resources/rocks/rock2C.png');
         this.load.image('rock2D', 'assets/resources/rocks/rock2D.png');
         this.load.image('rock2E', 'assets/resources/rocks/rock2E.png');
-        this.load.image('rock4A', 'assets/resources/rocks/rock4A.png');
-        this.load.image('rock4B', 'assets/resources/rocks/rock4B.png');
-        this.load.image('rock4C', 'assets/resources/rocks/rock4C.png');
-        this.load.image('rock4D', 'assets/resources/rocks/rock4D.png');
-        this.load.image('rock4E', 'assets/resources/rocks/rock4E.png');
+        this.load.image('rock5A', 'assets/resources/rocks/rock5A.png');
+        this.load.image('rock5B', 'assets/resources/rocks/rock5B.png');
+        this.load.image('rock5C', 'assets/resources/rocks/rock5C.png');
+        this.load.image('rock5D', 'assets/resources/rocks/rock5D.png');
+        this.load.image('rock5E', 'assets/resources/rocks/rock5E.png');
         // trees
         this.load.image('tree1A', 'assets/resources/trees/tree1A.png');
         this.load.image('tree1B', 'assets/resources/trees/tree1B.png');
