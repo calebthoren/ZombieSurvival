@@ -50,6 +50,7 @@ function createStubScene(callStore) {
             world: {},
         },
         time: {
+            now: 0,
             delayedCall(ms, cb) {
                 callStore.push(ms);
                 cb();
