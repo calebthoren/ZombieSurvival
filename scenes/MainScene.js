@@ -261,9 +261,6 @@ export default class MainScene extends Phaser.Scene {
             const now = DevTools.now(this);
             const diff = now - (this._pauseStart || now);
             if (diff > 0) {
-                if (this._nextRangedReadyTime) this._nextRangedReadyTime += diff;
-                if (this._lastSwingEndTime) this._lastSwingEndTime += diff;
-                if (this.isCharging) this.chargeStart += diff;
                 if (this._lastStaminaSpendTime) this._lastStaminaSpendTime += diff;
             }
             this._pauseStart = 0;
@@ -429,6 +426,7 @@ export default class MainScene extends Phaser.Scene {
                     ),
                 )
             ) {
+                DevTools.resetToDefaults(this);
                 this.scene.stop('UIScene');
                 this.scene.restart();
             }
@@ -498,9 +496,8 @@ export default class MainScene extends Phaser.Scene {
         this.regenStamina(delta);
 
         // Zombie pursuit (simple: slide → then stun → then chase)
+        const now = this.time.now;
         this.zombies.getChildren().forEach((zombie) => {
-            const now = DevTools.now(this);
-
             const inKnockback = (zombie.knockbackUntil || 0) > now;
             const stunned = (zombie.stunUntil || 0) > now && !inKnockback; // stun begins after slide
 
@@ -731,9 +728,8 @@ export default class MainScene extends Phaser.Scene {
         if (!wpnDef || wpnDef.canCharge !== true) return;
 
         // Raw 0..1 charge based on time held
-        const scale = DevTools.cheats.timeScale || 1;
         const heldMs = Phaser.Math.Clamp(
-            (DevTools.now(this) - this.chargeStart) * scale,
+            this.time.now - this.chargeStart,
             0,
             this.chargeMaxMs,
         );

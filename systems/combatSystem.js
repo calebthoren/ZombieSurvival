@@ -79,7 +79,7 @@ export default function createCombatSystem(scene) {
     function handlePlayerZombieCollision(player, zombie) {
         if (scene.isGameOver) return;
         if (DevTools?.isPlayerInvisible?.() === true) return;
-        const now = DevTools.now(scene) | 0;
+        const now = scene.time.now | 0;
         const hitCdMs = 500;
         if (!zombie.lastHitTime) zombie.lastHitTime = 0;
         if (now - zombie.lastHitTime < hitCdMs) return;
@@ -267,12 +267,10 @@ export default function createCombatSystem(scene) {
                 ? Math.floor(baseCd * st.lowCooldownMultiplier)
                 : baseCd;
         if (!DevTools.cheats.noCooldown && cdMs > 0) {
-            const scale = DevTools.cheats.timeScale || 1;
-            const dur = Math.floor(cdMs / scale);
-            scene._nextRangedReadyTime = DevTools.now(scene) + dur;
+            scene._nextRangedReadyTime = scene.time.now + cdMs;
             scene.uiScene?.events?.emit('weapon:cooldownStart', {
                 itemId: equipped.id,
-                durationMs: dur,
+                durationMs: cdMs,
             });
         }
         scene.uiScene?.events?.emit('weapon:chargeEnd');
@@ -295,7 +293,7 @@ export default function createCombatSystem(scene) {
         if (scene._isSwinging) return;
         const effectiveCooldownMs =
             scene._nextSwingCooldownMs ?? baseCooldownMs;
-        const now = DevTools.now(scene);
+        const now = scene.time.now;
         if (now - (scene._lastSwingEndTime || 0) < effectiveCooldownMs) return;
         const st = wpn?.stamina;
         let lowStamina = false;
@@ -314,9 +312,8 @@ export default function createCombatSystem(scene) {
         }
         const cooldownMult =
             lowStamina && st ? (st.cooldownMultiplier ?? 6) : 1;
-        const scale = DevTools.cheats.timeScale || 1;
         scene._nextSwingCooldownMs = Math.floor(
-            (baseCooldownMs * cooldownMult) / scale,
+            baseCooldownMs * cooldownMult,
         );
         const canCharge = wpn?.canCharge === true;
         let charge = canCharge
@@ -383,7 +380,7 @@ export default function createCombatSystem(scene) {
         cone.setData('aimAngle', startRot);
         cone.setData('coneHalfRad', halfArc);
         cone.setData('maxRange', range);
-        cone.setData('swingStartMs', DevTools.now(scene) | 0);
+        cone.setData('swingStartMs', scene.time.now | 0);
         cone.setData('swingDurationMs', swingDurationMs | 0);
         scene._isSwinging = true;
         const swing = { t: 0 };
@@ -406,7 +403,7 @@ export default function createCombatSystem(scene) {
             },
             onComplete: () => {
                 scene._isSwinging = false;
-                scene._lastSwingEndTime = DevTools.now(scene);
+                scene._lastSwingEndTime = scene.time.now;
                 if (scene.batSprite) {
                     scene.batSprite.destroy();
                     scene.batSprite = null;
@@ -559,7 +556,7 @@ export default function createCombatSystem(scene) {
         const vx = (dx / len) * impulse;
         const vy = (dy / len) * impulse;
         zombie.setVelocity(vx, vy);
-        const now = DevTools.now(scene) | 0;
+        const now = scene.time.now | 0;
         zombie.knockbackUntil = now + 120;
         if (baseKb >= (zombie.staggerThreshold || 99999)) {
             zombie.stunUntil = now + (zombie.stunDurationMs || 300);
