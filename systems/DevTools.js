@@ -4,6 +4,8 @@
 // - ~10 Hz: resources (YELLOW)
 // - Melee cones draw as time-synced thin slices. Batch size (1 or 2) is configurable.
 
+import { ITEM_DB } from '../data/itemDatabase.js';
+
 const DevTools = {
     // ─────────────────────────────────────────────────────────────
     // CHEATS (wired from Dev UI)
@@ -364,7 +366,8 @@ const DevTools = {
 
     // Try to add items to inventory; ignore leftovers if inventory is full
     spawnItemsSmart(scene, id, qty = 1) {
-        qty = Math.max(1, qty | 0);
+        const max = ITEM_DB[id]?.maxStack || 1;
+        qty = Math.max(1, Math.min(qty | 0, max));
         const game = scene?.game;
         if (!game || !game.events) return;
 
