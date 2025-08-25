@@ -309,6 +309,25 @@ export default class MainScene extends Phaser.Scene {
         return this.resourceSystem.spawnAllResources();
     }
 
+    addItemToInventory(id, qty = 1, _where = 'inventory') {
+        const inv = this.uiScene?.inventory;
+        if (!inv || !id) return 0;
+
+        const count = (arr) => {
+            let total = 0;
+            for (let i = 0; i < arr.length; i++) {
+                const s = arr[i];
+                if (s && s.id === id) total += s.count;
+            }
+            return total;
+        };
+
+        const before = count(inv.grid) + count(inv.hotbar);
+        inv.addItem(id, qty);
+        const after = count(inv.grid) + count(inv.hotbar);
+        return after - before;
+    }
+
     // ==========================
     // STAMINA HELPERS
     // ==========================
