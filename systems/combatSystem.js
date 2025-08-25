@@ -80,7 +80,8 @@ export default function createCombatSystem(scene) {
         if (scene.isGameOver) return;
         if (DevTools?.isPlayerInvisible?.() === true) return;
         const now = scene.time.now | 0;
-        const hitCdMs = 500;
+        const scale = DevTools.cheats.timeScale || 1;
+        const hitCdMs = 500 / scale;
         if (!zombie.lastHitTime) zombie.lastHitTime = 0;
         if (now - zombie.lastHitTime < hitCdMs) return;
         zombie.lastHitTime = now;
@@ -89,9 +90,6 @@ export default function createCombatSystem(scene) {
         scene.health = Math.max(0, (scene.health | 0) - damage);
         scene.uiScene?.updateHealth?.(scene.health);
         if (scene.health <= 0) {
-            try {
-                DevTools.resetToDefaults(scene);
-            } catch {}
             scene.isGameOver = true;
             scene.physics.world.isPaused = true;
             try {
