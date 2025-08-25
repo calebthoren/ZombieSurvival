@@ -184,6 +184,12 @@ export default class UIScene extends Phaser.Scene {
             .setAlpha(INVENTORY_CONFIG.panelAlpha);
         this.inventoryPanel.add(panelBg);
         this.panelBg = panelBg;
+        this._inventoryBounds = new Phaser.Geom.Rectangle(
+            panelX,
+            panelY,
+            panelW,
+            panelH,
+        );
 
         // Visual dividers (cosmetic)
         const third = panelW / 3;
@@ -296,6 +302,20 @@ export default class UIScene extends Phaser.Scene {
                     }
                     this.inventoryPanel.setVisible(false);
                 }
+            }
+        });
+
+        this.input.on('pointerup', (pointer) => {
+            if (!this.inventoryPanel.visible) return;
+            if (!this.dragCarry) return;
+            const x = pointer.worldX;
+            const y = pointer.worldY;
+            if (!Phaser.Geom.Rectangle.Contains(this._inventoryBounds, x, y)) {
+                const main = this.scene.get('MainScene');
+                if (main && typeof main.dropItemStack === 'function') {
+                    main.dropItemStack(this.dragCarry.id, this.dragCarry.count);
+                }
+                this.#clearCarry();
             }
         });
 
