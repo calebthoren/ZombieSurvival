@@ -35,6 +35,9 @@ export default class MainScene extends Phaser.Scene {
         //ranged cooldown state
         this._nextRangedReadyTime = 0; // ms timestamp when ranged can fire again
 
+        // pause tracking
+        this._pauseStart = 0;
+
         // Equipped-item ghost (generic)
         this.equippedItemGhost = null;
     }
@@ -249,6 +252,20 @@ export default class MainScene extends Phaser.Scene {
             (zombie, obj) => !!obj.getData('blocking'),
             this,
         );
+
+        // Adjust timers when the scene is paused/resumed
+        this.events.on(Phaser.Scenes.Events.PAUSE, () => {
+            this._pauseStart = DevTools.now(this);
+        });
+        this.events.on(Phaser.Scenes.Events.RESUME, () => {
+            const now = DevTools.now(this);
+            const diff = now - (this._pauseStart || now);
+            if (diff > 0) {
+                if (this._nextRangedReadyTime) this._nextRangedReadyTime += diff;
+                if (this._lastSwingEndTime) this._lastSwingEndTime += diff;
+                if (this.isCharging) this.chargeStart += diff;
+            }
+        });
 
         // Night overlay
         const w = this.sys.game.config.width;

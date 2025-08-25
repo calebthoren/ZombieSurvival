@@ -233,9 +233,10 @@ export default function createCombatSystem(scene) {
         const v = scene.physics.velocityFromRotation(angle, speed);
         bullet.setVelocity(v.x, v.y);
         bullet.setRotation(angle);
+        const ts = scene.physics?.world?.timeScale || 1; // account for slow/fast physics
         const lifetimeMs = Math.max(
             1,
-            Math.floor((travel / Math.max(1, speed)) * 1000),
+            Math.floor((travel / Math.max(1, speed)) * 1000 * ts),
         );
         scene.time.delayedCall(lifetimeMs, () => {
             if (bullet.active && bullet.destroy) bullet.destroy();
