@@ -91,7 +91,7 @@ export default class DevUIScene extends Phaser.Scene {
             count: startItemCount,
         };
 
-        this._time = { scale: String(DevTools.cheats.timeScale || 1) };
+        this._gameSpeed = { scale: String(DevTools.cheats.timeScale || 1) };
     }
 
     create() {
@@ -163,7 +163,7 @@ export default class DevUIScene extends Phaser.Scene {
         y = this._itemSpawnerRow(y);
 
         y = this._sectionTitle('Control', y);
-        y = this._timeControlRow(y);
+        y = this._gameSpeedRow(y);
 
         // Keyboard handling
         this.input.keyboard.on('keydown', (ev) => this._onKey(ev));
@@ -179,7 +179,7 @@ export default class DevUIScene extends Phaser.Scene {
             if (!consumed) this._scrollBy(dy); // otherwise scroll the whole panel
         });
 
-        // Make sure hitbox render and time scale react immediately
+        // Make sure hitbox render and game speed react immediately
         DevTools.applyHitboxCheat(this.scene.get('MainScene'));
         DevTools.applyTimeScale(this);
     }
@@ -260,18 +260,18 @@ export default class DevUIScene extends Phaser.Scene {
         return y + UI.rowH;
     }
 
-    _timeControlRow(y) {
+    _gameSpeedRow(y) {
         const card = this._card(y);
-        const label = this.add.text(UI.pad + 6, y + 12, 'Time Scale', UI.font).setDepth(2);
+        const label = this.add.text(UI.pad + 6, y + 12, 'Game Speed', UI.font).setDepth(2);
 
         const minusX = this._spawnMinusX ?? (this.scale.width - 220);
-        const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpTimeScale(-0.1), 2);
-        this._timeText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._time.scale, (s) => { this._time.scale = s; this._commitTimeScale(); });
-        const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpTimeScale(0.1), 2);
+        const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpGameSpeed(-0.1), 2);
+        this._gameSpeedText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._gameSpeed.scale, (s) => { this._gameSpeed.scale = s; this._commitGameSpeed(); });
+        const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpGameSpeed(0.1), 2);
         const setX = this._spawnBtnX ?? (this.scale.width - 140);
-        const set = this._makeButton(setX, y + 7, 120, 30, 'Set', () => this._commitTimeScale(), 2, UI.okColor);
+        const set = this._makeButton(setX, y + 7, 120, 30, 'Set', () => this._commitGameSpeed(), 2, UI.okColor);
 
-        this.content.add([card, label, minus, this._timeText.box, plus, set]);
+        this.content.add([card, label, minus, this._gameSpeedText.box, plus, set]);
         return y + UI.rowH;
     }
 
@@ -649,7 +649,7 @@ export default class DevUIScene extends Phaser.Scene {
             }
             if (
                 ev.key === '.' &&
-                this._editing === this._timeText &&
+                this._editing === this._gameSpeedText &&
                 !t.text.includes('.')
             ) {
                 if (t.text.length < 4) t.setText(t.text + '.');
@@ -1119,29 +1119,29 @@ export default class DevUIScene extends Phaser.Scene {
         });
     }
 
-    // ---------- Time control logic ----------
+    // ---------- Game speed logic ----------
 
-    _commitTimeScale() {
-        let raw = this._timeText?.get?.() ?? String(this._time.scale || '').trim();
+    _commitGameSpeed() {
+        let raw = this._gameSpeedText?.get?.() ?? String(this._gameSpeed.scale || '').trim();
         if (raw === '') raw = '0';
         let val = parseFloat(raw);
         if (!Number.isFinite(val)) val = 0;
         val = Math.round(val * 10) / 10;
         val = Phaser.Math.Clamp(val, 0, 10);
-        this._time.scale = val.toFixed(1).replace(/\.0$/, '');
-        if (this._timeText?.txt) this._timeText.txt.setText(this._time.scale);
-        this._timeText?.stopEdit?.(false);
+        this._gameSpeed.scale = val.toFixed(1).replace(/\.0$/, '');
+        if (this._gameSpeedText?.txt) this._gameSpeedText.txt.setText(this._gameSpeed.scale);
+        this._gameSpeedText?.stopEdit?.(false);
         DevTools.setTimeScale(val, this.game);
     }
 
 
-    _bumpTimeScale(delta) {
-        let val = parseFloat(this._time.scale) || 0;
+    _bumpGameSpeed(delta) {
+        let val = parseFloat(this._gameSpeed.scale) || 0;
         val = Math.round((val + delta) * 10) / 10;
         val = Phaser.Math.Clamp(val, 0, 10);
-        this._time.scale = val.toFixed(1).replace(/\.0$/, '');
-        if (this._timeText?.txt) this._timeText.txt.setText(this._time.scale);
-        this._timeText?.stopEdit?.(false);
+        this._gameSpeed.scale = val.toFixed(1).replace(/\.0$/, '');
+        if (this._gameSpeedText?.txt) this._gameSpeedText.txt.setText(this._gameSpeed.scale);
+        this._gameSpeedText?.stopEdit?.(false);
         DevTools.setTimeScale(val, this.game);
     }
 

@@ -21,7 +21,7 @@ const DevTools = {
         // NEW: how many slices to draw per fast tick (1 or 2)
         meleeSliceBatch: 1,
 
-        // Global time scale (0..10, 1 = normal)
+        // Global game speed (0..10, 1 = normal)
         timeScale: 1
     },
 
@@ -80,7 +80,7 @@ const DevTools = {
         this.cheats.timeScale       = 1;
         // Re-apply hitbox visibility immediately (hides layers if they were on)
         try { this.applyHitboxCheat(scene || this._lastScene); } catch {}
-        // Reset global time scale
+        // Reset global game speed
         try { this.setTimeScale(1, (scene || this._lastScene)?.game); } catch {}
     },
 
@@ -90,7 +90,7 @@ const DevTools = {
         this.cheats.meleeSliceBatch = (v <= 1) ? 1 : 2;
     },
 
-    // Set global time scale (0..10) and apply to all scenes
+    // Set global game speed (0..10) and apply to all scenes
     setTimeScale(scale = 1, game = null) {
         let v = Number(scale);
         if (!Number.isFinite(v)) v = 1;
