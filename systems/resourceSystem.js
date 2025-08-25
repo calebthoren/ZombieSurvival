@@ -393,13 +393,31 @@ export default function createResourceSystem(scene) {
         };
 
         const spawnCluster = () => {
-            const id = pickVariantId();
-            const def = RESOURCE_DB[id];
-            if (!def) return 0;
+            const baseId = pickVariantId();
+            const baseKey = baseId.replace(/[A-Za-z]$/, '');
+            const baseVariants = variants.filter((v) => v.id.startsWith(baseKey));
+            const baseTotalWeight = baseVariants.reduce(
+                (s, v) => s + (v.weight || 0),
+                0,
+            );
+            const pickBaseVariant = () => {
+                let r = Math.random() * baseTotalWeight;
+                for (const v of baseVariants) {
+                    r -= v.weight || 0;
+                    if (r <= 0) return v.id;
+                }
+                return baseVariants[0].id;
+            };
 
-            const tex = scene.textures.get(def.world?.textureKey || id);
-            const src = tex.getSourceImage();
-            const scale = def.world?.scale ?? 1;
+            const firstId = pickBaseVariant();
+            const firstDef = RESOURCE_DB[firstId];
+            if (!firstDef) return 0;
+
+            const firstTex = scene.textures.get(
+                firstDef.world?.textureKey || firstId,
+            );
+            const src = firstTex.getSourceImage();
+            const scale = firstDef.world?.scale ?? 1;
             const width = src.width * scale;
             const height = src.height * scale;
 
@@ -413,7 +431,7 @@ export default function createResourceSystem(scene) {
             } while (tries > 0 && tooClose(x, y, width, height));
             if (tries <= 0) return 0;
 
-            createResourceAt(id, def, x, y);
+            createResourceAt(firstId, firstDef, x, y);
             let spawned = 1;
 
             const clusterCount = Phaser.Math.Between(clusterMin, clusterMax);
@@ -424,6 +442,16 @@ export default function createResourceSystem(scene) {
                 i < clusterCount && scene.resources.countActive(true) < maxActive;
                 i++
             ) {
+                const id = pickBaseVariant();
+                const def = RESOURCE_DB[id];
+                if (!def) continue;
+
+                const tex = scene.textures.get(def.world?.textureKey || id);
+                const src2 = tex.getSourceImage();
+                const scale2 = def.world?.scale ?? 1;
+                const w = src2.width * scale2;
+                const h = src2.height * scale2;
+
                 let x2,
                     y2,
                     t2 = 10;
@@ -432,7 +460,7 @@ export default function createResourceSystem(scene) {
                     x2 = x + Math.cos(ang) * radius;
                     y2 = y + Math.sin(ang) * radius;
                     t2--;
-                } while (t2 > 0 && tooClose(x2, y2, width, height));
+                } while (t2 > 0 && tooClose(x2, y2, w, h));
                 if (t2 <= 0) continue;
                 createResourceAt(id, def, x2, y2);
                 spawned++;
