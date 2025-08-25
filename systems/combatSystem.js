@@ -106,7 +106,13 @@ export default function createCombatSystem(scene) {
             scene._isSwinging = false;
             if (scene.gameOverText?.destroy) scene.gameOverText.destroy();
             if (scene.respawnPrompt?.destroy) scene.respawnPrompt.destroy();
+            if (scene.gameOverOverlay?.destroy) scene.gameOverOverlay.destroy();
             const cam = scene.cameras.main;
+            scene.gameOverOverlay = scene.add
+                .rectangle(0, 0, cam.width, cam.height, 0x000000, 0.5)
+                .setOrigin(0, 0)
+                .setScrollFactor(0)
+                .setDepth(999);
             const cx = cam.worldView.x + cam.worldView.width * 0.5;
             const cy = cam.worldView.y + cam.worldView.height * 0.5;
             scene.gameOverText = scene.add
