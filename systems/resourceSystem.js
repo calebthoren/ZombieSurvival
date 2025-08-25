@@ -69,16 +69,16 @@ export default function createResourceSystem(scene) {
         const minSpacing = groupCfg.minSpacing ?? 48;
         const respawnMin = groupCfg.respawnDelayMs?.min ?? 5000;
         const respawnMax = groupCfg.respawnDelayMs?.max ?? 7000;
-        const clusterMax = groupCfg.clusterMax ?? 3;
-        const clusterRadius = groupCfg.clusterRadius ?? minSpacing * 2;
+        const clusterMin = groupCfg.clusterMin ?? 3;
+        const clusterMax = groupCfg.clusterMax ?? 6;
         const totalWeight = variants.reduce((s, v) => s + (v.weight || 0), 0);
 
         const w = scene.sys.game.config.width;
         const h = scene.sys.game.config.height;
-        const minX = 100,
-            maxX = w - 100,
-            minY = 100,
-            maxY = h - 100;
+        const minX = 0,
+            maxX = w,
+            minY = 0,
+            maxY = h;
 
         const tooClose = (x, y, w, h) => {
             const children = scene.resources.getChildren();
@@ -416,7 +416,9 @@ export default function createResourceSystem(scene) {
             createResourceAt(id, def, x, y);
             let spawned = 1;
 
-            const clusterCount = Phaser.Math.Between(1, clusterMax);
+            const clusterCount = Phaser.Math.Between(clusterMin, clusterMax);
+            const radius =
+                groupCfg.clusterRadius ?? Math.max(width, height) * 1.1;
             for (
                 let i = 1;
                 i < clusterCount && scene.resources.countActive(true) < maxActive;
@@ -426,10 +428,9 @@ export default function createResourceSystem(scene) {
                     y2,
                     t2 = 10;
                 do {
-                    x2 =
-                        x + Phaser.Math.Between(-clusterRadius, clusterRadius);
-                    y2 =
-                        y + Phaser.Math.Between(-clusterRadius, clusterRadius);
+                    const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
+                    x2 = x + Math.cos(ang) * radius;
+                    y2 = y + Math.sin(ang) * radius;
                     t2--;
                 } while (t2 > 0 && tooClose(x2, y2, width, height));
                 if (t2 <= 0) continue;
