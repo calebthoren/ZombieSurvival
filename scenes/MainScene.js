@@ -206,6 +206,7 @@ export default class MainScene extends Phaser.Scene {
         });
         this.meleeHits = this.physics.add.group();
         this.resources = this.physics.add.group();
+        this.droppedItems = this.add.group();
 
         // Spawn resources from WORLD_GEN (all resource groups)
         this.spawnAllResources();
@@ -345,6 +346,65 @@ export default class MainScene extends Phaser.Scene {
         inv.addItem(id, qty);
         const after = count(inv.grid) + count(inv.hotbar);
         return after - before;
+    }
+
+    dropItemStack(id, count = 1) {
+        if (!id || count <= 0) return null;
+        const item = this.add
+            .image(this.player.x, this.player.y, id)
+            .setDepth(5)
+            .setScale(0.5)
+            .setInteractive();
+
+        const shadow = this.add
+            .ellipse(
+                item.x,
+                item.y + item.displayHeight * 0.5,
+                item.displayWidth * 0.8,
+                item.displayHeight * 0.3,
+                0x000000,
+                0.3,
+            )
+            .setDepth(item.depth - 1);
+
+        item.setData('stack', { id, count });
+        const timer = this.time.delayedCall(
+            WORLD_GEN.dayNight.dayMs,
+            () => {
+                if (item.active) item.destroy();
+            },
+        );
+
+        item.once('destroy', () => {
+            timer.remove(false);
+            if (shadow && shadow.destroy) shadow.destroy();
+        });
+
+        item.on('pointerdown', (pointer) => {
+            if (!pointer.rightButtonDown()) return;
+            const pickupRange = 40;
+            const d2 = Phaser.Math.Distance.Squared(
+                this.player.x,
+                this.player.y,
+                item.x,
+                item.y,
+            );
+            if (d2 > pickupRange * pickupRange) return;
+            const stack = item.getData('stack');
+            const added = this.addItemToInventory(stack.id, stack.count);
+            if (added > 0) {
+                if (added >= stack.count) {
+                    item.destroy();
+                } else {
+                    stack.count -= added;
+                    item.setData('stack', stack);
+                }
+            }
+        });
+
+        item.setData('shadow', shadow);
+        this.droppedItems.add(item);
+        return item;
     }
 
     // ==========================
