@@ -355,7 +355,7 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 20,
+        height: 10,
         offsetX: 0,
         offsetY: -12,
         useScale: true,
@@ -391,7 +391,7 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 20,
+        height: 10,
         offsetX: 0,
         offsetY: -12,
         useScale: true,
@@ -427,7 +427,7 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 20,
+        height: 10,
         offsetX: 0,
         offsetY: -12,
         useScale: true,
@@ -463,7 +463,7 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 20,
+        height: 10,
         offsetX: 0,
         offsetY: -12,
         useScale: true,
@@ -499,7 +499,7 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 20,
+        height: 10,
         offsetX: 0,
         offsetY: -12,
         useScale: true,
@@ -535,7 +535,7 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 20,
+        height: 10,
         offsetX: 0,
         offsetY: -12,
         useScale: true,
