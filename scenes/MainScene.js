@@ -457,9 +457,9 @@ export default class MainScene extends Phaser.Scene {
         }
         const pointer = this.input.activePointer;
         const hits = this.input.manager.hitTest(
-            pointer.x,
-            pointer.y,
+            pointer,
             this.droppedItems.getChildren(),
+            this.cameras.main,
         );
         for (let i = 0; i < hits.length; i++) {
             const item = hits[i];
