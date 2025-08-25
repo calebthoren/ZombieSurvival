@@ -230,13 +230,13 @@ export default function createCombatSystem(scene) {
         bullet.setSize(8, 8);
         bullet.setData('damage', Math.max(0, Math.round(shotDmg)));
         bullet.setData('knockback', Math.max(0, shotKb));
-        const v = scene.physics.velocityFromRotation(angle, speed);
+        const scale = DevTools.cheats.timeScale || 1;
+        const v = scene.physics.velocityFromRotation(angle, speed * scale);
         bullet.setVelocity(v.x, v.y);
         bullet.setRotation(angle);
-        const scale = DevTools.cheats.timeScale || 1;
         const lifetimeMs = Math.max(
             1,
-            Math.floor((travel / Math.max(1, speed)) * 1000 * scale),
+            Math.floor((travel / Math.max(1, speed)) * 1000 / scale),
         );
         scene.time.delayedCall(lifetimeMs, () => {
             if (bullet.active && bullet.destroy) bullet.destroy();
