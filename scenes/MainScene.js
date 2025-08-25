@@ -78,6 +78,9 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('tree2A', 'assets/resources/trees/tree2A.png');
         this.load.image('tree2B', 'assets/resources/trees/tree2B.png');
         this.load.image('tree2C', 'assets/resources/trees/tree2C.png');
+        this.load.image('tree10A', 'assets/resources/trees/tree10A.png');
+        this.load.image('tree10B', 'assets/resources/trees/tree10B.png');
+        this.load.image('tree10C', 'assets/resources/trees/tree10C.png');
         // bushes
         this.load.image('bush1A', 'assets/resources/bushes/bush1A.png');
         this.load.image('bush1B', 'assets/resources/bushes/bush1B.png');
