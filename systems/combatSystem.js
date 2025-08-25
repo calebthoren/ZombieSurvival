@@ -264,11 +264,13 @@ export default function createCombatSystem(scene) {
             lowStamina && typeof st.lowCooldownMultiplier === 'number'
                 ? Math.floor(baseCd * st.lowCooldownMultiplier)
                 : baseCd;
-        if (!DevTools.cheats.noCooldown && cdMs > 0) {
-            scene._nextRangedReadyTime = scene.time.now + cdMs;
+        const applied = scale <= 0 ? 0 : 1 / scale;
+        const adjCd = Math.floor(cdMs * applied);
+        if (!DevTools.cheats.noCooldown && adjCd > 0) {
+            scene._nextRangedReadyTime = scene.time.now + adjCd;
             scene.uiScene?.events?.emit('weapon:cooldownStart', {
                 itemId: equipped.id,
-                durationMs: cdMs,
+                durationMs: adjCd,
             });
         }
         scene.uiScene?.events?.emit('weapon:chargeEnd');
@@ -310,8 +312,10 @@ export default function createCombatSystem(scene) {
         }
         const cooldownMult =
             lowStamina && st ? (st.cooldownMultiplier ?? 6) : 1;
+        const scale = DevTools.cheats.timeScale || 1;
+        const applied = scale <= 0 ? 0 : 1 / scale;
         scene._nextSwingCooldownMs = Math.floor(
-            baseCooldownMs * cooldownMult,
+            baseCooldownMs * cooldownMult * applied,
         );
         const canCharge = wpn?.canCharge === true;
         let charge = canCharge

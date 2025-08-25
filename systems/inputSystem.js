@@ -27,7 +27,9 @@ export default function createInputSystem(scene) {
             if (wpn.canCharge === true) {
                 scene.isCharging = true;
                 scene.chargeStart = now;
-                scene.chargeMaxMs = Math.max(1, wpn?.chargeMaxMs ?? 1500);
+                const scale = DevTools.cheats.timeScale || 1;
+                const applied = scale <= 0 ? 0 : 1 / scale;
+                scene.chargeMaxMs = Math.max(1, Math.floor((wpn?.chargeMaxMs ?? 1500) * applied));
                 scene._chargingItemId = equipped.id;
                 scene.uiScene?.events?.emit('weapon:charge', 0);
                 scene._createEquippedItemGhost?.(equipped.id);
@@ -56,7 +58,9 @@ export default function createInputSystem(scene) {
 
             scene.isCharging = true;
             scene.chargeStart = now;
-            scene.chargeMaxMs = Math.max(1, wpn?.chargeMaxMs ?? 1500);
+            const scale = DevTools.cheats.timeScale || 1;
+            const applied = scale <= 0 ? 0 : 1 / scale;
+            scene.chargeMaxMs = Math.max(1, Math.floor((wpn?.chargeMaxMs ?? 1500) * applied));
             scene._chargingItemId = equipped.id;
             scene.uiScene?.events?.emit('weapon:charge', 0);
             scene._createEquippedItemGhost?.(equipped.id);
