@@ -13,6 +13,10 @@ export default function createDayNightSystem(scene) {
             scene.nightWaveTimer.remove(false);
             scene.nightWaveTimer = null;
         }
+        if (scene.spawnZombieTimer) {
+            scene.spawnZombieTimer.remove(false);
+            scene.spawnZombieTimer = null;
+        }
         scene.waveNumber = 0;
         scheduleDaySpawn();
         updateTimeUi();
@@ -35,6 +39,10 @@ export default function createDayNightSystem(scene) {
     function scheduleDaySpawn() {
         const dayCfg = WORLD_GEN.spawns.zombie.day;
         const delay = Phaser.Math.Between(dayCfg.minDelayMs, dayCfg.maxDelayMs);
+        if (scene.spawnZombieTimer) {
+            scene.spawnZombieTimer.remove(false);
+            scene.spawnZombieTimer = null;
+        }
         scene.spawnZombieTimer = scene.time.addEvent({
             delay,
             loop: false,
