@@ -38,16 +38,16 @@ export const WORLD_GEN = {
           clusterMax: 3,
           respawnDelayMs: { min: 5000, max: 7000 },
           variants: [
-            { id: RESOURCE_IDS.ROCK1A, weight: 60 }, // collectible, non-blocking
+            { id: RESOURCE_IDS.ROCK1A, weight: 40 }, // collectible, non-blocking
             { id: RESOURCE_IDS.ROCK1B, weight: 20 }, // blocking
             { id: RESOURCE_IDS.ROCK1C, weight: 10 }, // blocking
             { id: RESOURCE_IDS.ROCK1D, weight: 6 },  // blocking
             { id: RESOURCE_IDS.ROCK1E, weight: 3 },  // blocking
-            { id: RESOURCE_IDS.ROCK2A, weight: 60 }, // collectible, non-blocking
+            { id: RESOURCE_IDS.ROCK2A, weight: 40 }, // collectible, non-blocking
             { id: RESOURCE_IDS.ROCK2C, weight: 10 }, // blocking
             { id: RESOURCE_IDS.ROCK2D, weight: 6 },  // blocking
             { id: RESOURCE_IDS.ROCK2E, weight: 3 },  // blocking
-            { id: RESOURCE_IDS.ROCK5A, weight: 60 }, // collectible, non-blocking
+            { id: RESOURCE_IDS.ROCK5A, weight: 40 }, // collectible, non-blocking
             { id: RESOURCE_IDS.ROCK5B, weight: 20 }, // blocking
             { id: RESOURCE_IDS.ROCK5C, weight: 10 }, // blocking
             { id: RESOURCE_IDS.ROCK5D, weight: 6 },  // blocking
@@ -56,7 +56,7 @@ export const WORLD_GEN = {
         },
         // Weighted tree variants
         trees: {
-          maxActive: 13,
+          maxActive: 10,
           minSpacing: 100,
           clusterMax: 3,
           variants: [
@@ -70,7 +70,7 @@ export const WORLD_GEN = {
         },
         // Weighted bush variants
         bushes: {
-          maxActive: 20,
+          maxActive: 15,
           minSpacing: 50,
           clusterMax: 3,
           variants: [
