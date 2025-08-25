@@ -264,6 +264,7 @@ export default class MainScene extends Phaser.Scene {
                 if (this._nextRangedReadyTime) this._nextRangedReadyTime += diff;
                 if (this._lastSwingEndTime) this._lastSwingEndTime += diff;
                 if (this.isCharging) this.chargeStart += diff;
+                if (this._lastStaminaSpendTime) this._lastStaminaSpendTime += diff;
             }
         });
 
