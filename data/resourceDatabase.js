@@ -15,11 +15,11 @@ export const RESOURCE_IDS = {
   ROCK2C: 'rock2C',
   ROCK2D: 'rock2D',
   ROCK2E: 'rock2E',
-  ROCK4A: 'rock4A',
-  ROCK4B: 'rock4B',
-  ROCK4C: 'rock4C',
-  ROCK4D: 'rock4D',
-  ROCK4E: 'rock4E',
+  ROCK5A: 'rock5A',
+  ROCK5B: 'rock5B',
+  ROCK5C: 'rock5C',
+  ROCK5D: 'rock5D',
+  ROCK5E: 'rock5E',
   TREE1A: 'tree1A',
   TREE1B: 'tree1B',
   TREE1C: 'tree1C',
@@ -48,7 +48,7 @@ export const RESOURCE_DB = {
   //-----
   [RESOURCE_IDS.ROCK1A]: {
     id: RESOURCE_IDS.ROCK1A,
-    name: 'Small Grassy Rock',
+    name: 'Small Rock',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -65,7 +65,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.ROCK1B]: {
     id: RESOURCE_IDS.ROCK1B,
-    name: 'Medium Grassy Rock',
+    name: 'Medium Rock',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -86,7 +86,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.ROCK1C]: {
     id: RESOURCE_IDS.ROCK1C,
-    name: 'Large Grassy Rock',
+    name: 'Large Rock',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -106,7 +106,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.ROCK1D]: {
     id: RESOURCE_IDS.ROCK1D,
-    name: 'Huge Grassy Rock',
+    name: 'Huge Rock',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -126,7 +126,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.ROCK1E]: {
     id: RESOURCE_IDS.ROCK1E,
-    name: 'Giant Grassy Rock',
+    name: 'Giant Rock',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -242,14 +242,14 @@ export const RESOURCE_DB = {
     meta: { rarity: 'legendary' },
   },
 
-  [RESOURCE_IDS.ROCK4A]: {
-    id: RESOURCE_IDS.ROCK4A,
-    name: 'Small Grassy Rock',
+  [RESOURCE_IDS.ROCK5A]: {
+    id: RESOURCE_IDS.ROCK5A,
+    name: 'Small Marble Rock',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
-    icon:  { textureKey: 'rock4A', scale: 1.0, ox: 0, oy: 0 },
-    world: { textureKey: 'rock4A', scale: .65 },
+    icon:  { textureKey: 'rock5A', scale: 1.0, ox: 0, oy: 0 },
+    world: { textureKey: 'rock5A', scale: .65 },
     collectible: true,          // custom flag for pickup
     blocking: false,            // walk-through
     givesItem: ITEM_IDS.SLINGSHOT_ROCK,
@@ -259,15 +259,15 @@ export const RESOURCE_DB = {
     meta: { rarity: 'common' },
   },
 
-  [RESOURCE_IDS.ROCK4B]: {
-    id: RESOURCE_IDS.ROCK4B,
-    name: 'Medium Grassy Rock',
+  [RESOURCE_IDS.ROCK5B]: {
+    id: RESOURCE_IDS.ROCK5B,
+    name: 'Medium Marble Rock',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
-    icon:  { textureKey: 'rock4B', scale: 1.0, ox: 0, oy: 0 },
+    icon:  { textureKey: 'rock5B', scale: 1.0, ox: 0, oy: 0 },
     world: {
-      textureKey: 'rock4B',
+      textureKey: 'rock5B',
       scale: 1.0,
       origin: { x: 0.5, y: 1 },
       body: { kind: 'circle', radius: 8, offsetX: 0, offsetY: -11, useScale: true, anchor: 'bottomCenter' }
@@ -280,15 +280,15 @@ export const RESOURCE_DB = {
     meta: { rarity: 'uncommon' },
   },
 
-  [RESOURCE_IDS.ROCK4C]: {
-    id: RESOURCE_IDS.ROCK4C,
-    name: 'Large Grassy Rock',
+  [RESOURCE_IDS.ROCK5C]: {
+    id: RESOURCE_IDS.ROCK5C,
+    name: 'Large Marble Rock',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
-    icon:  { textureKey: 'rock4C', scale: 1.0, ox: 0, oy: 0 },
+    icon:  { textureKey: 'rock5C', scale: 1.0, ox: 0, oy: 0 },
     world: {
-      textureKey: 'rock4C',
+      textureKey: 'rock5C',
       scale: 1.0,
       origin: { x: 0.5, y: 1 },
       body: { kind: 'circle', radius: 12, offsetX: 0, offsetY: -11, useScale: true, anchor: 'bottomCenter' }
@@ -300,15 +300,15 @@ export const RESOURCE_DB = {
     meta: { rarity: 'rare' },
   },
 
-  [RESOURCE_IDS.ROCK4D]: {
-    id: RESOURCE_IDS.ROCK4D,
-    name: 'Huge Grassy Rock',
+  [RESOURCE_IDS.ROCK5D]: {
+    id: RESOURCE_IDS.ROCK5D,
+    name: 'Huge Marble Rock',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
-    icon:  { textureKey: 'rock4D', scale: 1.0, ox: 0, oy: 0 },
+    icon:  { textureKey: 'rock5D', scale: 1.0, ox: 0, oy: 0 },
     world: {
-      textureKey: 'rock4D',
+      textureKey: 'rock5D',
       scale: 1.0,
       origin: { x: 0.5, y: 1 },
       body: { kind: 'circle', radius: 18, offsetX: 0, offsetY: -12, useScale: true, anchor: 'bottomCenter' }
@@ -320,15 +320,15 @@ export const RESOURCE_DB = {
     meta: { rarity: 'very_rare' },
   },
 
-  [RESOURCE_IDS.ROCK4E]: {
-    id: RESOURCE_IDS.ROCK4E,
-    name: 'Giant Grassy Rock',
+  [RESOURCE_IDS.ROCK5E]: {
+    id: RESOURCE_IDS.ROCK5E,
+    name: 'Giant Marble Rock',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
-    icon:  { textureKey: 'rock4E', scale: 1.0, ox: 0, oy: 0 },
+    icon:  { textureKey: 'rock5E', scale: 1.0, ox: 0, oy: 0 },
     world: {
-      textureKey: 'rock4E',
+      textureKey: 'rock5E',
       scale: 1.0,
       origin: { x: 0.5, y: 1 },
       body: { kind: 'circle', radius: 24, offsetX: 0, offsetY: -13, useScale: true, anchor: 'bottomCenter' }

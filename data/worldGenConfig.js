@@ -48,11 +48,11 @@ export const WORLD_GEN = {
             { id: RESOURCE_IDS.ROCK2C, weight: 12 }, // blocking
             { id: RESOURCE_IDS.ROCK2D, weight: 6 },  // blocking
             { id: RESOURCE_IDS.ROCK2E, weight: 2 },  // blocking
-            { id: RESOURCE_IDS.ROCK4A, weight: 60 }, // collectible, non-blocking
-            { id: RESOURCE_IDS.ROCK4B, weight: 20 }, // blocking
-            { id: RESOURCE_IDS.ROCK4C, weight: 12 }, // blocking
-            { id: RESOURCE_IDS.ROCK4D, weight: 6 },  // blocking
-            { id: RESOURCE_IDS.ROCK4E, weight: 2 },  // blocking
+            { id: RESOURCE_IDS.ROCK5A, weight: 60 }, // collectible, non-blocking
+            { id: RESOURCE_IDS.ROCK5B, weight: 20 }, // blocking
+            { id: RESOURCE_IDS.ROCK5C, weight: 12 }, // blocking
+            { id: RESOURCE_IDS.ROCK5D, weight: 6 },  // blocking
+            { id: RESOURCE_IDS.ROCK5E, weight: 2 },  // blocking
           ],
         },
         // Weighted tree variants
