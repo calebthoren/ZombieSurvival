@@ -33,7 +33,7 @@ export const WORLD_GEN = {
     resources: {
         // Weighted rock variants A–E (A most common → E rarest)
         rocks: {
-          maxActive: 10,
+          maxActive: 13,
           minSpacing: 100,  // pixels between rock centers
           clusterMin: 3,
           clusterMax: 6,
@@ -57,7 +57,7 @@ export const WORLD_GEN = {
         },
         // Weighted tree variants
         trees: {
-          maxActive: 10,
+          maxActive: 13,
           minSpacing: 100,
           clusterMin: 3,
           clusterMax: 6,
@@ -72,7 +72,7 @@ export const WORLD_GEN = {
         },
         // Weighted bush variants
         bushes: {
-          maxActive: 15,
+          maxActive: 18,
           minSpacing: 50,
           clusterMin: 3,
           clusterMax: 6,
