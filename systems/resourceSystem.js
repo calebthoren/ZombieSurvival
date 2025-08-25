@@ -213,10 +213,11 @@ export default function createResourceSystem(scene) {
                         trunk.body.setImmovable(true);
                     } else {
                         if (trunk.getData('bush')) {
-                            const r = Math.min(
-                                trunk.displayWidth,
-                                trunk.displayHeight,
-                            ) * 0.5;
+                            const r =
+                                Math.min(
+                                    trunk.displayWidth,
+                                    trunk.displayHeight,
+                                ) * 0.45; // shrink hitbox by 10%
                             const ox = trunk.displayWidth * 0.5 - r;
                             const oy = trunk.displayHeight * 0.5 - r;
                             trunk.body.setCircle(r, ox, oy);
