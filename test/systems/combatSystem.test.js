@@ -29,7 +29,8 @@ function createStubScene(callStore) {
         setSize() { return this; },
         setData(key, value) { this.data[key] = value; return this; },
         getData(key) { return this.data[key]; },
-        setVelocity() { return this; },
+        setVelocity(x, y) { this.vx = x; this.vy = y; return this; },
+
         setRotation() { return this; },
         destroy() { this.destroyed = true; },
     };
@@ -70,7 +71,8 @@ function createStubScene(callStore) {
     return scene;
 }
 
-test('fireRangedWeapon lifetime respects time scale', () => {
+
+test('fireRangedWeapon scales velocity and lifetime with time scale', () => {
     const run = (scale) => {
         DevTools.cheats.timeScale = scale;
         const calls = [];
@@ -79,12 +81,17 @@ test('fireRangedWeapon lifetime respects time scale', () => {
         const pointer = { worldX: 100, worldY: 0 };
         const wpn = { projectileSpeed: 100, minRange: 100, maxRange: 100 };
         combat.fireRangedWeapon(pointer, wpn, 1);
-        return calls[0];
+        const lifetime = calls[0];
+        const velMag = Math.hypot(scene.bullet.vx, scene.bullet.vy);
+        return { lifetime, velMag };
     };
 
-    const slowLifetime = run(0.5);
-    assert.equal(slowLifetime, 2000);
+    const slow = run(0.5);
+    assert.equal(slow.lifetime, 2000);
+    assert.equal(Math.round(slow.velMag), 50);
 
-    const fastLifetime = run(2);
-    assert.equal(fastLifetime, 500);
+    const fast = run(2);
+    assert.equal(fast.lifetime, 500);
+    assert.equal(Math.round(fast.velMag), 200);
+
 });
