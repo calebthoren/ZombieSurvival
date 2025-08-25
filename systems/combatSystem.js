@@ -236,7 +236,7 @@ export default function createCombatSystem(scene) {
         const scale = DevTools.cheats.timeScale || 1;
         const lifetimeMs = Math.max(
             1,
-            Math.floor((travel / Math.max(1, speed)) * 1000 * scale),
+            Math.floor((travel / Math.max(1, speed)) * 1000 / scale),
         );
         scene.time.delayedCall(lifetimeMs, () => {
             if (bullet.active && bullet.destroy) bullet.destroy();
