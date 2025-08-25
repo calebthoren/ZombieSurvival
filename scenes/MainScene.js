@@ -729,8 +729,9 @@ export default class MainScene extends Phaser.Scene {
         if (!wpnDef || wpnDef.canCharge !== true) return;
 
         // Raw 0..1 charge based on time held
+        const scale = DevTools.cheats.timeScale || 1;
         const heldMs = Phaser.Math.Clamp(
-            DevTools.now(this) - this.chargeStart,
+            (DevTools.now(this) - this.chargeStart) * scale,
             0,
             this.chargeMaxMs,
         );
