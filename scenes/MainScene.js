@@ -266,6 +266,7 @@ export default class MainScene extends Phaser.Scene {
                 if (this.isCharging) this.chargeStart += diff;
                 if (this._lastStaminaSpendTime) this._lastStaminaSpendTime += diff;
             }
+            this._pauseStart = 0;
         });
 
         // Night overlay
