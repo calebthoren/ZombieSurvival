@@ -59,7 +59,7 @@ export const RESOURCE_DB = {
     world: { textureKey: 'rock1A', scale: .65 },
     collectible: true,          // custom flag for pickup
     blocking: false,            // walk-through
-    givesItem: ITEM_IDS.SLINGSHOT_ROCK,
+    givesItem: ITEM_IDS.ROCK1A,
     giveAmount: 1,
     depth: 1,
     tags: ['resource', 'rock'],
@@ -157,7 +157,7 @@ export const RESOURCE_DB = {
     world: { textureKey: 'rock2A', scale: .65 },
     collectible: true,          // custom flag for pickup
     blocking: false,            // walk-through
-    givesItem: ITEM_IDS.SLINGSHOT_ROCK,
+    givesItem: ITEM_IDS.ROCK2A,
     giveAmount: 1,
     depth: 1,
     tags: ['resource', 'rock'],
@@ -255,7 +255,7 @@ export const RESOURCE_DB = {
     world: { textureKey: 'rock5A', scale: .65 },
     collectible: true,          // custom flag for pickup
     blocking: false,            // walk-through
-    givesItem: ITEM_IDS.SLINGSHOT_ROCK,
+    givesItem: ITEM_IDS.ROCK5A,
     giveAmount: 1,
     depth: 1,
     tags: ['resource', 'rock'],
