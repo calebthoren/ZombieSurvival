@@ -374,10 +374,7 @@ export default class UIScene extends Phaser.Scene {
             }
         });
 
-        // Puting items in inventory
-        this.inventory.addItem('slingshot_rock', 7);
-        this.inventory.hotbar[0] = { id: 'slingshot', count: 1 };
-        this.inventory.hotbar[1] = { id: 'crude_bat', count: 1 };
+        // Initialize inventory state
         this.events.emit('inv:changed');
 
         // React to model changes
