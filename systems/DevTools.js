@@ -354,7 +354,7 @@ const DevTools = {
         }
     },
 
-    // Try to add items to inventory; drop leftovers at player position
+    // Try to add items to inventory; ignore leftovers if inventory is full
     spawnItemsSmart(scene, id, qty = 1) {
         qty = Math.max(1, qty | 0);
         const game = scene?.game;
@@ -369,13 +369,7 @@ const DevTools = {
         let added = qty;
         if (reg) { added = reg.get('inv:addedCount') | 0; reg.set('inv:addedCount', prev + added); }
 
-        const leftover = qty - added;
-        if (leftover > 0) {
-            const pos = { x: scene.player?.x || 0, y: scene.player?.y || 0 };
-            for (let i = 0; i < leftover; i++) {
-                game.events.emit('dev:drop-item', { id, pos });
-            }
-        }
+        // Ignore leftovers when inventory + hotbar are full
     },
 
 };

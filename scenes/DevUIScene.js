@@ -212,6 +212,7 @@ export default class DevUIScene extends Phaser.Scene {
         const typeInputX = typeLabelX + typeLbl.displayWidth + 8;
         const typeInputW = 180;
 
+        this._enemyTypeInputX = typeInputX;
         this._makeTypeaheadBox(typeInputX, y + 9, typeInputW, 26);
 
         // Count controls
@@ -236,7 +237,7 @@ export default class DevUIScene extends Phaser.Scene {
 
         const typeLabelX = 135;
         const typeLbl = this.add.text(typeLabelX, y + 12, 'Item:', UI.font).setDepth(2);
-        const typeInputX = typeLabelX + typeLbl.displayWidth + 8;
+        const typeInputX = (this._enemyTypeInputX ?? (typeLabelX + typeLbl.displayWidth + 8));
         const typeInputW = 180;
 
         this._makeItemTypeaheadBox(typeInputX, y + 9, typeInputW, 26);
@@ -1013,6 +1014,10 @@ export default class DevUIScene extends Phaser.Scene {
             this._item.lastConfirmedKey = chosen.key;
             this._item.lastConfirmedName = chosen.name;
             this._item.maxStack = chosen.maxStack || 1;
+            if ((parseInt(this._item.count, 10) || 1) > this._item.maxStack) {
+                this._item.count = String(this._item.maxStack);
+                this._itemCountText?.set?.(this._item.count);
+            }
             this._itemTypeBox.set(chosen.name);
         } else {
             this._itemTypeBox.set(this._item.lastConfirmedName);

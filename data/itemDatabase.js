@@ -154,11 +154,11 @@ export const ITEM_DB = {
   // Ammo
   //-------------------------------
 
-  //slingshot rock
-  //--------------
+  //slingshot ammo
+  //-------------
   [ITEM_IDS.SLINGSHOT_ROCK]: {
     id: ITEM_IDS.SLINGSHOT_ROCK,
-    name: 'Rock',
+    name: 'Slingshot Ammo',
     type: ITEM_TYPES.AMMO,
     stackable: true,
     maxStack: 99,
