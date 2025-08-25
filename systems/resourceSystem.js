@@ -117,6 +117,17 @@ export default function createResourceSystem(scene) {
             const blocking = !!def.blocking;
             obj.setData('blocking', blocking);
 
+            if (blocking && def.tags?.includes('rock')) {
+                const top = scene.add
+                    .image(x, y, def.world?.textureKey || id)
+                    .setOrigin(originX, originY)
+                    .setScale(scale)
+                    .setDepth((scene.player?.depth ?? 900) + 2)
+                    .setCrop(0, 0, obj.width, obj.height * 0.5);
+                obj.setData('topSprite', top);
+                obj.once('destroy', () => top.destroy());
+            }
+
             if (def.tags?.includes('bush')) obj.setData('bush', true);
 
             const bodyCfg = def.world?.body;
