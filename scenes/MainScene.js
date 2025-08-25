@@ -40,6 +40,11 @@ export default class MainScene extends Phaser.Scene {
 
         // Equipped-item ghost (generic)
         this.equippedItemGhost = null;
+
+        // Auto-pickup state
+        this._autoPickupTimer = null;
+        this._autoPickupEvent = null;
+        this._autoPickupActive = false;
     }
 
     preload() {
@@ -141,6 +146,9 @@ export default class MainScene extends Phaser.Scene {
         this.shiftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
         this.input.on('pointerdown', this.onPointerDown, this);
         this.input.on('pointerup', this.onPointerUp, this);
+
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this._cancelAutoPickup());
+        this.events.once(Phaser.Scenes.Events.DESTROY, () => this._cancelAutoPickup());
 
         // ESC → open Pause overlay
         this.input.keyboard.on('keydown-ESC', this._onEsc, this);
@@ -382,29 +390,81 @@ export default class MainScene extends Phaser.Scene {
 
         item.on('pointerdown', (pointer) => {
             if (!pointer.rightButtonDown()) return;
-            const pickupRange = 40;
-            const d2 = Phaser.Math.Distance.Squared(
-                this.player.x,
-                this.player.y,
-                item.x,
-                item.y,
-            );
-            if (d2 > pickupRange * pickupRange) return;
-            const stack = item.getData('stack');
-            const added = this.addItemToInventory(stack.id, stack.count);
-            if (added > 0) {
-                if (added >= stack.count) {
-                    item.destroy();
-                } else {
-                    stack.count -= added;
-                    item.setData('stack', stack);
-                }
-            }
+            if (this.isCharging) return;
+            this._pickupItem(item);
         });
 
         item.setData('shadow', shadow);
         this.droppedItems.add(item);
         return item;
+    }
+
+    _pickupItem(item) {
+        if (!item) return false;
+        const pickupRange = 40;
+        const d2 = Phaser.Math.Distance.Squared(
+            this.player.x,
+            this.player.y,
+            item.x,
+            item.y,
+        );
+        if (d2 > pickupRange * pickupRange) return false;
+        const stack = item.getData('stack');
+        if (!stack) return false;
+        const added = this.addItemToInventory(stack.id, stack.count);
+        if (added > 0) {
+            if (added >= stack.count) {
+                item.destroy();
+            } else {
+                stack.count -= added;
+                item.setData('stack', stack);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    _scheduleAutoPickup() {
+        this._cancelAutoPickup();
+        this._autoPickupTimer = this.time.delayedCall(2000, () => {
+            if (this.isCharging || !this.input.activePointer.isDown) return;
+            this._autoPickupActive = true;
+            this._autoPickupEvent = this.time.addEvent({
+                delay: 200,
+                loop: true,
+                callback: () => this._attemptAutoPickup(),
+            });
+        });
+    }
+
+    _cancelAutoPickup() {
+        if (this._autoPickupTimer) {
+            this._autoPickupTimer.remove(false);
+            this._autoPickupTimer = null;
+        }
+        if (this._autoPickupEvent) {
+            this._autoPickupEvent.remove(false);
+            this._autoPickupEvent = null;
+        }
+        this._autoPickupActive = false;
+    }
+
+    _attemptAutoPickup() {
+        if (!this._autoPickupActive) return;
+        if (this.isCharging || !this.input.activePointer.isDown) {
+            this._cancelAutoPickup();
+            return;
+        }
+        const pointer = this.input.activePointer;
+        const hits = this.input.manager.hitTest(
+            pointer.x,
+            pointer.y,
+            this.droppedItems.getChildren(),
+        );
+        for (let i = 0; i < hits.length; i++) {
+            const item = hits[i];
+            if (this._pickupItem(item)) break;
+        }
     }
 
     // ==========================
@@ -611,10 +671,12 @@ export default class MainScene extends Phaser.Scene {
     // INPUT & COMBAT
     // ==========================
     onPointerDown(pointer) {
+        if (pointer.button === 0) this._scheduleAutoPickup();
         return this.inputSystem.onPointerDown(pointer);
     }
 
     onPointerUp(pointer) {
+        if (pointer.button === 0) this._cancelAutoPickup();
         return this.inputSystem.onPointerUp(pointer);
     }
 
