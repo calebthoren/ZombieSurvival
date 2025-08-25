@@ -75,8 +75,9 @@ export default function createInputSystem(scene) {
             return;
         }
 
+        const scale = DevTools.cheats.timeScale || 1;
         const heldMs = Phaser.Math.Clamp(
-            DevTools.now(scene) - scene.chargeStart,
+            (DevTools.now(scene) - scene.chargeStart) * scale,
             0,
             scene.chargeMaxMs,
         );
