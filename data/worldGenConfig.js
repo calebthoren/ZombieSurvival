@@ -68,9 +68,6 @@ export const WORLD_GEN = {
             { id: RESOURCE_IDS.TREE2A, weight: 10 },
             { id: RESOURCE_IDS.TREE2B, weight: 5 },
             { id: RESOURCE_IDS.TREE2C, weight: 3 },
-            { id: RESOURCE_IDS.TREE10A, weight: 17 },
-            { id: RESOURCE_IDS.TREE10B, weight: 7 },
-            { id: RESOURCE_IDS.TREE10C, weight: 1 },
           ],
         },
         // Weighted bush variants
