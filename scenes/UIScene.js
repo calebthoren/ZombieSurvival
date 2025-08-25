@@ -18,6 +18,8 @@ export default class UIScene extends Phaser.Scene {
         this._activeCooldowns = new Map(); // itemId -> { start: ms, end: ms }
         this._slotOverlays = [];           // [{kind:'bottom'|'hotbar'|'grid', area, index, itemId, rect}]
 
+        this._pauseStart = 0;
+
     }
 
     init(data) {
@@ -32,6 +34,27 @@ export default class UIScene extends Phaser.Scene {
         // -------------------------
         this.inventory = new InventoryModel(this.events);
         DevTools.applyTimeScale(this);
+
+        const main = this.scene.get('MainScene');
+        if (main) {
+            const onPause = () => { this._pauseStart = DevTools.now(this); };
+            const onResume = () => {
+                const now = DevTools.now(this);
+                const diff = now - (this._pauseStart || now);
+                if (diff > 0) {
+                    for (const cd of this._activeCooldowns.values()) {
+                        cd.start += diff;
+                        cd.end += diff;
+                    }
+                }
+            };
+            main.events.on(Phaser.Scenes.Events.PAUSE, onPause);
+            main.events.on(Phaser.Scenes.Events.RESUME, onResume);
+            this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+                main.events.off(Phaser.Scenes.Events.PAUSE, onPause);
+                main.events.off(Phaser.Scenes.Events.RESUME, onResume);
+            });
+        }
 
         // -------------------------
         // Basic HUD
@@ -112,9 +135,9 @@ export default class UIScene extends Phaser.Scene {
             ).setVisible(false).setDepth(10);
 
             const countText = this.add.text(
-                rect.x + this.slotSize - 16, rect.y + this.slotSize - 16, '',
+                rect.x + this.slotSize - 4, rect.y + this.slotSize - 4, '',
                 { fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace' }
-            ).setVisible(false).setDepth(11);
+            ).setOrigin(1, 1).setVisible(false).setDepth(11);
 
             // --- Charge bar (inside slot, above icon) ---
             const barW = Math.floor(this.slotSize * 0.8);
@@ -200,9 +223,9 @@ export default class UIScene extends Phaser.Scene {
                 rect.x + this.slotSize / 2, rect.y + this.slotSize / 2, ''
             ).setVisible(false).setDepth(10);
             const countText = this.add.text(
-                rect.x + this.slotSize - 16, rect.y + this.slotSize - 16, '',
+                rect.x + this.slotSize - 4, rect.y + this.slotSize - 4, '',
                 { fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace' }
-            ).setVisible(false).setDepth(11);
+            ).setOrigin(1, 1).setVisible(false).setDepth(11);
 
             this.inventoryPanel.add(icon);
             this.inventoryPanel.add(countText);
@@ -228,9 +251,9 @@ export default class UIScene extends Phaser.Scene {
                     rect.x + this.slotSize / 2, rect.y + this.slotSize / 2, ''
                 ).setVisible(false).setDepth(10);
                 const countText = this.add.text(
-                    rect.x + this.slotSize - 16, rect.y + this.slotSize - 16, '',
+                    rect.x + this.slotSize - 4, rect.y + this.slotSize - 4, '',
                     { fontSize: '12px', fill: '#ffffff', fontFamily: 'monospace' }
-                ).setVisible(false).setDepth(11);
+                ).setOrigin(1, 1).setVisible(false).setDepth(11);
 
                 this.inventoryPanel.add(icon);
                 this.inventoryPanel.add(countText);
@@ -562,13 +585,13 @@ export default class UIScene extends Phaser.Scene {
         if (!slot.icon.visible) slot.icon.setVisible(true);
 
         // Count label (ammo vs stack count)
-        let label = `${s.count}`;
         const def = ITEM_DB?.[s.id];
         const showWeaponAmmo = def?.showCountOnIcon === true && def?.weapon?.usesAmmo === true;
+        let amount = s.count;
         if (showWeaponAmmo) {
-            const { total } = this.inventory.totalOfActiveAmmo(s.id);
-            label = `${total}`;
+            amount = this.inventory.totalOfActiveAmmo(s.id).total;
         }
+        const label = amount > 99 ? '+99' : `${amount}`;
 
         if (slot.countText.text !== label) slot.countText.setText(label);
         if (!slot.countText.visible) slot.countText.setVisible(true);
@@ -597,9 +620,9 @@ export default class UIScene extends Phaser.Scene {
 
                 const def = ITEM_DB?.[s.id];
                 const show = def?.showCountOnIcon === true && def?.weapon?.usesAmmo === true;
-                const label = show
-                    ? `${this.inventory.totalOfActiveAmmo(s.id).total}`
-                    : `${s.count}`;
+                let amount = s.count;
+                if (show) amount = this.inventory.totalOfActiveAmmo(s.id).total;
+                const label = amount > 99 ? '+99' : `${amount}`;
 
                 if (vis.countText.text !== label) vis.countText.setText(label);
                 if (!vis.countText.visible) vis.countText.setVisible(true);
@@ -707,7 +730,7 @@ export default class UIScene extends Phaser.Scene {
         const existing = this._chargeGlowTweens[idx];
         if (p >= 1) {
             vis.chargeFill.setFillStyle(0xffff88);
-            if (!existing || !existing.isPlaying()) {
+            if (!existing) {
                 this._chargeGlowTweens[idx] = this.tweens.add({
                     targets: vis.chargeFill,
                     alpha: 0.5,
@@ -717,7 +740,7 @@ export default class UIScene extends Phaser.Scene {
                 });
             }
         } else {
-            if (existing && existing.isPlaying()) {
+            if (existing) {
                 existing.stop();
                 this._chargeGlowTweens[idx] = null;
             }

@@ -56,6 +56,16 @@ const DevTools = {
         };
     },
 
+    _getItemSpawnPrefs() { return this._itemSpawnPrefs || null; },
+    _setItemSpawnPrefs(p) {
+        if (!p) return;
+        this._itemSpawnPrefs = {
+            key:  p.key  || p.selectedKey || p.itemId,
+            name: p.name || p.selectedName,
+            count: (p.count == null ? '1' : String(p.count))
+        };
+    },
+
     // reset dev toggles to defaults (used on death)
     resetToDefaults(scene = null) {
         this.cheats.showHitboxes   = false;
@@ -111,13 +121,11 @@ const DevTools = {
         } catch {}
     },
 
-    // Get scaled time in ms honoring the dev time multiplier
+    // Get unscaled game time in ms (independent of scene timeScale)
     now(scene) {
-        const base = scene?.time?.now || 0;
-        const applied = scene?.time?.timeScale || 1;
-        const scale = this.cheats.timeScale || 1;
-        if (applied <= 0) return base;
-        return (base / applied) * scale;
+        const loop = scene?.sys?.game?.loop;
+        if (loop && typeof loop.time === 'number') return loop.time;
+        return scene?.time?.now || 0;
     },
 
     // Toggle entry point used by Dev UI

@@ -70,20 +70,25 @@ export default class DevUIScene extends Phaser.Scene {
         const firstItem = this._iIndex.sortedEntries.length
             ? this._iIndex.sortedEntries[0]
             : { key: '', name: '', lower: '', maxStack: 1 };
+        const savedItem = (DevTools._getItemSpawnPrefs && DevTools._getItemSpawnPrefs()) || null;
+        const startItemKey = savedItem?.key || firstItem.key;
+        const startItemName = savedItem?.name || firstItem.name;
+        const entry = this._iIndex.entries.find(e => e.key === startItemKey) || firstItem;
+        const startCount = savedItem?.count != null ? String(savedItem.count) : '1';
 
         this._item = {
-            selectedKey: firstItem.key,
-            selectedName: firstItem.name,
-            lastConfirmedKey: firstItem.key,
-            lastConfirmedName: firstItem.name,
-            maxStack: firstItem.maxStack || 1,
+            selectedKey: startItemKey,
+            selectedName: startItemName,
+            lastConfirmedKey: startItemKey,
+            lastConfirmedName: startItemName,
+            maxStack: entry.maxStack || 1,
 
-            query: firstItem.name,
+            query: startItemName,
             results: this._iIndex.sortedEntries,
             resStart: 0,
             resHL: 0,
 
-            count: '1',
+            count: startCount,
         };
 
         this._time = { scale: String(DevTools.cheats.timeScale || 1) };
@@ -401,17 +406,18 @@ export default class DevUIScene extends Phaser.Scene {
         // Row pool
         this._typeRows = [];
         for (let i = 0; i < MAX_DROPDOWN_ITEMS; i++) {
-            const rx = listX + 4;
             const ry = listYBelow + 4 + i * rowH;
-
-            const hlRect = this.add.rectangle(listX + 2, ry - 2, listW - 4, rowH, 0xffffff, 0.08).setOrigin(0, 0).setDepth(3).setVisible(false);
-            const pre   = this.add.text(rx, ry, '', UI.font).setDepth(4);
-            const mid   = this.add.text(rx, ry, '', { ...UI.font, fontStyle: 'bold' }).setDepth(4);
-            const post  = this.add.text(rx, ry, '', UI.font).setDepth(4);
-
-            const rowC  = this.add.container(0, 0, [hlRect, pre, mid, post]).setDepth(3);
+            const rowC = this.add.container(listX + 2, ry).setDepth(3);
+            const hlRect = this.add.rectangle(0, 0, listW - 4, rowH, 0xffffff, 0.08)
+                .setOrigin(0, 0)
+                .setDepth(3)
+                .setVisible(false);
+            const pre = this.add.text(2, 0, '', UI.font).setDepth(4);
+            const mid = this.add.text(2, 0, '', { ...UI.font, fontStyle: 'bold' }).setDepth(4);
+            const post = this.add.text(2, 0, '', UI.font).setDepth(4);
+            rowC.add([hlRect, pre, mid, post]);
             rowC.setSize(listW - 4, rowH);
-            rowC.setInteractive(new Phaser.Geom.Rectangle(listX + 2, ry - 2, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
+            rowC.setInteractive(new Phaser.Geom.Rectangle(0, 0, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
             rowC._hlRect = hlRect; rowC._pre = pre; rowC._mid = mid; rowC._post = post;
             rowC._index = i;
 
@@ -511,20 +517,18 @@ export default class DevUIScene extends Phaser.Scene {
 
         this._itemTypeRows = [];
         for (let i = 0; i < MAX_DROPDOWN_ITEMS; i++) {
-            const rx = listX + 4;
             const ry = listYBelow + 4 + i * rowH;
-
-            const hlRect = this.add.rectangle(listX + 2, ry - 2, listW - 4, rowH, 0xffffff, 0.08)
+            const rowC = this.add.container(listX + 2, ry).setDepth(3);
+            const hlRect = this.add.rectangle(0, 0, listW - 4, rowH, 0xffffff, 0.08)
                 .setOrigin(0, 0)
                 .setDepth(3)
                 .setVisible(false);
-            const pre  = this.add.text(rx, ry, '', UI.font).setDepth(4);
-            const mid  = this.add.text(rx, ry, '', { ...UI.font, fontStyle: 'bold' }).setDepth(4);
-            const post = this.add.text(rx, ry, '', UI.font).setDepth(4);
-
-            const rowC = this.add.container(0, 0, [hlRect, pre, mid, post]).setDepth(3);
+            const pre = this.add.text(2, 0, '', UI.font).setDepth(4);
+            const mid = this.add.text(2, 0, '', { ...UI.font, fontStyle: 'bold' }).setDepth(4);
+            const post = this.add.text(2, 0, '', UI.font).setDepth(4);
+            rowC.add([hlRect, pre, mid, post]);
             rowC.setSize(listW - 4, rowH);
-            rowC.setInteractive(new Phaser.Geom.Rectangle(listX + 2, ry - 2, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
+            rowC.setInteractive(new Phaser.Geom.Rectangle(0, 0, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
             rowC._hlRect = hlRect; rowC._pre = pre; rowC._mid = mid; rowC._post = post;
             rowC._index = i;
 
@@ -1019,6 +1023,11 @@ export default class DevUIScene extends Phaser.Scene {
                 this._itemCountText?.set?.(this._item.count);
             }
             this._itemTypeBox.set(chosen.name);
+            DevTools._setItemSpawnPrefs && DevTools._setItemSpawnPrefs({
+                key: this._item.selectedKey,
+                name: this._item.selectedName,
+                count: this._item.count
+            });
         } else {
             this._itemTypeBox.set(this._item.lastConfirmedName);
         }
@@ -1052,6 +1061,11 @@ export default class DevUIScene extends Phaser.Scene {
         let next = Phaser.Math.Clamp(val + delta, 1, max);
         this._item.count = String(next);
         if (this._itemCountText) this._itemCountText.set(this._item.count);
+        DevTools._setItemSpawnPrefs && DevTools._setItemSpawnPrefs({
+            key: this._item.selectedKey,
+            name: this._item.selectedName,
+            count: this._item.count
+        });
     }
 
     _spawnEnemies() {
@@ -1098,6 +1112,11 @@ export default class DevUIScene extends Phaser.Scene {
         if (!main) return;
 
         DevTools.spawnItemsSmart(main, itemKey, qty);
+        DevTools._setItemSpawnPrefs && DevTools._setItemSpawnPrefs({
+            key: itemKey,
+            name: this._item.selectedName,
+            count: this._item.count
+        });
     }
 
     // ---------- Time control logic ----------
