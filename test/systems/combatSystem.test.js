@@ -30,6 +30,7 @@ function createStubScene(callStore) {
         setData(key, value) { this.data[key] = value; return this; },
         getData(key) { return this.data[key]; },
         setVelocity(x, y) { this.vx = x; this.vy = y; return this; },
+
         setRotation() { return this; },
         destroy() { this.destroyed = true; },
     };
@@ -70,6 +71,7 @@ function createStubScene(callStore) {
     return scene;
 }
 
+
 test('fireRangedWeapon scales velocity and lifetime with time scale', () => {
     const run = (scale) => {
         DevTools.cheats.timeScale = scale;
@@ -91,4 +93,5 @@ test('fireRangedWeapon scales velocity and lifetime with time scale', () => {
     const fast = run(2);
     assert.equal(fast.lifetime, 500);
     assert.equal(Math.round(fast.velMag), 200);
+
 });
