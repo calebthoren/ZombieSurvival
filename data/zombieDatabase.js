@@ -7,7 +7,9 @@ const ZOMBIES = {
         name: 'Walker',
         textureKey: 'zombie',
         scale: 0.1,
-        depth: 2,
+        // Match player depth so zombies render under tree canopies when north
+        // of the trunk and over the trunk when south of it.
+        depth: 900,
 
         // Core stats
         health: 25,
