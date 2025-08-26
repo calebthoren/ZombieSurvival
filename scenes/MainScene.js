@@ -694,12 +694,12 @@ export default class MainScene extends Phaser.Scene {
     // INPUT & COMBAT
     // ==========================
     onPointerDown(pointer) {
-        if (pointer.button === 0) this._scheduleAutoPickup();
+        if (pointer.button === 2) this._scheduleAutoPickup();
         return this.inputSystem.onPointerDown(pointer);
     }
 
     onPointerUp(pointer) {
-        if (pointer.button === 0) this._cancelAutoPickup();
+        if (pointer.button === 2) this._cancelAutoPickup();
         return this.inputSystem.onPointerUp(pointer);
     }
 
