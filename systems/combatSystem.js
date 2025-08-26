@@ -4,6 +4,7 @@ import { ITEM_DB } from '../data/itemDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
 import DevTools from './DevTools.js';
 import { CHUNK_WIDTH, CHUNK_HEIGHT } from './worldGen/ChunkManager.js';
+import { WORLD_GEN } from '../data/worldGenConfig.js';
 
 export default function createCombatSystem(scene) {
     const chunkZombies = new Map();
@@ -11,19 +12,31 @@ export default function createCombatSystem(scene) {
     const onChunkActivate = ({ chunkX, chunkY, rng }) => {
         const key = `${chunkX},${chunkY}`;
         if (chunkZombies.has(key)) return;
-        const list = [];
-        const count = rng.between(0, 2);
-        for (let i = 0; i < count; i++) {
-            const x = rng.between(chunkX * CHUNK_WIDTH, chunkX * CHUNK_WIDTH + CHUNK_WIDTH);
-            const y = rng.between(chunkY * CHUNK_HEIGHT, chunkY * CHUNK_HEIGHT + CHUNK_HEIGHT);
-            const z = spawnZombie('walker', { x, y });
-            if (z) {
-                z.setData('chunkX', chunkX);
-                z.setData('chunkY', chunkY);
-                list.push(z);
-            }
+        chunkZombies.set(key, []);
+
+        const max = WORLD_GEN.spawns.zombie.nightWaves.maxCount;
+        if (scene.zombies.countActive(true) >= max) return;
+
+        const chance =
+            scene.phase === 'night'
+                ? WORLD_GEN.spawns.zombie.nightTrickle.chance
+                : WORLD_GEN.spawns.zombie.day.chance;
+        if (rng.frac() > chance) return;
+
+        const x = rng.between(
+            chunkX * CHUNK_WIDTH,
+            chunkX * CHUNK_WIDTH + CHUNK_WIDTH,
+        );
+        const y = rng.between(
+            chunkY * CHUNK_HEIGHT,
+            chunkY * CHUNK_HEIGHT + CHUNK_HEIGHT,
+        );
+        const z = spawnZombie('walker', { x, y });
+        if (z) {
+            z.setData('chunkX', chunkX);
+            z.setData('chunkY', chunkY);
+            chunkZombies.get(key).push(z);
         }
-        chunkZombies.set(key, list);
     };
 
     const onChunkDeactivate = ({ chunkX, chunkY }) => {
