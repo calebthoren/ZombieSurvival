@@ -432,7 +432,7 @@ export default class MainScene extends Phaser.Scene {
                 return;
             this._autoPickupActive = true;
             this._autoPickupEvent = this.time.addEvent({
-                delay: 200,
+                delay: 100,
                 loop: true,
                 callback: () => this._attemptAutoPickup(),
             });
