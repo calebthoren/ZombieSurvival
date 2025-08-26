@@ -24,7 +24,7 @@ export default class MainScene extends Phaser.Scene {
         this.isCharging = false;
         this._chargingItemId = null; // which item started the current charge; null when not charging
         this.chargeStart = 0;
-        this.chargeMaxMs = 1500; // 1.5s charge UI cap
+        this.chargeMaxMs = 2000; // 2s charge UI cap
         this.lastCharge = 0; // 0..1 captured on release
 
         // Melee swing state
