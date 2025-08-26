@@ -534,7 +534,8 @@ export default class DevUIScene extends Phaser.Scene {
             const hlRect = this.add.rectangle(0, 0, listW - 4, rowH, 0xffffff, 0.08)
                 .setOrigin(0, 0)
                 .setDepth(3)
-                .setVisible(false);
+                .setVisible(false)
+                .setInteractive({ useHandCursor: true });
             const pre = this.add.text(2, 0, '', UI.font).setDepth(4);
             const mid = this.add.text(2, 0, '', { ...UI.font, fontStyle: 'bold' }).setDepth(4);
             const post = this.add.text(2, 0, '', UI.font).setDepth(4);
@@ -542,15 +543,14 @@ export default class DevUIScene extends Phaser.Scene {
             rowC.setSize(listW - 4, rowH);
             this._itemTypeRows.push(rowC);
             this._itemTypeDD.add(rowC);
-            rowC.setInteractive(new Phaser.Geom.Rectangle(0, 0, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
             rowC._hlRect = hlRect; rowC._pre = pre; rowC._mid = mid; rowC._post = post;
             rowC._index = i;
 
-            rowC.on('pointerover', () => {
+            hlRect.on('pointerover', () => {
                 this._item.resHL = i;
                 this._renderItemDropdown();
             });
-            rowC.on('pointerdown', () => {
+            hlRect.on('pointerdown', () => {
                 const sel = this._visibleItemDropdownItem(i);
                 if (sel) this._confirmItemSelection(sel.name, true);
             });
