@@ -8,6 +8,7 @@ import createCombatSystem from '../systems/combatSystem.js';
 import createDayNightSystem from '../systems/dayNightSystem.js';
 import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
+import ChunkSpawner from '../chunk/ChunkSpawner.js';
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -240,6 +241,18 @@ export default class MainScene extends Phaser.Scene {
         });
 
         this.chunkManager = new ChunkManager(this, this.player);
+
+        this.chunkSpawner = new ChunkSpawner();
+        const _onChunkActivate = ({ chunkX, chunkY }) =>
+            this.chunkSpawner.spawn(this, { chunkX, chunkY });
+        const _onChunkDeactivate = ({ chunkX, chunkY }) =>
+            this.chunkSpawner.despawn(this, { chunkX, chunkY });
+        this.events.on('chunk:activate', _onChunkActivate);
+        this.events.on('chunk:deactivate', _onChunkDeactivate);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this.events.off('chunk:activate', _onChunkActivate);
+            this.events.off('chunk:deactivate', _onChunkDeactivate);
+        });
 
         // Physics interactions
         this.physics.add.overlap(

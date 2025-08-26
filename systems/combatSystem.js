@@ -3,59 +3,9 @@
 import { ITEM_DB } from '../data/itemDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
 import DevTools from './DevTools.js';
-import { CHUNK_WIDTH, CHUNK_HEIGHT } from './worldGen/ChunkManager.js';
 import { WORLD_GEN } from '../data/worldGenConfig.js';
 
 export default function createCombatSystem(scene) {
-    const chunkZombies = new Map();
-
-    const onChunkActivate = ({ chunkX, chunkY, rng }) => {
-        const key = `${chunkX},${chunkY}`;
-        if (chunkZombies.has(key)) return;
-        chunkZombies.set(key, []);
-
-        const max = WORLD_GEN.spawns.zombie.nightWaves.maxCount;
-        if (scene.zombies.countActive(true) >= max) return;
-
-        const chance =
-            scene.phase === 'night'
-                ? WORLD_GEN.spawns.zombie.nightTrickle.chance
-                : WORLD_GEN.spawns.zombie.day.chance;
-        if (rng.frac() > chance) return;
-
-        const x = rng.between(
-            chunkX * CHUNK_WIDTH,
-            chunkX * CHUNK_WIDTH + CHUNK_WIDTH,
-        );
-        const y = rng.between(
-            chunkY * CHUNK_HEIGHT,
-            chunkY * CHUNK_HEIGHT + CHUNK_HEIGHT,
-        );
-        const z = spawnZombie('walker', { x, y });
-        if (z) {
-            z.setData('chunkX', chunkX);
-            z.setData('chunkY', chunkY);
-            chunkZombies.get(key).push(z);
-        }
-    };
-
-    const onChunkDeactivate = ({ chunkX, chunkY }) => {
-        const key = `${chunkX},${chunkY}`;
-        const list = chunkZombies.get(key);
-        if (list) {
-            for (const z of list) if (z && z.destroy) z.destroy();
-            chunkZombies.delete(key);
-        }
-    };
-
-    if (scene?.events?.on) {
-        scene.events.on('chunk:activate', onChunkActivate);
-        scene.events.on('chunk:deactivate', onChunkDeactivate);
-        scene.events.once('shutdown', () => {
-            scene.events.off('chunk:activate', onChunkActivate);
-            scene.events.off('chunk:deactivate', onChunkDeactivate);
-        });
-    }
     // ----- Hit Handling -----
     function handleMeleeHit(hit, zombie) {
         if (!hit || !zombie || !zombie.active) return;
