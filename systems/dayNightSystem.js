@@ -113,21 +113,18 @@ export default function createDayNightSystem(scene) {
         const duration = getPhaseDuration();
 
         let target = 0;
-        if (scene.phase === 'night') {
-            if (elapsed <= transitionMs) {
-                target = Phaser.Math.Linear(
-                    0,
-                    nightOverlayAlpha,
-                    elapsed / transitionMs,
-                );
-            } else if (elapsed >= duration - transitionMs) {
+        if (scene.phase === 'day') {
+            if (elapsed >= duration - transitionMs) {
+                const t = (elapsed - (duration - transitionMs)) / transitionMs;
+                target = Phaser.Math.Linear(0, nightOverlayAlpha, t);
+            }
+        } else if (scene.phase === 'night') {
+            if (elapsed >= duration - transitionMs) {
                 const t = (elapsed - (duration - transitionMs)) / transitionMs;
                 target = Phaser.Math.Linear(nightOverlayAlpha, 0, t);
             } else {
                 target = nightOverlayAlpha;
             }
-        } else {
-            target = 0;
         }
         scene.nightOverlay.setAlpha(target);
     }
