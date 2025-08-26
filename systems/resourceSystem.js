@@ -7,6 +7,7 @@ import { CHUNK_WIDTH, CHUNK_HEIGHT } from './worldGen/ChunkManager.js';
 
 export default function createResourceSystem(scene) {
     const chunkResources = new Map();
+    const chunkRespawns = new Map();
 
     const onActivate = ({ chunkX, chunkY, rng }) => {
         const key = `${chunkX},${chunkY}`;
@@ -34,6 +35,11 @@ export default function createResourceSystem(scene) {
             for (const obj of list) obj.destroy();
             chunkResources.delete(key);
         }
+        const timers = chunkRespawns.get(key);
+        if (timers) {
+            for (const t of timers) t.remove(false);
+            chunkRespawns.delete(key);
+        }
     };
 
     scene.events.on('chunk:activate', onActivate);
@@ -41,6 +47,10 @@ export default function createResourceSystem(scene) {
     scene.events.once('shutdown', () => {
         scene.events.off('chunk:activate', onActivate);
         scene.events.off('chunk:deactivate', onDeactivate);
+        for (const timers of chunkRespawns.values()) {
+            for (const t of timers) t.remove(false);
+        }
+        chunkRespawns.clear();
     });
 
     function _ensureColliders() {
@@ -90,38 +100,29 @@ export default function createResourceSystem(scene) {
         const totalChunks =
             (WORLD_GEN.world.width / CHUNK_WIDTH) *
             (WORLD_GEN.world.height / CHUNK_HEIGHT);
-        const countPerChunk = Math.max(
+        const clustersPerChunk = Math.max(
             1,
             Math.floor((groupCfg.maxActive || 0) / totalChunks),
         );
         const minSpacing = groupCfg.minSpacing || 0;
         const minSpacingSq = minSpacing * minSpacing;
+        const clusterMin = groupCfg.clusterMin || 1;
+        const clusterMax = groupCfg.clusterMax || clusterMin;
         const results = [];
-        for (let i = 0; i < countPerChunk; i++) {
-            let r = rng.frac() * totalWeight;
-            let id = variants[0].id;
-            for (const v of variants) {
-                r -= v.weight || 0;
-                if (r <= 0) {
-                    id = v.id;
-                    break;
-                }
-            }
-            const def = RESOURCE_DB[id];
-            if (!def) continue;
-            let x = 0;
-            let y = 0;
+        const existing = scene.resources.getChildren();
+        for (let c = 0; c < clustersPerChunk; c++) {
+            let cx = 0;
+            let cy = 0;
             let valid = false;
             for (let attempt = 0; attempt < 4 && !valid; attempt++) {
-                x = rng.between(minX, maxX);
-                y = rng.between(minY, maxY);
+                cx = rng.between(minX, maxX);
+                cy = rng.between(minY, maxY);
                 valid = true;
                 if (minSpacing > 0) {
-                    const existing = scene.resources.getChildren();
                     for (let j = 0; j < existing.length; j++) {
                         const obj = existing[j];
-                        const dx = obj.x - x;
-                        const dy = obj.y - y;
+                        const dx = obj.x - cx;
+                        const dy = obj.y - cy;
                         if (dx * dx + dy * dy < minSpacingSq) {
                             valid = false;
                             break;
@@ -130,15 +131,33 @@ export default function createResourceSystem(scene) {
                 }
             }
             if (!valid) continue;
-            const obj = _createResource(id, def, x, y);
-            obj.setData('chunkX', chunkX);
-            obj.setData('chunkY', chunkY);
-            results.push(obj);
+            const clusterSize = rng.between(clusterMin, clusterMax);
+            const radius = minSpacing * 0.5;
+            for (let i = 0; i < clusterSize; i++) {
+                let r = rng.frac() * totalWeight;
+                let id = variants[0].id;
+                for (const v of variants) {
+                    r -= v.weight || 0;
+                    if (r <= 0) {
+                        id = v.id;
+                        break;
+                    }
+                }
+                const def = RESOURCE_DB[id];
+                if (!def) continue;
+                const ang = rng.angle();
+                const dist = radius * rng.frac();
+                const x = cx + Math.cos(ang) * dist;
+                const y = cy + Math.sin(ang) * dist;
+                const obj = _createResource(id, def, x, y, groupKey, chunkX, chunkY);
+                results.push(obj);
+                existing.push(obj);
+            }
         }
         return results;
     }
 
-    function _createResource(id, def, x, y) {
+    function _createResource(id, def, x, y, groupKey, chunkX, chunkY) {
         const originX = def.world?.origin?.x ?? 0.5;
         const originY = def.world?.origin?.y ?? 0.5;
         const scale = def.world?.scale ?? 1;
@@ -166,6 +185,7 @@ export default function createResourceSystem(scene) {
             trunk.setData('topSprite', top);
             trunk.once('destroy', () => top.destroy());
         }
+
         if (def.tags?.includes('bush')) trunk.setData('bush', true);
         if (trunk.body) {
             if (trunk.body.setAllowGravity) trunk.body.setAllowGravity(false);
@@ -183,10 +203,50 @@ export default function createResourceSystem(scene) {
                 if (def.givesItem) {
                     scene.addItemToInventory(def.givesItem, def.giveAmount ?? 1);
                 }
+                const cx = trunk.getData('chunkX');
+                const cy = trunk.getData('chunkY');
+                const key = `${cx},${cy}`;
+                const list = chunkResources.get(key);
+                if (list) {
+                    const idx = list.indexOf(trunk);
+                    if (idx !== -1) list.splice(idx, 1);
+                }
+                _scheduleRespawn(groupKey, id, cx, cy, trunk.x, trunk.y);
                 trunk.destroy();
             });
         }
         return trunk;
+    }
+
+    function _scheduleRespawn(groupKey, id, chunkX, chunkY, x, y) {
+        const cfg = WORLD_GEN?.spawns?.resources?.[groupKey];
+        const delayCfg = cfg?.respawnDelayMs;
+        if (!delayCfg) return;
+        const delay = Phaser.Math.Between(
+            delayCfg.min || 0,
+            delayCfg.max || delayCfg.min || 0,
+        );
+        const timer = scene.time.delayedCall(delay, () => {
+            const def = RESOURCE_DB[id];
+            if (!def) return;
+            const obj = _createResource(id, def, x, y, groupKey, chunkX, chunkY);
+            const key = `${chunkX},${chunkY}`;
+            const list = chunkResources.get(key);
+            if (list) list.push(obj);
+            const arr = chunkRespawns.get(key);
+            if (arr) {
+                const idx = arr.indexOf(timer);
+                if (idx !== -1) arr.splice(idx, 1);
+                if (arr.length === 0) chunkRespawns.delete(key);
+            }
+        });
+        const key = `${chunkX},${chunkY}`;
+        let arr = chunkRespawns.get(key);
+        if (!arr) {
+            arr = [];
+            chunkRespawns.set(key, arr);
+        }
+        arr.push(timer);
     }
 
     function spawnWorldItem(id, pos) {
