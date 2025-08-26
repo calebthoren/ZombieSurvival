@@ -143,7 +143,9 @@ export default function createDayNightSystem(scene) {
 
     // ----- Tick -----
     function tick(delta) {
-        scene._phaseElapsedMs = (scene._phaseElapsedMs || 0) + (delta | 0);
+        const scale = DevTools.cheats.timeScale || 1;
+        scene._phaseElapsedMs =
+            (scene._phaseElapsedMs || 0) + ((delta * scale) | 0);
         if (getPhaseElapsed() >= getPhaseDuration()) {
             if (scene.phase === 'day') {
                 startNight();
