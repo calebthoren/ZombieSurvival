@@ -628,8 +628,8 @@ export default class MainScene extends Phaser.Scene {
         }
 
         // Movement + sprinting
-        const walkSpeed = 100;
-        const sprintMult = 1.75;
+        const walkSpeed = 75;
+        const sprintMult = 1.5;
         const p = this.player.body.velocity;
         p.set(0);
 
