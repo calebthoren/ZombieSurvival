@@ -8,6 +8,7 @@ import { CHUNK_WIDTH, CHUNK_HEIGHT } from './worldGen/ChunkManager.js';
 export default function createResourceSystem(scene) {
     const chunkResources = new Map();
     const chunkRespawns = new Map();
+    const leafOverlaps = [];
 
     const onActivate = ({ chunkX, chunkY, rng }) => {
         const key = `${chunkX},${chunkY}`;
@@ -93,6 +94,35 @@ export default function createResourceSystem(scene) {
         }
     }
 
+    function _ensureLeavesUpdate() {
+        if (scene._leavesOverlapUpdate) return;
+        scene._leavesOverlapUpdate = () => {
+            const p = scene.player;
+            if (!p?.body) return;
+            const b = p.body;
+            const px = b.x;
+            const py = b.y;
+            const pr = px + b.width;
+            const pb = py + b.height;
+            for (let i = 0; i < leafOverlaps.length; i++) {
+                const { leaves, rect } = leafOverlaps[i];
+                leaves.alpha =
+                    px < rect.right &&
+                    pr > rect.x &&
+                    py < rect.bottom &&
+                    pb > rect.y
+                        ? 0.5
+                        : 1;
+            }
+        };
+        scene.events.on('update', scene._leavesOverlapUpdate);
+        scene.events.once('shutdown', () => {
+            scene.events.off('update', scene._leavesOverlapUpdate);
+            scene._leavesOverlapUpdate = null;
+            leafOverlaps.length = 0;
+        });
+    }
+
     function _spawnGroup(groupKey, groupCfg, rng, minX, maxX, minY, maxY, chunkX, chunkY) {
         const variants = Array.isArray(groupCfg?.variants) ? groupCfg.variants : null;
         if (!variants || variants.length === 0) return [];
@@ -168,6 +198,46 @@ export default function createResourceSystem(scene) {
             .setOrigin(originX, originY)
             .setScale(scale)
             .setDepth(def.trunkDepth ?? def.depth ?? 5);
+
+        trunk.setData('chunkX', chunkX);
+        trunk.setData('chunkY', chunkY);
+
+        const leavesCfg = def.world?.leaves;
+        if (leavesCfg) {
+            const frameW = trunk.width;
+            const frameH = trunk.height;
+            const leavesH = leavesCfg.height;
+            trunk.setCrop(0, leavesH, frameW, frameH - leavesH);
+
+            const scaleMul = leavesCfg.useScale ? scale : 1;
+            const trunkTopY = y - (frameH - leavesH) * scale;
+            const lx = x + (leavesCfg.offsetX || 0) * scaleMul;
+            const ly =
+                trunkTopY - leavesH * scaleMul + (leavesCfg.offsetY || 0) * scaleMul;
+            const leaves = scene.add
+                .image(lx, ly, texKey)
+                .setOrigin(0.5, 0)
+                .setScale(scale)
+                .setDepth(def.leavesDepth ?? (scene.player?.depth ?? 900) + 2)
+                .setCrop(0, 0, leavesCfg.width, leavesCfg.height);
+            const rect = {
+                x: lx - (leavesCfg.width * scaleMul) / 2,
+                y: ly,
+                right: lx + (leavesCfg.width * scaleMul) / 2,
+                bottom: ly + leavesCfg.height * scaleMul,
+            };
+            leafOverlaps.push({ leaves, rect });
+            _ensureLeavesUpdate();
+            trunk.once('destroy', () => {
+                leaves.destroy();
+                const idx = leafOverlaps.findIndex((e) => e.leaves === leaves);
+                if (idx !== -1) leafOverlaps.splice(idx, 1);
+                if (leafOverlaps.length === 0 && scene._leavesOverlapUpdate) {
+                    scene.events.off('update', scene._leavesOverlapUpdate);
+                    scene._leavesOverlapUpdate = null;
+                }
+            });
+        }
 
         const blocking = !!def.blocking;
         trunk.setData('blocking', blocking);
