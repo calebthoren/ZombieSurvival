@@ -1,27 +1,23 @@
 // systems/resourceSystem.js
 // Handles world resource spawning via chunk events.
-import { WORLD_GEN } from '../data/worldGenConfig.js';
 import { DESIGN_RULES } from '../data/designRules.js';
 import { RESOURCE_DB } from '../data/resourceDatabase.js';
-import { CHUNK_WIDTH, CHUNK_HEIGHT } from './worldGen/ChunkManager.js';
 
 export default function createResourceSystem(scene) {
     const chunkResources = new Map();
 
-    const onActivate = ({ chunkX, chunkY, rng }) => {
+    const onActivate = (chunkMeta) => {
+        const { chunkX, chunkY, resources } = chunkMeta;
         const key = `${chunkX},${chunkY}`;
         if (chunkResources.has(key)) return;
-        const all = WORLD_GEN?.spawns?.resources;
-        if (!all) return;
-        const minX = chunkX * CHUNK_WIDTH;
-        const minY = chunkY * CHUNK_HEIGHT;
-        const maxX = minX + CHUNK_WIDTH;
-        const maxY = minY + CHUNK_HEIGHT;
         const list = [];
-        for (const [gk, cfg] of Object.entries(all)) {
-            list.push(
-                ..._spawnGroup(gk, cfg, rng, minX, maxX, minY, maxY, chunkX, chunkY),
-            );
+        for (const r of resources || []) {
+            const def = RESOURCE_DB[r.id];
+            if (!def) continue;
+            const obj = _createResource(r.id, def, r.x, r.y);
+            obj.setData('chunkX', chunkX);
+            obj.setData('chunkY', chunkY);
+            list.push(obj);
         }
         chunkResources.set(key, list);
         _ensureColliders();
@@ -81,61 +77,6 @@ export default function createResourceSystem(scene) {
                 scene._bushSlowUpdate = null;
             });
         }
-    }
-
-    function _spawnGroup(groupKey, groupCfg, rng, minX, maxX, minY, maxY, chunkX, chunkY) {
-        const variants = Array.isArray(groupCfg?.variants) ? groupCfg.variants : null;
-        if (!variants || variants.length === 0) return [];
-        const totalWeight = variants.reduce((s, v) => s + (v.weight || 0), 0);
-        const totalChunks =
-            (WORLD_GEN.world.width / CHUNK_WIDTH) *
-            (WORLD_GEN.world.height / CHUNK_HEIGHT);
-        const countPerChunk = Math.max(
-            1,
-            Math.floor((groupCfg.maxActive || 0) / totalChunks),
-        );
-        const minSpacing = groupCfg.minSpacing || 0;
-        const minSpacingSq = minSpacing * minSpacing;
-        const results = [];
-        for (let i = 0; i < countPerChunk; i++) {
-            let r = rng.frac() * totalWeight;
-            let id = variants[0].id;
-            for (const v of variants) {
-                r -= v.weight || 0;
-                if (r <= 0) {
-                    id = v.id;
-                    break;
-                }
-            }
-            const def = RESOURCE_DB[id];
-            if (!def) continue;
-            let x = 0;
-            let y = 0;
-            let valid = false;
-            for (let attempt = 0; attempt < 4 && !valid; attempt++) {
-                x = rng.between(minX, maxX);
-                y = rng.between(minY, maxY);
-                valid = true;
-                if (minSpacing > 0) {
-                    const existing = scene.resources.getChildren();
-                    for (let j = 0; j < existing.length; j++) {
-                        const obj = existing[j];
-                        const dx = obj.x - x;
-                        const dy = obj.y - y;
-                        if (dx * dx + dy * dy < minSpacingSq) {
-                            valid = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (!valid) continue;
-            const obj = _createResource(id, def, x, y);
-            obj.setData('chunkX', chunkX);
-            obj.setData('chunkY', chunkY);
-            results.push(obj);
-        }
-        return results;
     }
 
     function _createResource(id, def, x, y) {

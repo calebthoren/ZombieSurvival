@@ -5,9 +5,10 @@ export const CHUNK_HEIGHT = 300;
 const ACTIVE_RADIUS = 1; // chunks around player kept active
 
 export default class ChunkManager {
-    constructor(scene, player) {
+    constructor(scene, player, loader) {
         this.scene = scene;
         this.player = player;
+        this.loader = loader;
         this._active = new Set();
         this._center = { x: NaN, y: NaN };
         this._onUpdate = () => this._update();
@@ -33,8 +34,10 @@ export default class ChunkManager {
                 const key = `${x},${y}`;
                 next.add(key);
                 if (!this._active.has(key)) {
-                    const rng = new Phaser.Math.RandomDataGenerator([x, y]);
-                    this.scene.events.emit('chunk:activate', { chunkX: x, chunkY: y, rng });
+                    const meta = this.loader
+                        ? this.loader.load(x, y)
+                        : { chunkX: x, chunkY: y };
+                    this.scene.events.emit('chunk:activate', meta);
                 }
             }
         }

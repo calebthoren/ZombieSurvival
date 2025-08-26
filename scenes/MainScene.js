@@ -1,6 +1,7 @@
 // scenes/MainScene.js
 import { WORLD_GEN } from '../data/worldGenConfig.js';
 import ChunkManager from '../systems/worldGen/ChunkManager.js';
+import ChunkLoader from '../chunk/ChunkLoader.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
 import DevTools from '../systems/DevTools.js';
@@ -239,7 +240,8 @@ export default class MainScene extends Phaser.Scene {
             this._dropCleanupEvent?.remove(false);
         });
 
-        this.chunkManager = new ChunkManager(this, this.player);
+        this.chunkLoader = new ChunkLoader('world');
+        this.chunkManager = new ChunkManager(this, this.player, this.chunkLoader);
 
         // Physics interactions
         this.physics.add.overlap(
