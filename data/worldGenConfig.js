@@ -103,9 +103,16 @@ export const WORLD_GEN = {
     zombie: {
       // DAY: Rare trickle
       day: {
-        minDelayMs: 6_000,   // random interval between checks
-        maxDelayMs: 12_000,
-        chance: 0.25,        // 25% chance to spawn 1 when timer fires
+        minDelayMs: 20_000,  // fixed interval between checks
+        maxDelayMs: 20_000,
+        chance: 0.15,        // 15% chance to spawn 1 when timer fires
+      },
+
+      // NIGHT: Occasional trickle
+      nightTrickle: {
+        minDelayMs: 20_000,
+        maxDelayMs: 20_000,
+        chance: 0.5,        // 50% chance to spawn 1 when timer fires
       },
 
       // NIGHT: Waves
