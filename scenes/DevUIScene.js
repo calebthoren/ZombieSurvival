@@ -128,7 +128,15 @@ export default class DevUIScene extends Phaser.Scene {
         this._makeButton(camW - 160, 10, 150, 30, '◀ Return', () => this._goBack(), 2);
 
         // Content root
+        const viewH = camH - 54 - 24;
         this.content = this.add.container(0, 54).setDepth(1);
+
+        // Clip content to viewport so we can scroll
+        const maskShape = this.add.rectangle(0, 54, camW, viewH, 0xffffff, 0)
+            .setOrigin(0, 0)
+            .setScrollFactor(0)
+            .setDepth(1);
+        this.content.setMask(maskShape.createGeometryMask());
 
         let y = 0;
         y = this._sectionTitle('Cheats', y);
