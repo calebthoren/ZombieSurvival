@@ -219,6 +219,17 @@ export default class MainScene extends Phaser.Scene {
         this.meleeHits = this.physics.add.group();
         this.resources = this.physics.add.group();
         this.droppedItems = this.add.group();
+        this._dropCleanupEvent = this.time.addEvent({
+            delay: 1000,
+            loop: true,
+            callback: () => this._cleanupDroppedItems(),
+        });
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this._dropCleanupEvent?.remove(false);
+        });
+        this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+            this._dropCleanupEvent?.remove(false);
+        });
 
         // Spawn resources from WORLD_GEN (all resource groups)
         this.spawnAllResources();
@@ -377,15 +388,13 @@ export default class MainScene extends Phaser.Scene {
             .setDepth(item.depth - 1);
 
         item.setData('stack', { id, count });
-        const timer = this.time.delayedCall(
-            WORLD_GEN.dayNight.dayMs,
-            () => {
-                if (item.active) item.destroy();
-            },
-        );
+        const cycleMs = WORLD_GEN.dayNight.dayMs + WORLD_GEN.dayNight.nightMs;
+        const phaseOffset = this.phase === 'night' ? WORLD_GEN.dayNight.dayMs : 0;
+        const elapsed = this.getPhaseElapsed();
+        const currentTime = (this.dayIndex - 1) * cycleMs + phaseOffset + elapsed;
+        item.setData('expireGameTime', currentTime + cycleMs);
 
         item.once('destroy', () => {
-            timer.remove(false);
             if (shadow && shadow.destroy) shadow.destroy();
         });
 
@@ -487,6 +496,23 @@ export default class MainScene extends Phaser.Scene {
             if (d2 > pickupRangeSq) continue;
             res.emit('pointerdown', this._autoPickupPointer);
             if (!res.active) break;
+        }
+    }
+
+    // Remove expired dropped items to keep performance steady
+    _cleanupDroppedItems() {
+        const cycleMs = WORLD_GEN.dayNight.dayMs + WORLD_GEN.dayNight.nightMs;
+        const phaseOffset = this.phase === 'night' ? WORLD_GEN.dayNight.dayMs : 0;
+        const now =
+            (this.dayIndex - 1) * cycleMs + phaseOffset + this.getPhaseElapsed();
+        const items = this.droppedItems.getChildren();
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (!item.active) continue;
+            const expire = item.getData('expireGameTime');
+            if (expire != null && now >= expire) {
+                item.destroy();
+            }
         }
     }
 
