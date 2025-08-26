@@ -155,6 +155,8 @@ export default function createResourceSystem(scene) {
         if (def.tags?.includes('bush')) trunk.setData('bush', true);
         if (trunk.body) {
             trunk.body.setAllowGravity(false);
+            trunk.body.setImmovable(true);
+            trunk.body.moves = false;
         }
 
         if (def.collectible) {
