@@ -898,8 +898,12 @@ export default class MainScene extends Phaser.Scene {
         const eq = this.uiScene?.inventory?.getEquipped?.();
         if (!eq) return;
 
-        const wpnDef = ITEM_DB?.[eq.id]?.weapon;
-        if (!wpnDef || wpnDef.canCharge !== true) return;
+        const item = ITEM_DB?.[eq.id];
+        const wpnDef = item?.weapon;
+        const ammoDef = item?.ammo;
+        const canChargeWpn = wpnDef?.canCharge === true;
+        const canChargeAmmo = !!ammoDef && item.tags?.includes('rock');
+        if (!canChargeWpn && !canChargeAmmo) return;
 
         // Raw 0..1 charge based on time held
         const heldMs = Phaser.Math.Clamp(
@@ -909,29 +913,32 @@ export default class MainScene extends Phaser.Scene {
         );
         const raw = this.chargeMaxMs > 0 ? heldMs / this.chargeMaxMs : 1;
 
-        // Predict low-stamina condition without spending stamina
-        const st = wpnDef.stamina || {};
-        let predictLowStamina = false;
-        let estCost = 0;
-        if (typeof st.baseCost === 'number' && typeof st.maxCost === 'number') {
-            estCost = Phaser.Math.Linear(st.baseCost, st.maxCost, raw);
-        } else if (typeof st.cost === 'number') {
-            estCost = st.cost;
+        let uiPercent;
+        if (canChargeWpn) {
+            const st = wpnDef.stamina || {};
+            let predictLowStamina = false;
+            let estCost = 0;
+            if (
+                typeof st.baseCost === 'number' &&
+                typeof st.maxCost === 'number'
+            ) {
+                estCost = Phaser.Math.Linear(st.baseCost, st.maxCost, raw);
+            } else if (typeof st.cost === 'number') {
+                estCost = st.cost;
+            }
+            if (estCost > 0 && this.stamina < estCost) predictLowStamina = true;
+
+            const maxCap =
+                predictLowStamina && typeof st.poorChargeClamp === 'number'
+                    ? Math.max(0.0001, st.poorChargeClamp)
+                    : 1;
+
+            const effective = Math.min(raw, maxCap);
+            uiPercent = Phaser.Math.Clamp(effective, 0, 1);
+        } else {
+            uiPercent = Phaser.Math.Clamp(raw, 0, 1);
         }
-        if (estCost > 0 && this.stamina < estCost) predictLowStamina = true;
 
-        // Max cap when tired; actual effective charge is clamped
-        const maxCap =
-            predictLowStamina && typeof st.poorChargeClamp === 'number'
-                ? Math.max(0.0001, st.poorChargeClamp)
-                : 1;
-
-        const effective = Math.min(raw, maxCap); // clamped effective charge
-
-        // Emit percent directly as the bar fill amount (no normalization)
-        const uiPercent = Phaser.Math.Clamp(effective, 0, 1);
-
-        // Emit only when visibly different
         if (Math.abs((uiPercent || 0) - (this.lastCharge || 0)) >= 0.01) {
             this.lastCharge = uiPercent;
             this.uiScene?.events?.emit('weapon:charge', uiPercent);
