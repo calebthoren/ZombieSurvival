@@ -154,9 +154,9 @@ export default function createResourceSystem(scene) {
         trunk.setData('blocking', blocking);
         if (def.tags?.includes('bush')) trunk.setData('bush', true);
         if (trunk.body) {
-            trunk.body.setAllowGravity(false);
-            trunk.body.setImmovable(true);
-            trunk.body.moves = false;
+            if (trunk.body.setAllowGravity) trunk.body.setAllowGravity(false);
+            if (trunk.body.setImmovable) trunk.body.setImmovable(true);
+            if ('moves' in trunk.body) trunk.body.moves = false;
         }
 
         if (def.collectible) {

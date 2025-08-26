@@ -132,10 +132,9 @@ export default class DevUIScene extends Phaser.Scene {
         this.content = this.add.container(0, 54).setDepth(1);
 
         // Clip content to viewport so we can scroll
-        const maskShape = this.add.rectangle(0, 54, camW, viewH, 0xffffff, 0)
-            .setOrigin(0, 0)
-            .setScrollFactor(0)
-            .setDepth(1);
+        const maskShape = this.make.graphics({ x: 0, y: 54, add: false });
+        maskShape.fillStyle(0xffffff, 1);
+        maskShape.fillRect(0, 0, camW, viewH);
         this.content.setMask(maskShape.createGeometryMask());
 
         let y = 0;
