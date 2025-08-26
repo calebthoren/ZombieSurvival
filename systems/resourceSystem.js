@@ -5,6 +5,7 @@ import { DESIGN_RULES } from '../data/designRules.js';
 import { RESOURCE_DB } from '../data/resourceDatabase.js';
 
 export default function createResourceSystem(scene) {
+  
     // ----- Public API -----
     function spawnAllResources() {
         const all = WORLD_GEN?.spawns?.resources;
@@ -71,7 +72,6 @@ export default function createResourceSystem(scene) {
         const respawnMax = groupCfg.respawnDelayMs?.max ?? 7000;
         const clusterMin = groupCfg.clusterMin ?? 3;
         const clusterMax = groupCfg.clusterMax ?? 6;
-        const totalWeight = variants.reduce((s, v) => s + (v.weight || 0), 0);
 
         const w = scene.sys.game.config.width;
         const h = scene.sys.game.config.height;
@@ -180,6 +180,7 @@ export default function createResourceSystem(scene) {
                         case 'bottomCenter':
                             baseX = (anchorSpaceW - bw) * 0.5;
                             baseY = anchorSpaceH - bh;
+
                             break;
                         case 'bottomLeft':
                             baseX = 0;
@@ -474,10 +475,42 @@ export default function createResourceSystem(scene) {
         while (spawned < maxActive && attempts < maxActive * 10) {
             spawned += spawnCluster();
             attempts++;
+
         }
     }
 
     // ----- Dev Helpers -----
+    function _scheduleRespawn(groupKey, id, chunkX, chunkY, x, y) {
+        const cfg = WORLD_GEN?.spawns?.resources?.[groupKey];
+        const delayCfg = cfg?.respawnDelayMs;
+        if (!delayCfg) return;
+        const delay = Phaser.Math.Between(
+            delayCfg.min || 0,
+            delayCfg.max || delayCfg.min || 0,
+        );
+        const timer = scene.time.delayedCall(delay, () => {
+            const def = RESOURCE_DB[id];
+            if (!def) return;
+            const obj = _createResource(id, def, x, y, groupKey, chunkX, chunkY);
+            const key = `${chunkX},${chunkY}`;
+            const list = chunkResources.get(key);
+            if (list) list.push(obj);
+            const arr = chunkRespawns.get(key);
+            if (arr) {
+                const idx = arr.indexOf(timer);
+                if (idx !== -1) arr.splice(idx, 1);
+                if (arr.length === 0) chunkRespawns.delete(key);
+            }
+        });
+        const key = `${chunkX},${chunkY}`;
+        let arr = chunkRespawns.get(key);
+        if (!arr) {
+            arr = [];
+            chunkRespawns.set(key, arr);
+        }
+        arr.push(timer);
+    }
+
     function spawnWorldItem(id, pos) {
         const def = RESOURCE_DB[id];
         if (!def) return;
