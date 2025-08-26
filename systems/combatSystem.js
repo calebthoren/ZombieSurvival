@@ -35,6 +35,8 @@ export default function createCombatSystem(scene) {
         if (z) {
             z.setData('chunkX', chunkX);
             z.setData('chunkY', chunkY);
+            const grid = scene.chunkPathGrids?.get(key);
+            if (grid) z.setData('pathGrid', grid);
             chunkZombies.get(key).push(z);
         }
     };

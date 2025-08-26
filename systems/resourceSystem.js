@@ -4,6 +4,7 @@ import { WORLD_GEN } from '../data/worldGenConfig.js';
 import { DESIGN_RULES } from '../data/designRules.js';
 import { RESOURCE_DB } from '../data/resourceDatabase.js';
 import { CHUNK_WIDTH, CHUNK_HEIGHT } from './worldGen/ChunkManager.js';
+import { getChunkPathGrid } from '../chunk/ChunkPathGrid.js';
 
 export default function createResourceSystem(scene) {
     const chunkResources = new Map();
@@ -24,6 +25,11 @@ export default function createResourceSystem(scene) {
             );
         }
         chunkResources.set(key, list);
+        if (!scene.chunkPathGrids) scene.chunkPathGrids = new Map();
+        scene.chunkPathGrids.set(
+            key,
+            getChunkPathGrid({ chunkX, chunkY, resources: list }),
+        );
         _ensureColliders();
     };
 
@@ -34,6 +40,7 @@ export default function createResourceSystem(scene) {
             for (const obj of list) obj.destroy();
             chunkResources.delete(key);
         }
+        if (scene.chunkPathGrids) scene.chunkPathGrids.delete(key);
     };
 
     scene.events.on('chunk:activate', onActivate);
