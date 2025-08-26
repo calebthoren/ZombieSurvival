@@ -294,13 +294,26 @@ export default function createCombatSystem(scene) {
         scene.uiScene?.events?.emit('weapon:chargeEnd');
     }
 
-    function throwRock(pointer) {
-        const damage = Phaser.Math.Between(1, 3);
-        const travel = Phaser.Math.Between(50, 100);
-        const speed = 300;
-        fireProjectile(pointer, 'slingshot_rock', {
+    function throwRock(pointer, itemId, chargePercent = 0) {
+        if (!pointer || !itemId) return;
+        const def = ITEM_DB[itemId];
+        const ammoCfg = def?.ammo || {};
+        const charge = Phaser.Math.Clamp(chargePercent || 0, 0, 1);
+        const minD = ammoCfg.minDamage ?? 1;
+        const maxD = ammoCfg.maxDamage ?? 3;
+        const damage = Phaser.Math.Linear(minD, maxD, charge);
+        const minR = ammoCfg.minRange ?? 50;
+        const maxR = ammoCfg.maxRange ?? 100;
+        const travel = Phaser.Math.Linear(minR, maxR, charge);
+        const speed = ammoCfg.speed ?? 300;
+        const knockback = ammoCfg.knockback ?? 0;
+        const tex = def?.icon?.textureKey || 'slingshot_rock';
+        if (DevTools.shouldConsumeAmmo()) {
+            scene.uiScene?.inventory?.consumeAmmo?.(itemId, 1);
+        }
+        fireProjectile(pointer, tex, {
             damage,
-            knockback: 0,
+            knockback,
             speed,
             travel,
         });
