@@ -20,7 +20,7 @@ export const WORLD_GEN = {
   dayNight: {
     dayMs: 240_000,          // 4 min day
     nightMs: 120_000,        // 2 min night
-    transitionMs: 15_000,    // 15s fade at start/end of night
+    transitionMs: 15_000,    // 15s fade before/after night
     nightOverlayAlpha: 0.55, // darkness amount at deepest night (0..1)
     // (You can tweak these freely without touching scene code.)
   },
@@ -68,6 +68,9 @@ export const WORLD_GEN = {
             { id: RESOURCE_IDS.TREE2A, weight: 10 },
             { id: RESOURCE_IDS.TREE2B, weight: 5 },
             { id: RESOURCE_IDS.TREE2C, weight: 3 },
+            { id: RESOURCE_IDS.TREE10A, weight: 17 },
+            { id: RESOURCE_IDS.TREE10B, weight: 7 },
+            { id: RESOURCE_IDS.TREE10C, weight: 1 },
           ],
         },
         // Weighted bush variants
@@ -100,9 +103,16 @@ export const WORLD_GEN = {
     zombie: {
       // DAY: Rare trickle
       day: {
-        minDelayMs: 6_000,   // random interval between checks
-        maxDelayMs: 12_000,
-        chance: 0.25,        // 25% chance to spawn 1 when timer fires
+        minDelayMs: 20_000,  // fixed interval between checks
+        maxDelayMs: 20_000,
+        chance: 0.15,        // 15% chance to spawn 1 when timer fires
+      },
+
+      // NIGHT: Occasional trickle
+      nightTrickle: {
+        minDelayMs: 20_000,
+        maxDelayMs: 20_000,
+        chance: 0.5,        // 50% chance to spawn 1 when timer fires
       },
 
       // NIGHT: Waves

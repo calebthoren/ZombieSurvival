@@ -251,7 +251,18 @@ export default class DevUIScene extends Phaser.Scene {
         const countLbl = this.add.text(countLabelX, y + 12, 'Amount:', UI.font).setDepth(2);
         const minusX = countLabelX + countLbl.displayWidth + 8;
         const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpItemCount(-1), 2);
-        this._itemCountText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._item.count, (s) => { this._item.count = s; });
+        this._itemCountText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._item.count, (s) => {
+            const max = this._item.maxStack || 1;
+            let v = s.trim() === '' ? 1 : parseInt(s, 10) || 1;
+            v = Phaser.Math.Clamp(v, 1, max);
+            this._item.count = String(v);
+            DevTools._setItemSpawnPrefs && DevTools._setItemSpawnPrefs({
+                key: this._item.selectedKey,
+                name: this._item.selectedName,
+                count: this._item.count
+            });
+            return this._item.count;
+        });
         const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpItemCount(1), 2);
 
         const spawn = this._makeButton(this.scale.width - 140, y + 7, 120, 30, 'Spawn', () => this._spawnItems(), 2, UI.okColor);
@@ -281,14 +292,16 @@ export default class DevUIScene extends Phaser.Scene {
     }
 
     _makeButton(x, y, w, h, text, onClick, depth = 1, fillColor = UI.btnColor) {
-        const r = this.add.rectangle(x, y, w, h, fillColor, 1).setOrigin(0, 0).setDepth(depth).setInteractive({ useHandCursor: true });
-        const t = this.add.text(x + 8, y + 6, text, UI.font).setDepth(depth + 1);
-        r.on('pointerover', () => r.setFillStyle(UI.btnHover, 1));
-        r.on('pointerout',  () => r.setFillStyle(fillColor, 1));
-        r.on('pointerdown', () => onClick && onClick());
-        const c = this.add.container(0, 0, [r, t]).setDepth(depth);
+        const r = this.add.rectangle(0, 0, w, h, fillColor, 1)
+            .setOrigin(0, 0)
+            .setDepth(depth)
+            .setInteractive({ useHandCursor: true });
+        const t = this.add.text(8, 6, text, UI.font).setDepth(depth + 1);
+        const c = this.add.container(x, y, [r, t]).setDepth(depth);
         c.setSize(w, h);
-        c.setInteractive(new Phaser.Geom.Rectangle(x, y, w, h), Phaser.Geom.Rectangle.Contains);
+        r.on('pointerover', () => r.setFillStyle(UI.btnHover, 1));
+        r.on('pointerout', () => r.setFillStyle(fillColor, 1));
+        r.on('pointerdown', () => onClick && onClick());
         c._rect = r;
         return c;
     }
@@ -346,8 +359,8 @@ export default class DevUIScene extends Phaser.Scene {
             if (apply) {
                 let val = txt.text.trim();
                 if (val === '') val = '1';
-                txt.setText(val);
-                setText(val);
+                const res = setText(val);
+                txt.setText(typeof res === 'string' ? res : val);
             } else {
                 txt.setText(getText());
             }
@@ -417,6 +430,8 @@ export default class DevUIScene extends Phaser.Scene {
             const post = this.add.text(2, 0, '', UI.font).setDepth(4);
             rowC.add([hlRect, pre, mid, post]);
             rowC.setSize(listW - 4, rowH);
+            this._typeRows.push(rowC);
+            this._typeDD.add(rowC);
             rowC.setInteractive(new Phaser.Geom.Rectangle(0, 0, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
             rowC._hlRect = hlRect; rowC._pre = pre; rowC._mid = mid; rowC._post = post;
             rowC._index = i;
@@ -429,9 +444,6 @@ export default class DevUIScene extends Phaser.Scene {
                 const sel = this._visibleDropdownItem(i);
                 if (sel) this._confirmTypeSelection(sel.name, true);
             });
-
-            this._typeRows.push(rowC);
-            this._typeDD.add(rowC);
         }
 
         // Bounds used for wheel & outside-click
@@ -522,27 +534,26 @@ export default class DevUIScene extends Phaser.Scene {
             const hlRect = this.add.rectangle(0, 0, listW - 4, rowH, 0xffffff, 0.08)
                 .setOrigin(0, 0)
                 .setDepth(3)
-                .setVisible(false);
+                .setVisible(false)
+                .setInteractive({ useHandCursor: true });
             const pre = this.add.text(2, 0, '', UI.font).setDepth(4);
             const mid = this.add.text(2, 0, '', { ...UI.font, fontStyle: 'bold' }).setDepth(4);
             const post = this.add.text(2, 0, '', UI.font).setDepth(4);
             rowC.add([hlRect, pre, mid, post]);
             rowC.setSize(listW - 4, rowH);
-            rowC.setInteractive(new Phaser.Geom.Rectangle(0, 0, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
+            this._itemTypeRows.push(rowC);
+            this._itemTypeDD.add(rowC);
             rowC._hlRect = hlRect; rowC._pre = pre; rowC._mid = mid; rowC._post = post;
             rowC._index = i;
 
-            rowC.on('pointerover', () => {
+            hlRect.on('pointerover', () => {
                 this._item.resHL = i;
                 this._renderItemDropdown();
             });
-            rowC.on('pointerdown', () => {
+            hlRect.on('pointerdown', () => {
                 const sel = this._visibleItemDropdownItem(i);
                 if (sel) this._confirmItemSelection(sel.name, true);
             });
-
-            this._itemTypeRows.push(rowC);
-            this._itemTypeDD.add(rowC);
         }
 
         this._itemDDBounds = new Phaser.Geom.Rectangle(listX, listYBelow, listW, dropH);
@@ -644,7 +655,17 @@ export default class DevUIScene extends Phaser.Scene {
             }
             if (/^[0-9]$/.test(ev.key)) {
                 const max = t.text.includes('.') ? 4 : 3;
-                if (t.text.length < max) t.setText(t.text + ev.key);
+                if (t.text.length < max) {
+                    const candidate = t.text + ev.key;
+                    let allow = true;
+                    if (this._editing === this._gameSpeedText) {
+                        allow = parseFloat(candidate) <= 10;
+                    } else if (this._editing === this._itemCountText) {
+                        const maxStack = this._item?.maxStack || 1;
+                        allow = parseInt(candidate, 10) <= maxStack;
+                    }
+                    if (allow) t.setText(candidate);
+                }
                 return;
             }
             if (
@@ -652,7 +673,11 @@ export default class DevUIScene extends Phaser.Scene {
                 this._editing === this._gameSpeedText &&
                 !t.text.includes('.')
             ) {
-                if (t.text.length < 4) t.setText(t.text + '.');
+                const candidate = t.text + '.';
+                if (candidate.length < 4) {
+                    const num = parseFloat(candidate);
+                    if (!Number.isFinite(num) || num <= 10) t.setText(candidate);
+                }
             }
         }
     }

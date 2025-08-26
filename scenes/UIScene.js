@@ -37,9 +37,9 @@ export default class UIScene extends Phaser.Scene {
 
         const main = this.scene.get('MainScene');
         if (main) {
-            const onPause = () => { this._pauseStart = DevTools.now(this); };
+            const onPause = () => { this._pauseStart = this.time.now; };
             const onResume = () => {
-                const now = DevTools.now(this);
+                const now = this.time.now;
                 const diff = now - (this._pauseStart || now);
                 if (diff > 0) {
                     for (const cd of this._activeCooldowns.values()) {
@@ -184,6 +184,12 @@ export default class UIScene extends Phaser.Scene {
             .setAlpha(INVENTORY_CONFIG.panelAlpha);
         this.inventoryPanel.add(panelBg);
         this.panelBg = panelBg;
+        this._inventoryBounds = new Phaser.Geom.Rectangle(
+            panelX,
+            panelY,
+            panelW,
+            panelH,
+        );
 
         // Visual dividers (cosmetic)
         const third = panelW / 3;
@@ -272,6 +278,7 @@ export default class UIScene extends Phaser.Scene {
         this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.TAB);
         this.input.keyboard.on('keydown-TAB', (e) => {
             e.preventDefault();
+            if (this.scene.isActive('PauseScene')) return;
             this.toggleInventory();
         });
 
@@ -296,6 +303,20 @@ export default class UIScene extends Phaser.Scene {
                     }
                     this.inventoryPanel.setVisible(false);
                 }
+            }
+        });
+
+        this.input.on('pointerup', (pointer) => {
+            if (!this.inventoryPanel.visible) return;
+            if (!this.dragCarry) return;
+            const x = pointer.worldX;
+            const y = pointer.worldY;
+            if (!Phaser.Geom.Rectangle.Contains(this._inventoryBounds, x, y)) {
+                const main = this.scene.get('MainScene');
+                if (main && typeof main.dropItemStack === 'function') {
+                    main.dropItemStack(this.dragCarry.id, this.dragCarry.count);
+                }
+                this.#clearCarry();
             }
         });
 
@@ -354,10 +375,7 @@ export default class UIScene extends Phaser.Scene {
             }
         });
 
-        // Puting items in inventory
-        this.inventory.addItem('slingshot_rock', 7);
-        this.inventory.hotbar[0] = { id: 'slingshot', count: 1 };
-        this.inventory.hotbar[1] = { id: 'crude_bat', count: 1 };
+        // Initialize inventory state
         this.events.emit('inv:changed');
 
         // React to model changes
@@ -393,7 +411,7 @@ export default class UIScene extends Phaser.Scene {
         // NEW: cooldown overlays (e.g., bat swings)
         this.events.on('weapon:cooldownStart', ({ itemId, durationMs }) => {
             if (!itemId || !durationMs || durationMs <= 0) return;
-            const now = DevTools.now(this);
+            const now = this.time.now;
             this._activeCooldowns.set(itemId, { start: now, end: now + durationMs });
             this.#syncCooldownOverlays();
         });
@@ -454,6 +472,7 @@ export default class UIScene extends Phaser.Scene {
     // -------------------------
     toggleInventory() {
         if (this.inventoryLocked) return; // <- blocked after death
+        if (this.scene.isActive('PauseScene')) return;
 
         const wasVisible = this.inventoryPanel.visible;
         if (wasVisible) {
@@ -704,11 +723,13 @@ export default class UIScene extends Phaser.Scene {
         const vis = this.bottomHotbarVisuals[idx];
         if (!vis) return;
 
-        // ✅ Show charge bar for ANY equipped weapon that supports charging
+        // ✅ Show charge bar for any equipped item that supports charging
         const eq = this.inventory.getEquipped?.();
+        const item = eq ? ITEM_DB?.[eq.id] : null;
         const canCharge =
-            !!eq &&
-            ITEM_DB?.[eq.id]?.weapon?.canCharge === true;
+            !!item &&
+            (item?.weapon?.canCharge === true ||
+                (item?.ammo && item.tags?.includes('rock')));
 
         if (!canCharge) {
             this.#hideChargeUIForAll();
@@ -760,7 +781,7 @@ export default class UIScene extends Phaser.Scene {
     // Create/ensure overlays for any slots showing items currently on cooldown,
     // and remove overlays that no longer match or have expired.
     #syncCooldownOverlays() {
-        const now = this._pauseStart || DevTools.now(this);
+        const now = this._pauseStart || this.time.now;
 
         // Remove expired item cooldowns
         for (const [itemId, cd] of this._activeCooldowns) {
@@ -864,7 +885,7 @@ export default class UIScene extends Phaser.Scene {
     #updateCooldownOverlays() {
         if (this._slotOverlays.length === 0) return;
 
-        const now = this._pauseStart || DevTools.now(this);
+        const now = this._pauseStart || this.time.now;
         for (let i = this._slotOverlays.length - 1; i >= 0; i--) {
             const o = this._slotOverlays[i];
             const cd = this._activeCooldowns.get(o.itemId);

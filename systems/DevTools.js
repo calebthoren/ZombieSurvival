@@ -25,6 +25,8 @@ const DevTools = {
         timeScale: 1
     },
 
+    _appliedTimeScale: 1,
+
     // ─────────────────────────────────────────────────────────────
     // RENDER CONFIG
     // ─────────────────────────────────────────────────────────────
@@ -78,6 +80,8 @@ const DevTools = {
         this.cheats.noCooldown     = false;
         this.cheats.meleeSliceBatch = 1;
         this.cheats.timeScale       = 1;
+        this._enemySpawnPrefs = null;
+        this._itemSpawnPrefs  = null;
         // Re-apply hitbox visibility immediately (hides layers if they were on)
         try { this.applyHitboxCheat(scene || this._lastScene); } catch {}
         // Reset global game speed
@@ -100,6 +104,8 @@ const DevTools = {
 
         // Engine treats smaller values as faster; invert so higher is faster
         const applied = (v <= 0) ? 0 : 1 / v;
+        const prev = this._appliedTimeScale || 1;
+        this._appliedTimeScale = applied;
 
         const mgr = game?.scene;
         if (mgr && Array.isArray(mgr.scenes)) {
@@ -109,6 +115,53 @@ const DevTools = {
                     if (sc.time) sc.time.timeScale = applied;
                     if (sc.physics && sc.physics.world) sc.physics.world.timeScale = applied;
                 } catch {}
+            }
+            try { this._rescaleTimers(prev, applied, mgr.scenes); } catch {}
+        }
+    },
+
+    _rescaleTimers(prev, applied, scenes) {
+        if (!Array.isArray(scenes)) return;
+        for (let i = 0; i < scenes.length; i++) {
+            const sc = scenes[i];
+            const clock = sc?.time;
+            const now = clock?.now;
+            if (typeof now === 'number') {
+                // Ranged cooldown
+                if (sc._nextRangedReadyTime != null && sc._nextRangedReadyTime > now) {
+                    const remaining = sc._nextRangedReadyTime - now;
+                    sc._nextRangedReadyTime = now + remaining * (prev / applied);
+                }
+                // Melee swing cooldown
+                if (sc._nextSwingCooldownMs != null && sc._lastSwingEndTime != null) {
+                    const duration = sc._nextSwingCooldownMs;
+                    const elapsed = now - sc._lastSwingEndTime;
+                    const newDuration = duration * (prev / applied);
+                    const newElapsed = elapsed * (prev / applied);
+                    sc._nextSwingCooldownMs = newDuration;
+                    sc._lastSwingEndTime = now - newElapsed;
+                }
+                // Charging adjustments
+                if (sc.isCharging && sc.chargeStart != null) {
+                    const elapsed = now - sc.chargeStart;
+                    const factor = prev / applied;
+                    sc.chargeStart = now - elapsed * factor;
+                    if (sc.chargeMaxMs != null) {
+                        sc.chargeMaxMs = Math.floor(sc.chargeMaxMs * factor);
+                    }
+                }
+            }
+            // UI cooldown overlays
+            if (sc._activeCooldowns && sc.time && typeof sc.time.now === 'number') {
+                const nowUi = sc.time.now;
+                sc._activeCooldowns.forEach((info) => {
+                    const duration = info.end - info.start;
+                    const elapsed = nowUi - info.start;
+                    const newDuration = duration * (prev / applied);
+                    const newElapsed = elapsed * (prev / applied);
+                    info.start = nowUi - newElapsed;
+                    info.end = info.start + newDuration;
+                });
             }
         }
     },

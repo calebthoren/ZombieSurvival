@@ -24,7 +24,7 @@ export default class MainScene extends Phaser.Scene {
         this.isCharging = false;
         this._chargingItemId = null; // which item started the current charge; null when not charging
         this.chargeStart = 0;
-        this.chargeMaxMs = 1500; // 1.5s charge UI cap
+        this.chargeMaxMs = 2000; // 2s charge UI cap
         this.lastCharge = 0; // 0..1 captured on release
 
         // Melee swing state
@@ -40,6 +40,12 @@ export default class MainScene extends Phaser.Scene {
 
         // Equipped-item ghost (generic)
         this.equippedItemGhost = null;
+
+        // Auto-pickup state
+        this._autoPickupTimer = null;
+        this._autoPickupEvent = null;
+        this._autoPickupActive = false;
+        this._autoPickupPointer = { rightButtonDown: () => true };
     }
 
     preload() {
@@ -78,6 +84,9 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('tree2A', 'assets/resources/trees/tree2A.png');
         this.load.image('tree2B', 'assets/resources/trees/tree2B.png');
         this.load.image('tree2C', 'assets/resources/trees/tree2C.png');
+        this.load.image('tree10A', 'assets/resources/trees/tree10A.png');
+        this.load.image('tree10B', 'assets/resources/trees/tree10B.png');
+        this.load.image('tree10C', 'assets/resources/trees/tree10C.png');
         // bushes
         this.load.image('bush1A', 'assets/resources/bushes/bush1A.png');
         this.load.image('bush1B', 'assets/resources/bushes/bush1B.png');
@@ -138,6 +147,9 @@ export default class MainScene extends Phaser.Scene {
         this.shiftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
         this.input.on('pointerdown', this.onPointerDown, this);
         this.input.on('pointerup', this.onPointerUp, this);
+
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this._cancelAutoPickup());
+        this.events.once(Phaser.Scenes.Events.DESTROY, () => this._cancelAutoPickup());
 
         // ESC → open Pause overlay
         this.input.keyboard.on('keydown-ESC', this._onEsc, this);
@@ -206,6 +218,18 @@ export default class MainScene extends Phaser.Scene {
         });
         this.meleeHits = this.physics.add.group();
         this.resources = this.physics.add.group();
+        this.droppedItems = this.add.group();
+        this._dropCleanupEvent = this.time.addEvent({
+            delay: 1000,
+            loop: true,
+            callback: () => this._cleanupDroppedItems(),
+        });
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this._dropCleanupEvent?.remove(false);
+        });
+        this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+            this._dropCleanupEvent?.remove(false);
+        });
 
         // Spawn resources from WORLD_GEN (all resource groups)
         this.spawnAllResources();
@@ -261,9 +285,6 @@ export default class MainScene extends Phaser.Scene {
             const now = DevTools.now(this);
             const diff = now - (this._pauseStart || now);
             if (diff > 0) {
-                if (this._nextRangedReadyTime) this._nextRangedReadyTime += diff;
-                if (this._lastSwingEndTime) this._lastSwingEndTime += diff;
-                if (this.isCharging) this.chargeStart += diff;
                 if (this._lastStaminaSpendTime) this._lastStaminaSpendTime += diff;
             }
             this._pauseStart = 0;
@@ -345,6 +366,154 @@ export default class MainScene extends Phaser.Scene {
         inv.addItem(id, qty);
         const after = count(inv.grid) + count(inv.hotbar);
         return after - before;
+    }
+
+    dropItemStack(id, count = 1) {
+        if (!id || count <= 0) return null;
+        const item = this.add
+            .image(this.player.x, this.player.y, id)
+            .setDepth(5)
+            .setScale(0.5)
+            .setInteractive();
+
+        const shadow = this.add
+            .ellipse(
+                item.x,
+                item.y + item.displayHeight * 0.5,
+                item.displayWidth * 0.8,
+                item.displayHeight * 0.3,
+                0x000000,
+                0.3,
+            )
+            .setDepth(item.depth - 1);
+
+        item.setData('stack', { id, count });
+        const cycleMs = WORLD_GEN.dayNight.dayMs + WORLD_GEN.dayNight.nightMs;
+        const phaseOffset = this.phase === 'night' ? WORLD_GEN.dayNight.dayMs : 0;
+        const elapsed = this.getPhaseElapsed();
+        const currentTime = (this.dayIndex - 1) * cycleMs + phaseOffset + elapsed;
+        item.setData('expireGameTime', currentTime + cycleMs);
+
+        item.once('destroy', () => {
+            if (shadow && shadow.destroy) shadow.destroy();
+        });
+
+        item.on('pointerdown', (pointer) => {
+            if (!pointer.rightButtonDown()) return;
+            if (this.isCharging) return;
+            this._pickupItem(item);
+        });
+
+        item.setData('shadow', shadow);
+        this.droppedItems.add(item);
+        return item;
+    }
+
+    _pickupItem(item) {
+        if (!item) return false;
+        const pickupRange = 40;
+        const d2 = Phaser.Math.Distance.Squared(
+            this.player.x,
+            this.player.y,
+            item.x,
+            item.y,
+        );
+        if (d2 > pickupRange * pickupRange) return false;
+        const stack = item.getData('stack');
+        if (!stack) return false;
+        const added = this.addItemToInventory(stack.id, stack.count);
+        if (added > 0) {
+            if (added >= stack.count) {
+                item.destroy();
+            } else {
+                stack.count -= added;
+                item.setData('stack', stack);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    _scheduleAutoPickup() {
+        this._cancelAutoPickup();
+        this._autoPickupTimer = this.time.delayedCall(1000, () => {
+            if (this.isCharging || !this.input.activePointer.rightButtonDown())
+                return;
+            this._autoPickupActive = true;
+            this._autoPickupEvent = this.time.addEvent({
+                delay: 100,
+                loop: true,
+                callback: () => this._attemptAutoPickup(),
+            });
+        });
+    }
+
+    _cancelAutoPickup() {
+        if (this._autoPickupTimer) {
+            this._autoPickupTimer.remove(false);
+            this._autoPickupTimer = null;
+        }
+        if (this._autoPickupEvent) {
+            this._autoPickupEvent.remove(false);
+            this._autoPickupEvent = null;
+        }
+        this._autoPickupActive = false;
+    }
+
+    _attemptAutoPickup() {
+        if (!this._autoPickupActive) return;
+        if (this.isCharging || !this.input.activePointer.rightButtonDown()) {
+            this._cancelAutoPickup();
+            return;
+        }
+        const ptr = this.input.activePointer;
+        const px = ptr.worldX;
+        const py = ptr.worldY;
+        const pickupRange = 40;
+        const pickupRangeSq = pickupRange * pickupRange;
+        const items = this.droppedItems.getChildren();
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (!item.active) continue;
+            if (!Phaser.Geom.Rectangle.Contains(item.getBounds(), px, py))
+                continue;
+            const dx = this.player.x - item.x;
+            const dy = this.player.y - item.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 > pickupRangeSq) continue;
+            if (this._pickupItem(item)) break;
+        }
+
+        const resources = this.resources.getChildren();
+        for (let i = 0; i < resources.length; i++) {
+            const res = resources[i];
+            if (!res.active) continue;
+            if (!Phaser.Geom.Rectangle.Contains(res.getBounds(), px, py))
+                continue;
+            const dx = this.player.x - res.x;
+            const dy = this.player.y - res.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 > pickupRangeSq) continue;
+            res.emit('pointerdown', this._autoPickupPointer);
+            if (!res.active) break;
+        }
+    }
+
+    // Remove expired dropped items to keep performance steady
+    _cleanupDroppedItems() {
+        const cycleMs = WORLD_GEN.dayNight.dayMs + WORLD_GEN.dayNight.nightMs;
+        const phaseOffset = this.phase === 'night' ? WORLD_GEN.dayNight.dayMs : 0;
+        const now =
+            (this.dayIndex - 1) * cycleMs + phaseOffset + this.getPhaseElapsed();
+        const items = this.droppedItems.getChildren();
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (!item.active) continue;
+            const expire = item.getData('expireGameTime');
+            if (expire != null && now >= expire) {
+                item.destroy();
+            }
+        }
     }
 
     // ==========================
@@ -429,6 +598,7 @@ export default class MainScene extends Phaser.Scene {
                     ),
                 )
             ) {
+                DevTools.resetToDefaults(this);
                 this.scene.stop('UIScene');
                 this.scene.restart();
             }
@@ -458,8 +628,8 @@ export default class MainScene extends Phaser.Scene {
         }
 
         // Movement + sprinting
-        const walkSpeed = 100;
-        const sprintMult = 1.75;
+        const walkSpeed = 75;
+        const sprintMult = 1.5;
         const p = this.player.body.velocity;
         p.set(0);
 
@@ -498,9 +668,8 @@ export default class MainScene extends Phaser.Scene {
         this.regenStamina(delta);
 
         // Zombie pursuit (simple: slide → then stun → then chase)
+        const now = this.time.now;
         this.zombies.getChildren().forEach((zombie) => {
-            const now = DevTools.now(this);
-
             const inKnockback = (zombie.knockbackUntil || 0) > now;
             const stunned = (zombie.stunUntil || 0) > now && !inKnockback; // stun begins after slide
 
@@ -551,10 +720,12 @@ export default class MainScene extends Phaser.Scene {
     // INPUT & COMBAT
     // ==========================
     onPointerDown(pointer) {
+        if (pointer.button === 2) this._scheduleAutoPickup();
         return this.inputSystem.onPointerDown(pointer);
     }
 
     onPointerUp(pointer) {
+        if (pointer.button === 2) this._cancelAutoPickup();
         return this.inputSystem.onPointerUp(pointer);
     }
 
@@ -727,41 +898,47 @@ export default class MainScene extends Phaser.Scene {
         const eq = this.uiScene?.inventory?.getEquipped?.();
         if (!eq) return;
 
-        const wpnDef = ITEM_DB?.[eq.id]?.weapon;
-        if (!wpnDef || wpnDef.canCharge !== true) return;
+        const item = ITEM_DB?.[eq.id];
+        const wpnDef = item?.weapon;
+        const ammoDef = item?.ammo;
+        const canChargeWpn = wpnDef?.canCharge === true;
+        const canChargeAmmo = !!ammoDef && item.tags?.includes('rock');
+        if (!canChargeWpn && !canChargeAmmo) return;
 
         // Raw 0..1 charge based on time held
-        const scale = DevTools.cheats.timeScale || 1;
         const heldMs = Phaser.Math.Clamp(
-            (DevTools.now(this) - this.chargeStart) * scale,
+            this.time.now - this.chargeStart,
             0,
             this.chargeMaxMs,
         );
         const raw = this.chargeMaxMs > 0 ? heldMs / this.chargeMaxMs : 1;
 
-        // Predict low-stamina condition without spending stamina
-        const st = wpnDef.stamina || {};
-        let predictLowStamina = false;
-        let estCost = 0;
-        if (typeof st.baseCost === 'number' && typeof st.maxCost === 'number') {
-            estCost = Phaser.Math.Linear(st.baseCost, st.maxCost, raw);
-        } else if (typeof st.cost === 'number') {
-            estCost = st.cost;
+        let uiPercent;
+        if (canChargeWpn) {
+            const st = wpnDef.stamina || {};
+            let predictLowStamina = false;
+            let estCost = 0;
+            if (
+                typeof st.baseCost === 'number' &&
+                typeof st.maxCost === 'number'
+            ) {
+                estCost = Phaser.Math.Linear(st.baseCost, st.maxCost, raw);
+            } else if (typeof st.cost === 'number') {
+                estCost = st.cost;
+            }
+            if (estCost > 0 && this.stamina < estCost) predictLowStamina = true;
+
+            const maxCap =
+                predictLowStamina && typeof st.poorChargeClamp === 'number'
+                    ? Math.max(0.0001, st.poorChargeClamp)
+                    : 1;
+
+            const effective = Math.min(raw, maxCap);
+            uiPercent = Phaser.Math.Clamp(effective, 0, 1);
+        } else {
+            uiPercent = Phaser.Math.Clamp(raw, 0, 1);
         }
-        if (estCost > 0 && this.stamina < estCost) predictLowStamina = true;
 
-        // Max cap when tired; actual effective charge is clamped
-        const maxCap =
-            predictLowStamina && typeof st.poorChargeClamp === 'number'
-                ? Math.max(0.0001, st.poorChargeClamp)
-                : 1;
-
-        const effective = Math.min(raw, maxCap); // clamped effective charge
-
-        // Emit percent directly as the bar fill amount (no normalization)
-        const uiPercent = Phaser.Math.Clamp(effective, 0, 1);
-
-        // Emit only when visibly different
         if (Math.abs((uiPercent || 0) - (this.lastCharge || 0)) >= 0.01) {
             this.lastCharge = uiPercent;
             this.uiScene?.events?.emit('weapon:charge', uiPercent);

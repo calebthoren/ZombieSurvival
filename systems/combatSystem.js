@@ -35,12 +35,11 @@ export default function createCombatSystem(scene) {
         const baseD = hit.getData('damage');
         const baseKb = hit.getData('knockback');
         const meleeMult = Math.max(0, zombie?.resist?.meleeMult ?? 1);
-        const dmg = Math.max(
-            0,
-            Math.round(
-                (baseD ?? ITEM_DB?.crude_bat?.weapon?.damage ?? 10) * meleeMult,
-            ),
-        );
+        const defMin = ITEM_DB?.crude_bat?.weapon?.minDamage ?? 10;
+        const defMax = ITEM_DB?.crude_bat?.weapon?.maxDamage ?? defMin;
+        const rawD =
+            baseD ?? Phaser.Math.Between(defMin, defMax);
+        const dmg = Math.max(0, Math.round(rawD * meleeMult));
         const kb = Math.max(
             0,
             baseKb ?? ITEM_DB?.crude_bat?.weapon?.knockback ?? 10,
@@ -59,10 +58,12 @@ export default function createCombatSystem(scene) {
             typeof bullet.getData === 'function'
                 ? bullet.getData('knockback')
                 : undefined;
+        const slMin = ITEM_DB?.slingshot?.weapon?.minDamage ?? 5;
+        const slMax = ITEM_DB?.slingshot?.weapon?.maxDamage ?? slMin;
         let dmg =
             typeof payloadDmg === 'number'
                 ? payloadDmg
-                : (ITEM_DB?.slingshot?.weapon?.damage ?? 5);
+                : Phaser.Math.Between(slMin, slMax);
         let kb =
             typeof payloadKb === 'number'
                 ? payloadKb
@@ -79,8 +80,9 @@ export default function createCombatSystem(scene) {
     function handlePlayerZombieCollision(player, zombie) {
         if (scene.isGameOver) return;
         if (DevTools?.isPlayerInvisible?.() === true) return;
-        const now = DevTools.now(scene) | 0;
-        const hitCdMs = 500;
+        const now = scene.time.now | 0;
+        const scale = DevTools.cheats.timeScale || 1;
+        const hitCdMs = 500 / scale;
         if (!zombie.lastHitTime) zombie.lastHitTime = 0;
         if (now - zombie.lastHitTime < hitCdMs) return;
         zombie.lastHitTime = now;
@@ -89,9 +91,6 @@ export default function createCombatSystem(scene) {
         scene.health = Math.max(0, (scene.health | 0) - damage);
         scene.uiScene?.updateHealth?.(scene.health);
         if (scene.health <= 0) {
-            try {
-                DevTools.resetToDefaults(scene);
-            } catch {}
             scene.isGameOver = true;
             scene.physics.world.isPaused = true;
             try {
@@ -141,6 +140,65 @@ export default function createCombatSystem(scene) {
     }
 
     // ----- Ranged Weapons -----
+    function fireProjectile(pointer, textureKey, cfg) {
+        if (!pointer || !textureKey) return;
+        const damage = cfg?.damage ?? 0;
+        const knockback = cfg?.knockback ?? 0;
+        const speed = cfg?.speed ?? 0;
+        const travel = cfg?.travel ?? 0;
+        const angle = Phaser.Math.Angle.Between(
+            scene.player.x,
+            scene.player.y,
+            pointer.worldX,
+            pointer.worldY,
+        );
+        const bullet =
+            scene.bullets.get(
+                scene.player.x,
+                scene.player.y,
+                textureKey,
+            ) ||
+            scene.physics.add.image(
+                scene.player.x,
+                scene.player.y,
+                textureKey,
+            );
+        if (!bullet) return;
+        if (!bullet.body) scene.physics.add.existing(bullet);
+        bullet.setActive(true).setVisible(true);
+        bullet.body.setAllowGravity(false);
+        bullet.setDepth(600);
+        bullet.setScale(0.4);
+        bullet.setSize(8, 8);
+        bullet.setData('damage', Math.max(0, Math.round(damage)));
+        bullet.setData('knockback', Math.max(0, knockback));
+        const scale = DevTools.cheats.timeScale || 1;
+        const v = scene.physics.velocityFromRotation(angle, speed * scale);
+        bullet.setVelocity(v.x, v.y);
+        bullet.setRotation(angle);
+        const lifetimeMs = Math.max(
+            1,
+            Math.floor((travel / Math.max(1, speed)) * 1000 / scale),
+        );
+        scene.time.delayedCall(lifetimeMs, () => {
+            if (bullet.active && bullet.destroy) bullet.destroy();
+        });
+        scene.physics.add.collider(
+            bullet,
+            scene.resources,
+            (bb, r) => {
+                if (bb && bb.destroy) bb.destroy();
+            },
+            (_b, r) =>
+                !!(
+                    r &&
+                    typeof r.getData === 'function' &&
+                    r.getData('blocking') === true
+                ),
+            scene,
+        );
+    }
+
     function fireRangedWeapon(pointer, wpn, chargePercent) {
         const equipped = scene.uiScene?.inventory?.getEquipped?.();
         const ammoChoice =
@@ -182,8 +240,10 @@ export default function createCombatSystem(scene) {
         const uiPercent = Phaser.Math.Clamp(effectiveCharge / maxCap, 0, 1);
         scene.uiScene?.events?.emit('weapon:charge', uiPercent);
         const canCharge = wpn?.canCharge === true;
-        const baseDmg = wpn?.damage ?? 6;
-        const maxDmg = wpn?.maxChargeDamage ?? baseDmg;
+        const baseMin = wpn?.minDamage ?? wpn?.damage ?? 6;
+        const baseMax = wpn?.maxDamage ?? baseMin;
+        const baseDmg = Phaser.Math.Between(baseMin, baseMax);
+        const maxDmg = wpn?.maxChargeDamage ?? baseMax;
         let shotDmg = canCharge
             ? Phaser.Math.Linear(baseDmg, maxDmg, effectiveCharge)
             : baseDmg;
@@ -210,72 +270,53 @@ export default function createCombatSystem(scene) {
         if (DevTools.shouldConsumeAmmo()) {
             scene.uiScene?.inventory?.consumeAmmo?.(ammoChoice.ammoId, 1);
         }
-        const angle = Phaser.Math.Angle.Between(
-            scene.player.x,
-            scene.player.y,
-            pointer.worldX,
-            pointer.worldY,
-        );
-        const bullet =
-            scene.bullets.get(
-                scene.player.x,
-                scene.player.y,
-                ammoChoice.ammoId,
-            ) ||
-            scene.physics.add.image(
-                scene.player.x,
-                scene.player.y,
-                ammoChoice.ammoId,
-            );
-        if (!bullet) return;
-        if (!bullet.body) scene.physics.add.existing(bullet);
-        bullet.setActive(true).setVisible(true);
-        bullet.body.setAllowGravity(false);
-        bullet.setDepth(600);
-        bullet.setScale(0.4);
-        bullet.setSize(8, 8);
-        bullet.setData('damage', Math.max(0, Math.round(shotDmg)));
-        bullet.setData('knockback', Math.max(0, shotKb));
-        const scale = DevTools.cheats.timeScale || 1;
-        const v = scene.physics.velocityFromRotation(angle, speed * scale);
-        bullet.setVelocity(v.x, v.y);
-        bullet.setRotation(angle);
-        const lifetimeMs = Math.max(
-            1,
-            Math.floor((travel / Math.max(1, speed)) * 1000 / scale),
-        );
-        scene.time.delayedCall(lifetimeMs, () => {
-            if (bullet.active && bullet.destroy) bullet.destroy();
+        fireProjectile(pointer, ammoChoice.ammoId, {
+            damage: shotDmg,
+            knockback: shotKb,
+            speed,
+            travel,
         });
-        scene.physics.add.collider(
-            bullet,
-            scene.resources,
-            (bb, r) => {
-                if (bb && bb.destroy) bb.destroy();
-            },
-            (_b, r) =>
-                !!(
-                    r &&
-                    typeof r.getData === 'function' &&
-                    r.getData('blocking') === true
-                ),
-            scene,
-        );
+        const scale = DevTools.cheats.timeScale || 1;
         const baseCd = wpn?.fireCooldownMs ?? 0;
         const cdMs =
             lowStamina && typeof st.lowCooldownMultiplier === 'number'
                 ? Math.floor(baseCd * st.lowCooldownMultiplier)
                 : baseCd;
-        if (!DevTools.cheats.noCooldown && cdMs > 0) {
-            const scale = DevTools.cheats.timeScale || 1;
-            const dur = Math.floor(cdMs / scale);
-            scene._nextRangedReadyTime = DevTools.now(scene) + dur;
+        const applied = scale <= 0 ? 0 : 1 / scale;
+        const adjCd = Math.floor(cdMs * applied);
+        if (!DevTools.cheats.noCooldown && adjCd > 0) {
+            scene._nextRangedReadyTime = scene.time.now + adjCd;
             scene.uiScene?.events?.emit('weapon:cooldownStart', {
                 itemId: equipped.id,
-                durationMs: dur,
+                durationMs: adjCd,
             });
         }
         scene.uiScene?.events?.emit('weapon:chargeEnd');
+    }
+
+    function throwRock(pointer, itemId, chargePercent = 0) {
+        if (!pointer || !itemId) return;
+        const def = ITEM_DB[itemId];
+        const ammoCfg = def?.ammo || {};
+        const charge = Phaser.Math.Clamp(chargePercent || 0, 0, 1);
+        const minD = ammoCfg.minDamage ?? 1;
+        const maxD = ammoCfg.maxDamage ?? 3;
+        const damage = Phaser.Math.Linear(minD, maxD, charge);
+        const minR = ammoCfg.minRange ?? 50;
+        const maxR = ammoCfg.maxRange ?? 100;
+        const travel = Phaser.Math.Linear(minR, maxR, charge);
+        const speed = ammoCfg.speed ?? 300;
+        const knockback = ammoCfg.knockback ?? 0;
+        const tex = def?.icon?.textureKey || 'slingshot_rock';
+        if (DevTools.shouldConsumeAmmo()) {
+            scene.uiScene?.inventory?.consumeAmmo?.(itemId, 1);
+        }
+        fireProjectile(pointer, tex, {
+            damage,
+            knockback,
+            speed,
+            travel,
+        });
     }
 
     // ----- Melee Weapons -----
@@ -295,7 +336,7 @@ export default function createCombatSystem(scene) {
         if (scene._isSwinging) return;
         const effectiveCooldownMs =
             scene._nextSwingCooldownMs ?? baseCooldownMs;
-        const now = DevTools.now(scene);
+        const now = scene.time.now;
         if (now - (scene._lastSwingEndTime || 0) < effectiveCooldownMs) return;
         const st = wpn?.stamina;
         let lowStamina = false;
@@ -315,8 +356,9 @@ export default function createCombatSystem(scene) {
         const cooldownMult =
             lowStamina && st ? (st.cooldownMultiplier ?? 6) : 1;
         const scale = DevTools.cheats.timeScale || 1;
+        const applied = scale <= 0 ? 0 : 1 / scale;
         scene._nextSwingCooldownMs = Math.floor(
-            (baseCooldownMs * cooldownMult) / scale,
+            baseCooldownMs * cooldownMult * applied,
         );
         const canCharge = wpn?.canCharge === true;
         let charge = canCharge
@@ -325,9 +367,11 @@ export default function createCombatSystem(scene) {
         if (lowStamina && st && typeof st.poorChargeClamp === 'number') {
             charge = Math.min(charge, st.poorChargeClamp);
         }
-        const baseDmg = wpn?.damage ?? 10;
+        const baseMin = wpn?.minDamage ?? wpn?.damage ?? 10;
+        const baseMax = wpn?.maxDamage ?? baseMin;
+        const baseDmg = Phaser.Math.Between(baseMin, baseMax);
         const baseKb = wpn?.knockback ?? 10;
-        const maxDmg = wpn?.maxChargeDamage ?? baseDmg;
+        const maxDmg = wpn?.maxChargeDamage ?? baseMax;
         const maxKb = wpn?.maxChargeKnockback ?? baseKb;
         let swingDamage = canCharge
             ? Phaser.Math.Linear(baseDmg, maxDmg, charge)
@@ -383,7 +427,7 @@ export default function createCombatSystem(scene) {
         cone.setData('aimAngle', startRot);
         cone.setData('coneHalfRad', halfArc);
         cone.setData('maxRange', range);
-        cone.setData('swingStartMs', DevTools.now(scene) | 0);
+        cone.setData('swingStartMs', scene.time.now | 0);
         cone.setData('swingDurationMs', swingDurationMs | 0);
         scene._isSwinging = true;
         const swing = { t: 0 };
@@ -406,7 +450,7 @@ export default function createCombatSystem(scene) {
             },
             onComplete: () => {
                 scene._isSwinging = false;
-                scene._lastSwingEndTime = DevTools.now(scene);
+                scene._lastSwingEndTime = scene.time.now;
                 if (scene.batSprite) {
                     scene.batSprite.destroy();
                     scene.batSprite = null;
@@ -559,7 +603,7 @@ export default function createCombatSystem(scene) {
         const vx = (dx / len) * impulse;
         const vy = (dy / len) * impulse;
         zombie.setVelocity(vx, vy);
-        const now = DevTools.now(scene) | 0;
+        const now = scene.time.now | 0;
         zombie.knockbackUntil = now + 120;
         if (baseKb >= (zombie.staggerThreshold || 99999)) {
             zombie.stunUntil = now + (zombie.stunDurationMs || 300);
@@ -665,7 +709,9 @@ export default function createCombatSystem(scene) {
         handleMeleeHit,
         handleProjectileHit,
         handlePlayerZombieCollision,
+        fireProjectile,
         fireRangedWeapon,
+        throwRock,
         swingBat,
         spawnZombie,
         getEligibleZombieTypesForPhase,

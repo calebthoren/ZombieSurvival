@@ -17,7 +17,7 @@ export default function createInputSystem(scene) {
 
         if (cat === 'melee' && equipped.id === 'crude_bat') {
             const wpn = def.weapon || {};
-            const now = DevTools.now(scene);
+            const now = scene.time.now;
             const baseCd = wpn?.swingCooldownMs ?? 80;
             const effectiveCd = scene._nextSwingCooldownMs ?? baseCd;
             const lastEnd = scene._lastSwingEndTime || 0;
@@ -27,7 +27,9 @@ export default function createInputSystem(scene) {
             if (wpn.canCharge === true) {
                 scene.isCharging = true;
                 scene.chargeStart = now;
-                scene.chargeMaxMs = Math.max(1, wpn?.chargeMaxMs ?? 1500);
+                const scale = DevTools.cheats.timeScale || 1;
+                const applied = scale <= 0 ? 0 : 1 / scale;
+                scene.chargeMaxMs = Math.max(1, Math.floor((wpn?.chargeMaxMs ?? 2000) * applied));
                 scene._chargingItemId = equipped.id;
                 scene.uiScene?.events?.emit('weapon:charge', 0);
                 scene._createEquippedItemGhost?.(equipped.id);
@@ -41,7 +43,7 @@ export default function createInputSystem(scene) {
 
         if (cat === 'ranged' && equipped.id === 'slingshot') {
             const wpn = def.weapon || {};
-            const now = DevTools.now(scene);
+            const now = scene.time.now;
             const fireCd = wpn?.fireCooldownMs ?? 0;
             if (
                 !DevTools.cheats.noCooldown &&
@@ -56,7 +58,26 @@ export default function createInputSystem(scene) {
 
             scene.isCharging = true;
             scene.chargeStart = now;
-            scene.chargeMaxMs = Math.max(1, wpn?.chargeMaxMs ?? 1500);
+            const scale = DevTools.cheats.timeScale || 1;
+            const applied = scale <= 0 ? 0 : 1 / scale;
+            scene.chargeMaxMs = Math.max(1, Math.floor((wpn?.chargeMaxMs ?? 2000) * applied));
+            scene._chargingItemId = equipped.id;
+            scene.uiScene?.events?.emit('weapon:charge', 0);
+            scene._createEquippedItemGhost?.(equipped.id);
+            scene._updateEquippedItemGhost();
+            return;
+        }
+
+        if (def?.ammo && def.tags?.includes('rock')) {
+            const now = scene.time.now;
+            scene.isCharging = true;
+            scene.chargeStart = now;
+            const scale = DevTools.cheats.timeScale || 1;
+            const applied = scale <= 0 ? 0 : 1 / scale;
+            scene.chargeMaxMs = Math.max(
+                1,
+                Math.floor((def.ammo?.maxChargeMs ?? 2000) * applied),
+            );
             scene._chargingItemId = equipped.id;
             scene.uiScene?.events?.emit('weapon:charge', 0);
             scene._createEquippedItemGhost?.(equipped.id);
@@ -75,9 +96,8 @@ export default function createInputSystem(scene) {
             return;
         }
 
-        const scale = DevTools.cheats.timeScale || 1;
         const heldMs = Phaser.Math.Clamp(
-            (DevTools.now(scene) - scene.chargeStart) * scale,
+            scene.time.now - scene.chargeStart,
             0,
             scene.chargeMaxMs,
         );
@@ -98,6 +118,11 @@ export default function createInputSystem(scene) {
 
         if (cat === 'melee' && eq.id === 'crude_bat') {
             scene.combat.swingBat(pointer, def.weapon || {}, charge);
+            return;
+        }
+
+        if (def?.ammo && def.tags?.includes('rock')) {
+            scene.combat.throwRock(pointer, eq.id, charge);
             return;
         }
     }
