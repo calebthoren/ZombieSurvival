@@ -292,14 +292,16 @@ export default class DevUIScene extends Phaser.Scene {
     }
 
     _makeButton(x, y, w, h, text, onClick, depth = 1, fillColor = UI.btnColor) {
-        const r = this.add.rectangle(0, 0, w, h, fillColor, 1).setOrigin(0, 0).setDepth(depth);
+        const r = this.add.rectangle(0, 0, w, h, fillColor, 1)
+            .setOrigin(0, 0)
+            .setDepth(depth)
+            .setInteractive({ useHandCursor: true });
         const t = this.add.text(8, 6, text, UI.font).setDepth(depth + 1);
         const c = this.add.container(x, y, [r, t]).setDepth(depth);
         c.setSize(w, h);
-        c.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
-        c.on('pointerover', () => r.setFillStyle(UI.btnHover, 1));
-        c.on('pointerout', () => r.setFillStyle(fillColor, 1));
-        c.on('pointerdown', () => onClick && onClick());
+        r.on('pointerover', () => r.setFillStyle(UI.btnHover, 1));
+        r.on('pointerout', () => r.setFillStyle(fillColor, 1));
+        r.on('pointerdown', () => onClick && onClick());
         c._rect = r;
         return c;
     }
