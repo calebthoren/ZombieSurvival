@@ -90,14 +90,22 @@ export default function createResourceSystem(scene) {
         const totalChunks =
             (WORLD_GEN.world.width / CHUNK_WIDTH) *
             (WORLD_GEN.world.height / CHUNK_HEIGHT);
-        const countPerChunk = Math.max(
-            1,
-            Math.floor((groupCfg.maxActive || 0) / totalChunks),
-        );
+        const expectedPerChunk = (groupCfg.maxActive || 0) / totalChunks;
+        const base = Math.floor(expectedPerChunk);
+        const countPerChunk = base +
+            (rng.frac() < expectedPerChunk - base ? 1 : 0);
+
+        let activeInGroup = 0;
+        const existing = scene.resources.getChildren();
+        for (let i = 0; i < existing.length; i++) {
+            if (existing[i].getData('group') === groupKey) activeInGroup++;
+        }
+        const remaining = (groupCfg.maxActive || 0) - activeInGroup;
+        const spawnCount = Math.min(countPerChunk, Math.max(0, remaining));
         const minSpacing = groupCfg.minSpacing || 0;
         const minSpacingSq = minSpacing * minSpacing;
         const results = [];
-        for (let i = 0; i < countPerChunk; i++) {
+        for (let i = 0; i < spawnCount; i++) {
             let r = rng.frac() * totalWeight;
             let id = variants[0].id;
             for (const v of variants) {
@@ -133,6 +141,7 @@ export default function createResourceSystem(scene) {
             const obj = _createResource(id, def, x, y);
             obj.setData('chunkX', chunkX);
             obj.setData('chunkY', chunkY);
+            obj.setData('group', groupKey);
             results.push(obj);
         }
         return results;
