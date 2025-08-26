@@ -428,7 +428,8 @@ export default class MainScene extends Phaser.Scene {
     _scheduleAutoPickup() {
         this._cancelAutoPickup();
         this._autoPickupTimer = this.time.delayedCall(2000, () => {
-            if (this.isCharging || !this.input.activePointer.isDown) return;
+            if (this.isCharging || !this.input.activePointer.rightButtonDown())
+                return;
             this._autoPickupActive = true;
             this._autoPickupEvent = this.time.addEvent({
                 delay: 200,
@@ -452,29 +453,39 @@ export default class MainScene extends Phaser.Scene {
 
     _attemptAutoPickup() {
         if (!this._autoPickupActive) return;
-        if (this.isCharging || !this.input.activePointer.isDown) {
+        if (this.isCharging || !this.input.activePointer.rightButtonDown()) {
             this._cancelAutoPickup();
             return;
         }
-        const pointer = this.input.activePointer;
-        const hits = this.input.manager.hitTest(
-            pointer,
-            this.droppedItems.getChildren(),
-            this.cameras.main,
-        );
-        for (let i = 0; i < hits.length; i++) {
-            const item = hits[i];
+        const ptr = this.input.activePointer;
+        const px = ptr.worldX;
+        const py = ptr.worldY;
+        const pickupRange = 40;
+        const pickupRangeSq = pickupRange * pickupRange;
+        const items = this.droppedItems.getChildren();
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (!item.active) continue;
+            if (!Phaser.Geom.Rectangle.Contains(item.getBounds(), px, py))
+                continue;
+            const dx = this.player.x - item.x;
+            const dy = this.player.y - item.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 > pickupRangeSq) continue;
             if (this._pickupItem(item)) break;
         }
 
-        const resourceHits = this.input.manager.hitTest(
-            pointer,
-            this.resources.getChildren(),
-            this.cameras.main,
-        );
-        for (let i = 0; i < resourceHits.length; i++) {
-            const res = resourceHits[i];
-            res.emit?.('pointerdown', this._autoPickupPointer);
+        const resources = this.resources.getChildren();
+        for (let i = 0; i < resources.length; i++) {
+            const res = resources[i];
+            if (!res.active) continue;
+            if (!Phaser.Geom.Rectangle.Contains(res.getBounds(), px, py))
+                continue;
+            const dx = this.player.x - res.x;
+            const dy = this.player.y - res.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 > pickupRangeSq) continue;
+            res.emit('pointerdown', this._autoPickupPointer);
             if (!res.active) break;
         }
     }
