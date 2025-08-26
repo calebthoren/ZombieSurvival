@@ -5,6 +5,7 @@
 // - Melee cones draw as time-synced thin slices. Batch size (1 or 2) is configurable.
 
 import { ITEM_DB } from '../data/itemDatabase.js';
+import { CHUNK_WIDTH, CHUNK_HEIGHT } from './worldGen/ChunkManager.js';
 
 const DevTools = {
     // ─────────────────────────────────────────────────────────────
@@ -22,7 +23,10 @@ const DevTools = {
         meleeSliceBatch: 1,
 
         // Global game speed (0..10, 1 = normal)
-        timeScale: 1
+        timeScale: 1,
+
+        // Toggle chunk boundary overlay
+        showChunkBounds: false
     },
 
     _appliedTimeScale: 1,
@@ -39,6 +43,8 @@ const DevTools = {
     _lastFastDraw: 0,
     _lastSlowDraw: 0,
     _lastScene: null,
+    _chunkGfx: null,
+    _chunkScene: null,
 
     // Public helpers used by scenes
     isPlayerInvisible() { return !!this.cheats.invisible; },
@@ -80,12 +86,14 @@ const DevTools = {
         this.cheats.noCooldown     = false;
         this.cheats.meleeSliceBatch = 1;
         this.cheats.timeScale       = 1;
+        this.cheats.showChunkBounds = false;
         this._enemySpawnPrefs = null;
         this._itemSpawnPrefs  = null;
         // Re-apply hitbox visibility immediately (hides layers if they were on)
         try { this.applyHitboxCheat(scene || this._lastScene); } catch {}
         // Reset global game speed
         try { this.setTimeScale(1, (scene || this._lastScene)?.game); } catch {}
+        try { this.toggleChunkBounds(false, scene || this._chunkScene); } catch {}
     },
 
     // Public API: change between 1 or 2 slices per tick at runtime
@@ -223,6 +231,59 @@ const DevTools = {
         if (now - this._lastSlowDraw >= this._SLOW_MS) {
             this._drawSlow(scene);
             this._lastSlowDraw = now;
+        }
+    },
+
+    toggleChunkBounds(value, scene) {
+        if (value == null) {
+            this.cheats.showChunkBounds = !this.cheats.showChunkBounds;
+        } else {
+            this.cheats.showChunkBounds = !!value;
+        }
+        if (scene) this._chunkScene = scene;
+        const sc = this._chunkScene;
+        if (!sc) return;
+
+        if (this.cheats.showChunkBounds) {
+            if (!this._chunkGfx || this._chunkGfx.scene !== sc) {
+                if (this._chunkGfx) {
+                    try { this._chunkGfx.destroy(); } catch {}
+                }
+                this._chunkGfx = sc.add.graphics();
+                this._chunkGfx.setDepth(9999);
+            } else {
+                this._chunkGfx.clear();
+                this._chunkGfx.setVisible(true);
+            }
+            sc.events.on('postupdate', this._drawChunkBounds, this);
+            this._drawChunkBounds();
+        } else {
+            sc.events.off('postupdate', this._drawChunkBounds, this);
+            if (this._chunkGfx) {
+                this._chunkGfx.clear();
+                this._chunkGfx.setVisible(false);
+            }
+        }
+    },
+
+    _drawChunkBounds() {
+        if (!this.cheats.showChunkBounds || !this._chunkScene || !this._chunkGfx) return;
+        const scene = this._chunkScene;
+        const cam = scene.cameras?.main;
+        if (!cam) return;
+        const view = cam.worldView;
+        const startX = Math.floor(view.x / CHUNK_WIDTH) * CHUNK_WIDTH;
+        const endX = Math.ceil((view.x + view.width) / CHUNK_WIDTH) * CHUNK_WIDTH;
+        const startY = Math.floor(view.y / CHUNK_HEIGHT) * CHUNK_HEIGHT;
+        const endY = Math.ceil((view.y + view.height) / CHUNK_HEIGHT) * CHUNK_HEIGHT;
+        const gfx = this._chunkGfx;
+        gfx.clear();
+        gfx.lineStyle(1, 0x00ff00, 0.5);
+        for (let x = startX; x <= endX; x += CHUNK_WIDTH) {
+            gfx.lineBetween(x, startY, x, endY);
+        }
+        for (let y = startY; y <= endY; y += CHUNK_HEIGHT) {
+            gfx.lineBetween(startX, y, endX, y);
         }
     },
 

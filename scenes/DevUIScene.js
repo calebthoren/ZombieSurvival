@@ -133,6 +133,7 @@ export default class DevUIScene extends Phaser.Scene {
         let y = 0;
         y = this._sectionTitle('Cheats', y);
         y = this._rowToggle('Show Hitboxes', () => DevTools.cheats.showHitboxes, v => DevTools.setShowHitboxes(v), y);
+        y = this._rowToggle('Show Chunk Bounds', () => DevTools.cheats.showChunkBounds, v => DevTools.toggleChunkBounds(v, this.scene.get('MainScene')), y);
         y = this._rowToggle('Invisible',      () => DevTools.cheats.invisible,    v => DevTools.cheats.invisible = v, y);
         y = this._rowToggle('Infinite Health',() => DevTools.cheats.invincible,   v => {
             DevTools.cheats.invincible = v;
@@ -179,9 +180,11 @@ export default class DevUIScene extends Phaser.Scene {
             if (!consumed) this._scrollBy(dy); // otherwise scroll the whole panel
         });
 
-        // Make sure hitbox render and game speed react immediately
-        DevTools.applyHitboxCheat(this.scene.get('MainScene'));
+        // Make sure hitbox render, chunk bounds, and game speed react immediately
+        const mainScene = this.scene.get('MainScene');
+        DevTools.applyHitboxCheat(mainScene);
         DevTools.applyTimeScale(this);
+        DevTools.toggleChunkBounds(DevTools.cheats.showChunkBounds, mainScene);
     }
 
     // ---------- Section builders ----------
