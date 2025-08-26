@@ -45,6 +45,7 @@ export default class MainScene extends Phaser.Scene {
         this._autoPickupTimer = null;
         this._autoPickupEvent = null;
         this._autoPickupActive = false;
+        this._autoPickupPointer = { rightButtonDown: () => true };
     }
 
     preload() {
@@ -464,6 +465,17 @@ export default class MainScene extends Phaser.Scene {
         for (let i = 0; i < hits.length; i++) {
             const item = hits[i];
             if (this._pickupItem(item)) break;
+        }
+
+        const resourceHits = this.input.manager.hitTest(
+            pointer,
+            this.resources.getChildren(),
+            this.cameras.main,
+        );
+        for (let i = 0; i < resourceHits.length; i++) {
+            const res = resourceHits[i];
+            res.emit?.('pointerdown', this._autoPickupPointer);
+            if (!res.active) break;
         }
     }
 
