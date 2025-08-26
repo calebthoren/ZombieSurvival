@@ -223,7 +223,7 @@ export default class MainScene extends Phaser.Scene {
             maxSize: 32,
         });
         this.meleeHits = this.physics.add.group();
-        this.resources = this.physics.add.group();
+        this.resources = this.physics.add.staticGroup();
         this.droppedItems = this.add.group();
         this._dropCleanupEvent = this.time.addEvent({
             delay: 1000,
