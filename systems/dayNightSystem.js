@@ -32,6 +32,7 @@ export default function createDayNightSystem(scene) {
         }
         scene.waveNumber = 0;
         scheduleNightWave();
+        scheduleNightTrickle();
         updateTimeUi();
     }
 
@@ -55,6 +56,32 @@ export default function createDayNightSystem(scene) {
                     scene.combat.spawnZombie(id);
                 }
                 scheduleDaySpawn();
+            },
+        });
+    }
+
+    function scheduleNightTrickle() {
+        const nightCfg = WORLD_GEN.spawns.zombie.nightTrickle;
+        const delay = Phaser.Math.Between(
+            nightCfg.minDelayMs,
+            nightCfg.maxDelayMs,
+        );
+        if (scene.spawnZombieTimer) {
+            scene.spawnZombieTimer.remove(false);
+            scene.spawnZombieTimer = null;
+        }
+        scene.spawnZombieTimer = scene.time.addEvent({
+            delay,
+            loop: false,
+            callback: () => {
+                if (scene.phase !== 'night' || scene.isGameOver) return;
+                if (Math.random() < nightCfg.chance) {
+                    const types =
+                        scene.combat.getEligibleZombieTypesForPhase('night');
+                    const id = scene.combat.pickZombieTypeWeighted(types);
+                    scene.combat.spawnZombie(id);
+                }
+                scheduleNightTrickle();
             },
         });
     }
@@ -158,6 +185,7 @@ export default function createDayNightSystem(scene) {
         startDay,
         startNight,
         scheduleDaySpawn,
+        scheduleNightTrickle,
         scheduleNightWave,
         getPhaseElapsed,
         getPhaseDuration,
