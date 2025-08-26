@@ -96,3 +96,30 @@ test('fireRangedWeapon scales velocity and lifetime with time scale', () => {
     assert.equal(Math.round(fast.velMag), 200);
 
 });
+
+test('fireProjectile scales velocity and lifetime with time scale', () => {
+    const run = (scale) => {
+        DevTools.cheats.timeScale = scale;
+        const calls = [];
+        const scene = createStubScene(calls);
+        const combat = createCombatSystem(scene);
+        const pointer = { worldX: 100, worldY: 0 };
+        combat.fireProjectile(pointer, 'rock', {
+            damage: 1,
+            knockback: 0,
+            speed: 100,
+            travel: 100,
+        });
+        const lifetime = calls[0];
+        const velMag = Math.hypot(scene.bullet.vx, scene.bullet.vy);
+        return { lifetime, velMag };
+    };
+
+    const slow = run(0.5);
+    assert.equal(slow.lifetime, 2000);
+    assert.equal(Math.round(slow.velMag), 50);
+
+    const fast = run(2);
+    assert.equal(fast.lifetime, 500);
+    assert.equal(Math.round(fast.velMag), 200);
+});
