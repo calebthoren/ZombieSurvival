@@ -8,8 +8,8 @@ export const WORLD_GEN = {
   // World bounds / scale (future)
   // -----------------------------
   world: {
-    width: 1200,   // logical world width (px). You can expand later.
-    height: 900,   // logical world height (px).
+    width: 8000,   // logical world width (px). You can expand later.
+    height: 8000,  // logical world height (px).
   },
 
   // -----------------------------

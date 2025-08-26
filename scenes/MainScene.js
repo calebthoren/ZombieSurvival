@@ -1,5 +1,6 @@
 // scenes/MainScene.js
 import { WORLD_GEN } from '../data/worldGenConfig.js';
+import ChunkManager from '../systems/worldGen/ChunkManager.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
 import DevTools from '../systems/DevTools.js';
@@ -138,6 +139,11 @@ export default class MainScene extends Phaser.Scene {
             .setDepth(900)
             .setCollideWorldBounds(true);
 
+        this.physics.world.setBounds(0, 0, WORLD_GEN.world.width, WORLD_GEN.world.height);
+        this.cameras.main
+            .setBounds(0, 0, WORLD_GEN.world.width, WORLD_GEN.world.height)
+            .startFollow(this.player, true);
+
         this.player._speedMult = 1;
         this.player._inBush = false;
 
@@ -231,8 +237,7 @@ export default class MainScene extends Phaser.Scene {
             this._dropCleanupEvent?.remove(false);
         });
 
-        // Spawn resources from WORLD_GEN (all resource groups)
-        this.spawnAllResources();
+        this.chunkManager = new ChunkManager(this, this.player);
 
         // Physics interactions
         this.physics.add.overlap(
@@ -345,9 +350,6 @@ export default class MainScene extends Phaser.Scene {
     // ==========================
     // Resource spawning (DB-driven)
     // ==========================
-    spawnAllResources() {
-        return this.resourceSystem.spawnAllResources();
-    }
 
     addItemToInventory(id, qty = 1, _where = 'inventory') {
         const inv = this.uiScene?.inventory;
