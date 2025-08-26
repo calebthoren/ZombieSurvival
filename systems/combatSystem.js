@@ -139,6 +139,65 @@ export default function createCombatSystem(scene) {
     }
 
     // ----- Ranged Weapons -----
+    function fireProjectile(pointer, textureKey, cfg) {
+        if (!pointer || !textureKey) return;
+        const damage = cfg?.damage ?? 0;
+        const knockback = cfg?.knockback ?? 0;
+        const speed = cfg?.speed ?? 0;
+        const travel = cfg?.travel ?? 0;
+        const angle = Phaser.Math.Angle.Between(
+            scene.player.x,
+            scene.player.y,
+            pointer.worldX,
+            pointer.worldY,
+        );
+        const bullet =
+            scene.bullets.get(
+                scene.player.x,
+                scene.player.y,
+                textureKey,
+            ) ||
+            scene.physics.add.image(
+                scene.player.x,
+                scene.player.y,
+                textureKey,
+            );
+        if (!bullet) return;
+        if (!bullet.body) scene.physics.add.existing(bullet);
+        bullet.setActive(true).setVisible(true);
+        bullet.body.setAllowGravity(false);
+        bullet.setDepth(600);
+        bullet.setScale(0.4);
+        bullet.setSize(8, 8);
+        bullet.setData('damage', Math.max(0, Math.round(damage)));
+        bullet.setData('knockback', Math.max(0, knockback));
+        const scale = DevTools.cheats.timeScale || 1;
+        const v = scene.physics.velocityFromRotation(angle, speed * scale);
+        bullet.setVelocity(v.x, v.y);
+        bullet.setRotation(angle);
+        const lifetimeMs = Math.max(
+            1,
+            Math.floor((travel / Math.max(1, speed)) * 1000 / scale),
+        );
+        scene.time.delayedCall(lifetimeMs, () => {
+            if (bullet.active && bullet.destroy) bullet.destroy();
+        });
+        scene.physics.add.collider(
+            bullet,
+            scene.resources,
+            (bb, r) => {
+                if (bb && bb.destroy) bb.destroy();
+            },
+            (_b, r) =>
+                !!(
+                    r &&
+                    typeof r.getData === 'function' &&
+                    r.getData('blocking') === true
+                ),
+            scene,
+        );
+    }
+
     function fireRangedWeapon(pointer, wpn, chargePercent) {
         const equipped = scene.uiScene?.inventory?.getEquipped?.();
         const ammoChoice =
@@ -208,57 +267,13 @@ export default function createCombatSystem(scene) {
         if (DevTools.shouldConsumeAmmo()) {
             scene.uiScene?.inventory?.consumeAmmo?.(ammoChoice.ammoId, 1);
         }
-        const angle = Phaser.Math.Angle.Between(
-            scene.player.x,
-            scene.player.y,
-            pointer.worldX,
-            pointer.worldY,
-        );
-        const bullet =
-            scene.bullets.get(
-                scene.player.x,
-                scene.player.y,
-                ammoChoice.ammoId,
-            ) ||
-            scene.physics.add.image(
-                scene.player.x,
-                scene.player.y,
-                ammoChoice.ammoId,
-            );
-        if (!bullet) return;
-        if (!bullet.body) scene.physics.add.existing(bullet);
-        bullet.setActive(true).setVisible(true);
-        bullet.body.setAllowGravity(false);
-        bullet.setDepth(600);
-        bullet.setScale(0.4);
-        bullet.setSize(8, 8);
-        bullet.setData('damage', Math.max(0, Math.round(shotDmg)));
-        bullet.setData('knockback', Math.max(0, shotKb));
-        const scale = DevTools.cheats.timeScale || 1;
-        const v = scene.physics.velocityFromRotation(angle, speed * scale);
-        bullet.setVelocity(v.x, v.y);
-        bullet.setRotation(angle);
-        const lifetimeMs = Math.max(
-            1,
-            Math.floor((travel / Math.max(1, speed)) * 1000 / scale),
-        );
-        scene.time.delayedCall(lifetimeMs, () => {
-            if (bullet.active && bullet.destroy) bullet.destroy();
+        fireProjectile(pointer, ammoChoice.ammoId, {
+            damage: shotDmg,
+            knockback: shotKb,
+            speed,
+            travel,
         });
-        scene.physics.add.collider(
-            bullet,
-            scene.resources,
-            (bb, r) => {
-                if (bb && bb.destroy) bb.destroy();
-            },
-            (_b, r) =>
-                !!(
-                    r &&
-                    typeof r.getData === 'function' &&
-                    r.getData('blocking') === true
-                ),
-            scene,
-        );
+        const scale = DevTools.cheats.timeScale || 1;
         const baseCd = wpn?.fireCooldownMs ?? 0;
         const cdMs =
             lowStamina && typeof st.lowCooldownMultiplier === 'number'
@@ -274,6 +289,18 @@ export default function createCombatSystem(scene) {
             });
         }
         scene.uiScene?.events?.emit('weapon:chargeEnd');
+    }
+
+    function throwRock(pointer) {
+        const damage = Phaser.Math.Between(1, 3);
+        const travel = Phaser.Math.Between(50, 100);
+        const speed = 300;
+        fireProjectile(pointer, 'slingshot_rock', {
+            damage,
+            knockback: 0,
+            speed,
+            travel,
+        });
     }
 
     // ----- Melee Weapons -----
@@ -664,7 +691,9 @@ export default function createCombatSystem(scene) {
         handleMeleeHit,
         handleProjectileHit,
         handlePlayerZombieCollision,
+        fireProjectile,
         fireRangedWeapon,
+        throwRock,
         swingBat,
         spawnZombie,
         getEligibleZombieTypesForPhase,
