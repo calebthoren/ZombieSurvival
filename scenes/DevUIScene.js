@@ -428,6 +428,8 @@ export default class DevUIScene extends Phaser.Scene {
             const post = this.add.text(2, 0, '', UI.font).setDepth(4);
             rowC.add([hlRect, pre, mid, post]);
             rowC.setSize(listW - 4, rowH);
+            this._typeRows.push(rowC);
+            this._typeDD.add(rowC);
             rowC.setInteractive(new Phaser.Geom.Rectangle(0, 0, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
             rowC._hlRect = hlRect; rowC._pre = pre; rowC._mid = mid; rowC._post = post;
             rowC._index = i;
@@ -440,9 +442,6 @@ export default class DevUIScene extends Phaser.Scene {
                 const sel = this._visibleDropdownItem(i);
                 if (sel) this._confirmTypeSelection(sel.name, true);
             });
-
-            this._typeRows.push(rowC);
-            this._typeDD.add(rowC);
         }
 
         // Bounds used for wheel & outside-click
@@ -539,6 +538,8 @@ export default class DevUIScene extends Phaser.Scene {
             const post = this.add.text(2, 0, '', UI.font).setDepth(4);
             rowC.add([hlRect, pre, mid, post]);
             rowC.setSize(listW - 4, rowH);
+            this._itemTypeRows.push(rowC);
+            this._itemTypeDD.add(rowC);
             rowC.setInteractive(new Phaser.Geom.Rectangle(0, 0, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
             rowC._hlRect = hlRect; rowC._pre = pre; rowC._mid = mid; rowC._post = post;
             rowC._index = i;
@@ -551,9 +552,6 @@ export default class DevUIScene extends Phaser.Scene {
                 const sel = this._visibleItemDropdownItem(i);
                 if (sel) this._confirmItemSelection(sel.name, true);
             });
-
-            this._itemTypeRows.push(rowC);
-            this._itemTypeDD.add(rowC);
         }
 
         this._itemDDBounds = new Phaser.Geom.Rectangle(listX, listYBelow, listW, dropH);
