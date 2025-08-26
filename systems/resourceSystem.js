@@ -157,6 +157,31 @@ export default function createResourceSystem(scene) {
             if (trunk.body.setAllowGravity) trunk.body.setAllowGravity(false);
             if (trunk.body.setImmovable) trunk.body.setImmovable(true);
             if ('moves' in trunk.body) trunk.body.moves = false;
+            const bodyDef = def.world?.body;
+            if (bodyDef) {
+                const scaleBody = bodyDef.useScale ? scale : 1;
+                let anchorX = 0;
+                let anchorY = 0;
+                if (bodyDef.anchor === 'bottomCenter') {
+                    anchorX = trunk.width * scale * 0.5;
+                    anchorY = trunk.height * scale;
+                } else if (bodyDef.anchor === 'topCenter') {
+                    anchorX = trunk.width * scale * 0.5;
+                    anchorY = 0;
+                }
+                const cx = anchorX + (bodyDef.offsetX || 0) * scaleBody;
+                const cy = anchorY + (bodyDef.offsetY || 0) * scaleBody;
+                if (bodyDef.kind === 'circle' && trunk.body.setCircle) {
+                    const radius = bodyDef.radius * scaleBody;
+                    trunk.body.setCircle(radius, cx - radius, cy - radius);
+                } else if (bodyDef.kind === 'rect') {
+                    const width = bodyDef.width * scaleBody;
+                    const height = bodyDef.height * scaleBody;
+                    if (trunk.body.setSize) trunk.body.setSize(width, height);
+                    if (trunk.body.setOffset)
+                        trunk.body.setOffset(cx - width / 2, cy - height / 2);
+                }
+            }
         }
 
         if (def.collectible) {
