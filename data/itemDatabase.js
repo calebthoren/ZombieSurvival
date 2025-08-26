@@ -182,54 +182,87 @@ export const ITEM_DB = {
   },
 
   //-------------------------------
-  // Resources
+  // Materials / throwable rocks
   //-------------------------------
 
   [ITEM_IDS.ROCK1A]: {
     id: ITEM_IDS.ROCK1A,
     name: 'Small Rock',
-    type: ITEM_TYPES.RESOURCE,
+    type: ITEM_TYPES.AMMO,
     stackable: true,
     maxStack: 99,
 
     icon: { textureKey: 'rock1A', scale: 1.0, ox: 0, oy: 0 },
     world: { textureKey: 'rock1A', scale: .65 },
 
+    showCountOnIcon: true,
     sounds: { pickup: 'sfx_pickup_small' },
 
-    tags: ['resource', 'rock'],
+    ammo: {
+      minDamage: 1,
+      maxDamage: 3,
+      minRange: 50,
+      maxRange: 100,
+      maxChargeMs: 2000,
+      speed: 300,
+      knockback: 0,
+    },
+
+    tags: ['ammo', 'material', 'rock'],
     meta: { rarity: 'common' },
   },
 
   [ITEM_IDS.ROCK2A]: {
     id: ITEM_IDS.ROCK2A,
     name: 'Small Grassy Rock',
-    type: ITEM_TYPES.RESOURCE,
+    type: ITEM_TYPES.AMMO,
     stackable: true,
     maxStack: 99,
 
     icon: { textureKey: 'rock2A', scale: 1.0, ox: 0, oy: 0 },
     world: { textureKey: 'rock2A', scale: .65 },
 
+    showCountOnIcon: true,
     sounds: { pickup: 'sfx_pickup_small' },
 
-    tags: ['resource', 'rock'],
+    ammo: {
+      minDamage: 1,
+      maxDamage: 3,
+      minRange: 50,
+      maxRange: 100,
+      maxChargeMs: 2000,
+      speed: 300,
+      knockback: 0,
+    },
+
+    tags: ['ammo', 'material', 'rock'],
     meta: { rarity: 'common' },
   },
 
   [ITEM_IDS.ROCK5A]: {
     id: ITEM_IDS.ROCK5A,
     name: 'Small Marble Rock',
-    type: ITEM_TYPES.RESOURCE,
+    type: ITEM_TYPES.AMMO,
     stackable: true,
     maxStack: 99,
 
     icon: { textureKey: 'rock5A', scale: 1.0, ox: 0, oy: 0 },
     world: { textureKey: 'rock5A', scale: .65 },
 
+    showCountOnIcon: true,
     sounds: { pickup: 'sfx_pickup_small' },
 
-    tags: ['resource', 'rock'],
+    ammo: {
+      minDamage: 1,
+      maxDamage: 3,
+      minRange: 50,
+      maxRange: 100,
+      maxChargeMs: 2000,
+      speed: 300,
+      knockback: 0,
+    },
+
+    tags: ['ammo', 'material', 'rock'],
     meta: { rarity: 'common' },
   },
 
@@ -237,6 +270,11 @@ export const ITEM_DB = {
 
 export const GROUPS = {
   weapons: [ITEM_IDS.SLINGSHOT, ITEM_IDS.CRUDE_BAT],
-  ammo: [ITEM_IDS.SLINGSHOT_ROCK ],
-  resources: [ITEM_IDS.ROCK1A, ITEM_IDS.ROCK2A, ITEM_IDS.ROCK5A],
+  ammo: [
+    ITEM_IDS.SLINGSHOT_ROCK,
+    ITEM_IDS.ROCK1A,
+    ITEM_IDS.ROCK2A,
+    ITEM_IDS.ROCK5A,
+  ],
+  materials: [ITEM_IDS.ROCK1A, ITEM_IDS.ROCK2A, ITEM_IDS.ROCK5A],
 };

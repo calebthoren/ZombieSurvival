@@ -67,6 +67,23 @@ export default function createInputSystem(scene) {
             scene._updateEquippedItemGhost();
             return;
         }
+
+        if (def?.ammo && def.tags?.includes('rock')) {
+            const now = scene.time.now;
+            scene.isCharging = true;
+            scene.chargeStart = now;
+            const scale = DevTools.cheats.timeScale || 1;
+            const applied = scale <= 0 ? 0 : 1 / scale;
+            scene.chargeMaxMs = Math.max(
+                1,
+                Math.floor((def.ammo?.maxChargeMs ?? 2000) * applied),
+            );
+            scene._chargingItemId = equipped.id;
+            scene.uiScene?.events?.emit('weapon:charge', 0);
+            scene._createEquippedItemGhost?.(equipped.id);
+            scene._updateEquippedItemGhost();
+            return;
+        }
     }
 
     function onPointerUp(pointer) {
@@ -101,6 +118,11 @@ export default function createInputSystem(scene) {
 
         if (cat === 'melee' && eq.id === 'crude_bat') {
             scene.combat.swingBat(pointer, def.weapon || {}, charge);
+            return;
+        }
+
+        if (def?.ammo && def.tags?.includes('rock')) {
+            scene.combat.throwRock(pointer, eq.id, charge);
             return;
         }
     }
