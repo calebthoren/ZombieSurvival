@@ -87,9 +87,17 @@ export default function createResourceSystem(scene) {
         const variants = Array.isArray(groupCfg?.variants) ? groupCfg.variants : null;
         if (!variants || variants.length === 0) return [];
         const totalWeight = variants.reduce((s, v) => s + (v.weight || 0), 0);
-        const count = groupCfg.maxActive || 0;
+        const totalChunks =
+            (WORLD_GEN.world.width / CHUNK_WIDTH) *
+            (WORLD_GEN.world.height / CHUNK_HEIGHT);
+        const countPerChunk = Math.max(
+            1,
+            Math.floor((groupCfg.maxActive || 0) / totalChunks),
+        );
+        const minSpacing = groupCfg.minSpacing || 0;
+        const minSpacingSq = minSpacing * minSpacing;
         const results = [];
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < countPerChunk; i++) {
             let r = rng.frac() * totalWeight;
             let id = variants[0].id;
             for (const v of variants) {
@@ -101,8 +109,27 @@ export default function createResourceSystem(scene) {
             }
             const def = RESOURCE_DB[id];
             if (!def) continue;
-            const x = rng.between(minX, maxX);
-            const y = rng.between(minY, maxY);
+            let x = 0;
+            let y = 0;
+            let valid = false;
+            for (let attempt = 0; attempt < 4 && !valid; attempt++) {
+                x = rng.between(minX, maxX);
+                y = rng.between(minY, maxY);
+                valid = true;
+                if (minSpacing > 0) {
+                    const existing = scene.resources.getChildren();
+                    for (let j = 0; j < existing.length; j++) {
+                        const obj = existing[j];
+                        const dx = obj.x - x;
+                        const dy = obj.y - y;
+                        if (dx * dx + dy * dy < minSpacingSq) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!valid) continue;
             const obj = _createResource(id, def, x, y);
             obj.setData('chunkX', chunkX);
             obj.setData('chunkY', chunkY);
