@@ -2,7 +2,7 @@
 // Tracks player-centric chunks and emits activation/deactivation events.
 export const CHUNK_WIDTH = 400;
 export const CHUNK_HEIGHT = 300;
-const ACTIVE_RADIUS = 2; // chunks around player kept active
+const ACTIVE_RADIUS = 1; // chunks around player kept active
 
 export default class ChunkManager {
     constructor(scene, player) {
