@@ -436,6 +436,7 @@ export default class DevUIScene extends Phaser.Scene {
             this._typeRows.push(rowC);
             this._typeDD.add(rowC);
             rowC.setInteractive(new Phaser.Geom.Rectangle(0, 0, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
+            rowC.input.useHandCursor = true;
             rowC._hlRect = hlRect; rowC._pre = pre; rowC._mid = mid; rowC._post = post;
             rowC._index = i;
 
@@ -621,7 +622,17 @@ export default class DevUIScene extends Phaser.Scene {
 
         // ENTER confirms current editor
         if (ev.key === 'Enter') {
-            if (this._editing && this._editing.stopEdit) this._editing.stopEdit(true);
+            if (this._editing === this._typeBox) {
+                const sel = this._visibleDropdownItem(this._enemy.resHL);
+                if (sel) this._confirmTypeSelection(sel.name, true);
+                this._editing.stopEdit(false);
+            } else if (this._editing === this._itemTypeBox) {
+                const sel = this._visibleItemDropdownItem(this._item.resHL);
+                if (sel) this._confirmItemSelection(sel.name, true);
+                this._editing.stopEdit(false);
+            } else if (this._editing && this._editing.stopEdit) {
+                this._editing.stopEdit(true);
+            }
             return;
         }
 
@@ -658,16 +669,17 @@ export default class DevUIScene extends Phaser.Scene {
             }
             if (/^[0-9]$/.test(ev.key)) {
                 const max = t.text.includes('.') ? 4 : 3;
-                if (t.text.length < max) {
+                if (t.text.length < max || this._editing === this._itemCountText) {
                     const candidate = t.text + ev.key;
-                    let allow = true;
                     if (this._editing === this._gameSpeedText) {
-                        allow = parseFloat(candidate) <= 10;
+                        if (parseFloat(candidate) <= 10) t.setText(candidate);
                     } else if (this._editing === this._itemCountText) {
                         const maxStack = this._item?.maxStack || 1;
-                        allow = parseInt(candidate, 10) <= maxStack;
+                        const num = parseInt(candidate, 10);
+                        t.setText(num > maxStack ? String(maxStack) : candidate);
+                    } else if (t.text.length < max) {
+                        t.setText(candidate);
                     }
-                    if (allow) t.setText(candidate);
                 }
                 return;
             }
