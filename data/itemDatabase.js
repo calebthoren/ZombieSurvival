@@ -54,39 +54,41 @@ export const ITEM_DB = {
 
     // data/itemDatabase.js — inside ITEM_DB[ITEM_IDS.SLINGSHOT]
         weapon: {
-      category: WEAPON_CATEGORIES.RANGED,
-      usesAmmo: true,
-      compatibleAmmo: [ITEM_IDS.SLINGSHOT_ROCK],
+            category: WEAPON_CATEGORIES.RANGED,
+            usesAmmo: true,
+            compatibleAmmo: [ITEM_IDS.SLINGSHOT_ROCK],
 
-      // damage/knockback
-      damage: 5,
-      knockback: 5,
+            // damage/knockback
+            minDamage: 5,
+            maxDamage: 5,
+            knockback: 5,
 
-      // Charging support
-      canCharge: true,
-      maxChargeDamage: 10,
-      maxChargeKnockback: 8,
+            // Charging support
+            canCharge: true,
+            chargeMaxMs: 1500,
+            maxChargeDamage: 10,
+            maxChargeKnockback: 8,
 
-      // Tuning
-      projectileTexture: 'slingshot_rock',
-      projectileFrame: null,
-      projectileSpeed: 520,
-      minRange: 250,
-      maxRange: 500,
-      spread: 3,
-      muzzleOffset: { x: 16, y: 6 },
-      fireCooldownMs: 1000, // ranged fire cooldown (ms)
+            // Tuning
+            projectileTexture: 'slingshot_rock',
+            projectileFrame: null,
+            projectileSpeed: 520,
+            minRange: 250,
+            maxRange: 500,
+            spread: 3,
+            muzzleOffset: { x: 16, y: 6 },
+            fireCooldownMs: 1000, // ranged fire cooldown (ms)
 
-      // STAMINA + penalties when stamina is insufficient
-      stamina: {
-        baseCost: 5,             // at 0% charge
-        maxCost: 10,             // at 100% charge
-        poorChargeClamp: 0.15,   // when low stamin max charge is ~15%
-        lowSpeedMultiplier: 0.75,      // e.g., 25% slower when tired
-        lowCooldownMultiplier: 1.5,     // e.g., 1.0s → 1.5s when tired
-        lowRangeMultiplier: 0.6  // e.g., cut travel distance to 60%
-      },
-    },
+            // STAMINA + penalties when stamina is insufficient
+            stamina: {
+                baseCost: 5,             // at 0% charge
+                maxCost: 10,             // at 100% charge
+                poorChargeClamp: 0.15,   // when low stamin max charge is ~15%
+                lowSpeedMultiplier: 0.75,      // e.g., 25% slower when tired
+                lowCooldownMultiplier: 1.5,     // e.g., 1.0s → 1.5s when tired
+                lowRangeMultiplier: 0.6  // e.g., cut travel distance to 60%
+            },
+        },
 
 
 
@@ -112,35 +114,35 @@ export const ITEM_DB = {
 
     // data/itemDatabase.js — inside ITEM_DB[ITEM_IDS.CRUDE_BAT]
     weapon: {
-      category: WEAPON_CATEGORIES.MELEE,
-      usesAmmo: false,
+        category: WEAPON_CATEGORIES.MELEE,
+        usesAmmo: false,
 
-      // Damage & knockback
-      damage: 15,
-      knockback: 15,
+        // Damage & knockback
+        minDamage: 15,
+        maxDamage: 15,
+        knockback: 15,
 
-      // Charging support
-      canCharge: true,
-      chargeMaxMs: 1000, 
-      maxChargeDamage: 20,
-      maxChargeKnockback: 25,
+        // Charging support
+        canCharge: true,
+        chargeMaxMs: 2000,
+        maxChargeDamage: 20,
+        maxChargeKnockback: 25,
 
-      // Swing tuning
-      swingDurationMs: 160,
-      swingCooldownMs: 100,
-      chargeMaxMs: 2000,
+        // Swing tuning
+        swingDurationMs: 160,
+        swingCooldownMs: 100,
 
-      // Hit shape/reach
-      range: 30,
-      radius: 22,
+        // Hit shape/reach
+        range: 30,
+        radius: 22,
 
-      // STAMINA + penalties when stamina is insufficient
-      stamina: {
-        cost: 15,
-        slowMultiplier: 6,
-        cooldownMultiplier: 12,
-        poorChargeClamp: 0.25,
-      },
+        // STAMINA + penalties when stamina is insufficient
+        stamina: {
+            cost: 15,
+            slowMultiplier: 6,
+            cooldownMultiplier: 12,
+            poorChargeClamp: 0.25,
+        },
     },
 
     sounds: {

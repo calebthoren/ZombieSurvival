@@ -7,6 +7,7 @@ globalThis.Phaser = {
     Math: {
         Clamp: (v, min, max) => Math.min(Math.max(v, min), max),
         Linear: (start, end, t) => start + (end - start) * t,
+        Between: (min, max) => min,
         Angle: {
             Between: (x1, y1, x2, y2) => Math.atan2(y2 - y1, x2 - x1),
         },
