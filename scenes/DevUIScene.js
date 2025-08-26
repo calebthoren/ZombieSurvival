@@ -655,7 +655,17 @@ export default class DevUIScene extends Phaser.Scene {
             }
             if (/^[0-9]$/.test(ev.key)) {
                 const max = t.text.includes('.') ? 4 : 3;
-                if (t.text.length < max) t.setText(t.text + ev.key);
+                if (t.text.length < max) {
+                    const candidate = t.text + ev.key;
+                    let allow = true;
+                    if (this._editing === this._gameSpeedText) {
+                        allow = parseFloat(candidate) <= 10;
+                    } else if (this._editing === this._itemCountText) {
+                        const maxStack = this._item?.maxStack || 1;
+                        allow = parseInt(candidate, 10) <= maxStack;
+                    }
+                    if (allow) t.setText(candidate);
+                }
                 return;
             }
             if (
@@ -663,7 +673,11 @@ export default class DevUIScene extends Phaser.Scene {
                 this._editing === this._gameSpeedText &&
                 !t.text.includes('.')
             ) {
-                if (t.text.length < 4) t.setText(t.text + '.');
+                const candidate = t.text + '.';
+                if (candidate.length < 4) {
+                    const num = parseFloat(candidate);
+                    if (!Number.isFinite(num) || num <= 10) t.setText(candidate);
+                }
             }
         }
     }
