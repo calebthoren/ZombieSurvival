@@ -17,6 +17,7 @@ const DevTools = {
         noAmmo:       false,
         noStamina:    false,
         noCooldown:   false,
+        showChunks:   false,
 
         // NEW: how many slices to draw per fast tick (1 or 2)
         meleeSliceBatch: 1,
@@ -35,7 +36,7 @@ const DevTools = {
     _MELEE_SUBDIV: 13,    // total thin wedges across the cone (odd looks good)
 
     // Pooled graphics layers per scene
-    _gfx: { enemies: null, attacks: null, resources: null, player: null },
+    _gfx: { enemies: null, attacks: null, resources: null, player: null, chunks: null },
     _lastFastDraw: 0,
     _lastSlowDraw: 0,
     _lastScene: null,
@@ -78,6 +79,7 @@ const DevTools = {
         this.cheats.noAmmo         = false;
         this.cheats.noStamina      = false;
         this.cheats.noCooldown     = false;
+        this.cheats.showChunks     = false;
         this.cheats.meleeSliceBatch = 1;
         this.cheats.timeScale       = 1;
         this._enemySpawnPrefs = null;
@@ -190,6 +192,12 @@ const DevTools = {
         if (this._lastScene) this.applyHitboxCheat(this._lastScene);
     },
 
+    setShowChunks(value, scene) {
+        this.cheats.showChunks = !!value;
+        if (scene) this._lastScene = scene;
+        if (this._lastScene) this.applyChunkDebug(this._lastScene);
+    },
+
     applyHitboxCheat(scene) {
         this._ensureLayers(scene);
         const vis = !!this.cheats.showHitboxes;
@@ -210,18 +218,29 @@ const DevTools = {
         this._lastScene = scene;
     },
 
+    applyChunkDebug(scene) {
+        this._ensureLayers(scene);
+        const vis = !!this.cheats.showChunks;
+        this._gfx.chunks.setVisible(vis);
+        if (!vis) this._gfx.chunks.clear();
+        this._lastScene = scene;
+    },
+
     // Call this once per frame from MainScene.update()
     tickHitboxDebug(scene) {
-        if (!this.cheats.showHitboxes) return;
+        const showHit = this.cheats.showHitboxes;
+        const showChunks = this.cheats.showChunks;
+        if (!showHit && !showChunks) return;
         this._ensureLayers(scene);
 
         const now = this.now(scene) | 0;
-        if (now - this._lastFastDraw >= this._FAST_MS) {
+        if (showHit && now - this._lastFastDraw >= this._FAST_MS) {
             this._drawFast(scene);
             this._lastFastDraw = now;
         }
         if (now - this._lastSlowDraw >= this._SLOW_MS) {
-            this._drawSlow(scene);
+            if (showHit) this._drawSlow(scene);
+            if (showChunks) this._drawChunks(scene);
             this._lastSlowDraw = now;
         }
     },
@@ -239,6 +258,7 @@ const DevTools = {
         }
 
         // Create pooled graphics (drawn above gameplay, below UI)
+        this._gfx.chunks    = scene.add.graphics().setDepth(993).setVisible(false);
         this._gfx.resources = scene.add.graphics().setDepth(994).setVisible(false);
         this._gfx.enemies   = scene.add.graphics().setDepth(995).setVisible(false);
         this._gfx.attacks   = scene.add.graphics().setDepth(996).setVisible(false);
@@ -263,6 +283,21 @@ const DevTools = {
     _drawSlow(scene) {
         // RESOURCES (yellow with 25% fill)
         this._drawResources(scene);
+    },
+
+    _drawChunks(scene) {
+        const g = this._gfx.chunks;
+        if (!g) return;
+        g.clear().lineStyle(1, 0x00ff00, 1); // green
+
+        const mgr = scene.chunkManager;
+        if (!mgr) return;
+        const { chunkWidth, chunkHeight } = mgr;
+        mgr.active.forEach((info) => {
+            const x = info.chunkX * chunkWidth;
+            const y = info.chunkY * chunkHeight;
+            g.strokeRect(x, y, chunkWidth, chunkHeight);
+        });
     },
 
     _drawEnemies(scene) {

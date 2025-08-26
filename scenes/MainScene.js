@@ -1,12 +1,13 @@
 // scenes/MainScene.js
-import { WORLD_GEN } from '../data/worldGenConfig.js';
+import { WORLD_GEN } from '../systems/worldGen/worldGenConfig.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
 import DevTools from '../systems/DevTools.js';
 import createCombatSystem from '../systems/combatSystem.js';
-import createDayNightSystem from '../systems/dayNightSystem.js';
+import createDayNightSystem from '../systems/worldGen/dayNightSystem.js';
 import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
+import ChunkManager from '../systems/worldGen/ChunkManager.js';
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -137,6 +138,51 @@ export default class MainScene extends Phaser.Scene {
             .setScale(0.5)
             .setDepth(900)
             .setCollideWorldBounds(true);
+
+        this.physics.world.setBounds(
+            0,
+            0,
+            WORLD_GEN.world.width,
+            WORLD_GEN.world.height,
+        );
+        this.cameras.main
+            .setBounds(0, 0, WORLD_GEN.world.width, WORLD_GEN.world.height)
+            .startFollow(this.player, true);
+
+        this.chunkManager = new ChunkManager(this);
+        this._chunkUpdate = () => this.chunkManager.update();
+        this.events.on('update', this._chunkUpdate);
+        this.events.once('shutdown', () => {
+            this.events.off('update', this._chunkUpdate);
+            this._chunkUpdate = null;
+        });
+
+        const onChunkActivate = ({ chunkX, chunkY, seed }) => {
+            const rng = ChunkManager.rng(seed);
+            const chance = 0.1;
+            if (rng() < chance) {
+                const cw = this.chunkManager.chunkWidth;
+                const ch = this.chunkManager.chunkHeight;
+                const x = chunkX * cw + Math.floor(rng() * cw);
+                const y = chunkY * ch + Math.floor(rng() * ch);
+                const z = this.combat.spawnZombie('walker', { x, y });
+                z.setData('chunkKey', `${chunkX},${chunkY}`);
+            }
+        };
+        const onChunkDeactivate = ({ chunkX, chunkY }) => {
+            const key = `${chunkX},${chunkY}`;
+            const zs = this.zombies.getChildren();
+            for (let i = 0; i < zs.length; i++) {
+                const z = zs[i];
+                if (z.getData('chunkKey') === key) z.destroy();
+            }
+        };
+        this.events.on('chunk:activate', onChunkActivate);
+        this.events.on('chunk:deactivate', onChunkDeactivate);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this.events.off('chunk:activate', onChunkActivate);
+            this.events.off('chunk:deactivate', onChunkDeactivate);
+        });
 
         this.player._speedMult = 1;
         this.player._inBush = false;

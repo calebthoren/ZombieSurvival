@@ -1,15 +1,15 @@
 // data/worldGenConfig.js
 // PURE DATA ONLY — no logic. Tunable world gen + day/night + spawn settings.
 
-import { RESOURCE_IDS } from './resourceDatabase.js';
+import { RESOURCE_IDS } from '../../data/resourceDatabase.js';
 
 export const WORLD_GEN = {
   // -----------------------------
   // World bounds / scale (future)
   // -----------------------------
   world: {
-    width: 1200,   // logical world width (px). You can expand later.
-    height: 900,   // logical world height (px).
+    width: 8000,   // logical world width (px). You can expand later.
+    height: 8000,   // logical world height (px).
   },
 
   // -----------------------------

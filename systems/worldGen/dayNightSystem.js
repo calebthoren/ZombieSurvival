@@ -1,7 +1,7 @@
 // systems/dayNightSystem.js
 // Day/Night cycle logic isolated from Phaser scene for reuse.
-import { WORLD_GEN } from '../data/worldGenConfig.js';
-import DevTools from './DevTools.js';
+import { WORLD_GEN } from './worldGenConfig.js';
+import DevTools from '../DevTools.js';
 
 export default function createDayNightSystem(scene) {
     // ----- Phase Transitions -----

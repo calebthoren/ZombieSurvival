@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import createDayNightSystem from '../../systems/dayNightSystem.js';
+import createDayNightSystem from '../../systems/worldGen/dayNightSystem.js';
 import DevTools from '../../systems/DevTools.js';
 
 globalThis.Phaser = {

@@ -133,6 +133,7 @@ export default class DevUIScene extends Phaser.Scene {
         let y = 0;
         y = this._sectionTitle('Cheats', y);
         y = this._rowToggle('Show Hitboxes', () => DevTools.cheats.showHitboxes, v => DevTools.setShowHitboxes(v), y);
+        y = this._rowToggle('Show Chunk Bounds', () => DevTools.cheats.showChunks, v => DevTools.setShowChunks(v), y);
         y = this._rowToggle('Invisible',      () => DevTools.cheats.invisible,    v => DevTools.cheats.invisible = v, y);
         y = this._rowToggle('Infinite Health',() => DevTools.cheats.invincible,   v => {
             DevTools.cheats.invincible = v;

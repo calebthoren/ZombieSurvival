@@ -1,10 +1,19 @@
 // systems/resourceSystem.js
 // Handles world resource spawning in a Phaser-agnostic way.
-import { WORLD_GEN } from '../data/worldGenConfig.js';
+import { WORLD_GEN } from './worldGen/worldGenConfig.js';
 import { DESIGN_RULES } from '../data/designRules.js';
 import { RESOURCE_DB } from '../data/resourceDatabase.js';
+import ChunkManager from './worldGen/ChunkManager.js';
 
 export default function createResourceSystem(scene) {
+    const chunkResources = new Map();
+
+    scene.events.on('chunk:activate', ({ chunkX, chunkY, seed }) => {
+        spawnResourcesInChunk(chunkX, chunkY, seed);
+    });
+    scene.events.on('chunk:deactivate', ({ chunkX, chunkY }) => {
+        clearChunkResources(chunkX, chunkY);
+    });
     // ----- Public API -----
     function spawnAllResources() {
         const all = WORLD_GEN?.spawns?.resources;
@@ -53,19 +62,51 @@ export default function createResourceSystem(scene) {
         }
     }
 
+    function spawnResourcesInChunk(chunkX, chunkY, seed) {
+        const all = WORLD_GEN?.spawns?.resources;
+        if (!all || !scene.chunkManager) return;
+        const { chunkWidth, chunkHeight } = scene.chunkManager;
+        const bounds = {
+            minX: chunkX * chunkWidth,
+            maxX: (chunkX + 1) * chunkWidth,
+            minY: chunkY * chunkHeight,
+            maxY: (chunkY + 1) * chunkHeight,
+        };
+        const rng = ChunkManager.rng(seed);
+        const list = [];
+        for (const [key, cfg] of Object.entries(all)) {
+            const created = _spawnResourceGroup(key, cfg, rng, bounds);
+            for (const obj of created) obj.setData('chunkKey', `${chunkX},${chunkY}`);
+            list.push(...created);
+        }
+        chunkResources.set(`${chunkX},${chunkY}`, list);
+    }
+
+    function clearChunkResources(chunkX, chunkY) {
+        const key = `${chunkX},${chunkY}`;
+        const list = chunkResources.get(key);
+        if (list) {
+            for (const obj of list) obj.destroy();
+            chunkResources.delete(key);
+        }
+    }
+
     // ----- Internal Helpers -----
-    function _spawnResourceGroup(groupKey, groupCfg) {
+    function _spawnResourceGroup(groupKey, groupCfg, rng = Math.random, bounds) {
         const variants = Array.isArray(groupCfg?.variants)
             ? groupCfg.variants
             : null;
-        if (!variants || variants.length === 0) return;
+        if (!variants || variants.length === 0) return [];
+
+        const created = [];
+
+        const between = (min, max) =>
+            Math.floor(rng() * (max - min + 1)) + min;
+        const floatBetween = (min, max) => rng() * (max - min) + min;
 
         const maxActive =
             groupCfg.maxActive ??
-            Phaser.Math.Between(
-                groupCfg.minCount ?? 8,
-                groupCfg.maxCount ?? 12,
-            );
+            between(groupCfg.minCount ?? 8, groupCfg.maxCount ?? 12);
         const minSpacing = groupCfg.minSpacing ?? 48;
         const respawnMin = groupCfg.respawnDelayMs?.min ?? 5000;
         const respawnMax = groupCfg.respawnDelayMs?.max ?? 7000;
@@ -73,12 +114,11 @@ export default function createResourceSystem(scene) {
         const clusterMax = groupCfg.clusterMax ?? 6;
         const totalWeight = variants.reduce((s, v) => s + (v.weight || 0), 0);
 
-        const w = scene.sys.game.config.width;
-        const h = scene.sys.game.config.height;
-        const minX = 0,
-            maxX = w,
-            minY = 0,
-            maxY = h;
+        const { width: w, height: h } = WORLD_GEN.world;
+        const minX = bounds?.minX ?? 0,
+            maxX = bounds?.maxX ?? w,
+            minY = bounds?.minY ?? 0,
+            maxY = bounds?.maxY ?? h;
 
         const tooClose = (x, y, w, h) => {
             const children = scene.resources.getChildren();
@@ -95,7 +135,7 @@ export default function createResourceSystem(scene) {
         };
 
         const pickVariantId = () => {
-            let r = Math.random() * totalWeight;
+            let r = rng() * totalWeight;
             for (let v of variants) {
                 r -= v.weight || 0;
                 if (r <= 0) return v.id;
@@ -382,7 +422,7 @@ export default function createResourceSystem(scene) {
                     }
                     trunk.destroy();
                     scene.time.delayedCall(
-                        Phaser.Math.Between(respawnMin, respawnMax),
+                        between(respawnMin, respawnMax),
                         () => {
                             if (scene.resources.countActive(true) < maxActive)
                                 spawnCluster();
@@ -390,6 +430,7 @@ export default function createResourceSystem(scene) {
                     );
                 });
             }
+            created.push(trunk);
         };
 
         const spawnCluster = () => {
@@ -401,7 +442,7 @@ export default function createResourceSystem(scene) {
                 0,
             );
             const pickBaseVariant = () => {
-                let r = Math.random() * baseTotalWeight;
+                let r = rng() * baseTotalWeight;
                 for (const v of baseVariants) {
                     r -= v.weight || 0;
                     if (r <= 0) return v.id;
@@ -425,8 +466,8 @@ export default function createResourceSystem(scene) {
                 y,
                 tries = 30;
             do {
-                x = Phaser.Math.Between(minX, maxX);
-                y = Phaser.Math.Between(minY, maxY);
+                x = between(minX, maxX);
+                y = between(minY, maxY);
                 tries--;
             } while (tries > 0 && tooClose(x, y, width, height));
             if (tries <= 0) return 0;
@@ -434,7 +475,7 @@ export default function createResourceSystem(scene) {
             createResourceAt(firstId, firstDef, x, y);
             let spawned = 1;
 
-            const clusterCount = Phaser.Math.Between(clusterMin, clusterMax);
+            const clusterCount = between(clusterMin, clusterMax);
             const radius =
                 groupCfg.clusterRadius ?? Math.max(width, height) * 1.1;
             for (
@@ -456,7 +497,7 @@ export default function createResourceSystem(scene) {
                     y2,
                     t2 = 10;
                 do {
-                    const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
+                    const ang = floatBetween(0, Math.PI * 2);
                     x2 = x + Math.cos(ang) * radius;
                     y2 = y + Math.sin(ang) * radius;
                     t2--;
@@ -475,6 +516,7 @@ export default function createResourceSystem(scene) {
             spawned += spawnCluster();
             attempts++;
         }
+        return created;
     }
 
     // ----- Dev Helpers -----
