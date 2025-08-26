@@ -133,8 +133,10 @@ export default class MainScene extends Phaser.Scene {
         this.inputSystem = createInputSystem(this);
 
         // Player
+        const startX = WORLD_GEN.world.width / 2;
+        const startY = WORLD_GEN.world.height / 2;
         this.player = this.physics.add
-            .sprite(400, 300, 'player')
+            .sprite(startX, startY, 'player')
             .setScale(0.5)
             .setDepth(900)
             .setCollideWorldBounds(true);
