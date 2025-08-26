@@ -428,7 +428,8 @@ export default class MainScene extends Phaser.Scene {
     _scheduleAutoPickup() {
         this._cancelAutoPickup();
         this._autoPickupTimer = this.time.delayedCall(2000, () => {
-            if (this.isCharging || !this.input.activePointer.isDown) return;
+            if (this.isCharging || !this.input.activePointer.rightButtonDown())
+                return;
             this._autoPickupActive = true;
             this._autoPickupEvent = this.time.addEvent({
                 delay: 200,
@@ -452,7 +453,7 @@ export default class MainScene extends Phaser.Scene {
 
     _attemptAutoPickup() {
         if (!this._autoPickupActive) return;
-        if (this.isCharging || !this.input.activePointer.isDown) {
+        if (this.isCharging || !this.input.activePointer.rightButtonDown()) {
             this._cancelAutoPickup();
             return;
         }
