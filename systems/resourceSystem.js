@@ -152,6 +152,20 @@ export default function createResourceSystem(scene) {
 
         const blocking = !!def.blocking;
         trunk.setData('blocking', blocking);
+        if (blocking && def.tags?.includes('rock')) {
+            const frameW = trunk.width;
+            const frameH = trunk.height;
+            const topH = frameH * 0.5;
+            const top = scene.add
+                .image(x, y, texKey)
+                .setOrigin(originX, originY)
+                .setScale(scale)
+                .setDepth((scene.player?.depth ?? 900) + 2)
+                .setCrop(0, 0, frameW, topH);
+            trunk.setCrop(0, topH, frameW, frameH - topH);
+            trunk.setData('topSprite', top);
+            trunk.once('destroy', () => top.destroy());
+        }
         if (def.tags?.includes('bush')) trunk.setData('bush', true);
         if (trunk.body) {
             if (trunk.body.setAllowGravity) trunk.body.setAllowGravity(false);
