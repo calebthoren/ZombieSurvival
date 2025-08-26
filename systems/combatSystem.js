@@ -35,12 +35,11 @@ export default function createCombatSystem(scene) {
         const baseD = hit.getData('damage');
         const baseKb = hit.getData('knockback');
         const meleeMult = Math.max(0, zombie?.resist?.meleeMult ?? 1);
-        const dmg = Math.max(
-            0,
-            Math.round(
-                (baseD ?? ITEM_DB?.crude_bat?.weapon?.damage ?? 10) * meleeMult,
-            ),
-        );
+        const defMin = ITEM_DB?.crude_bat?.weapon?.minDamage ?? 10;
+        const defMax = ITEM_DB?.crude_bat?.weapon?.maxDamage ?? defMin;
+        const rawD =
+            baseD ?? Phaser.Math.Between(defMin, defMax);
+        const dmg = Math.max(0, Math.round(rawD * meleeMult));
         const kb = Math.max(
             0,
             baseKb ?? ITEM_DB?.crude_bat?.weapon?.knockback ?? 10,
@@ -59,10 +58,12 @@ export default function createCombatSystem(scene) {
             typeof bullet.getData === 'function'
                 ? bullet.getData('knockback')
                 : undefined;
+        const slMin = ITEM_DB?.slingshot?.weapon?.minDamage ?? 5;
+        const slMax = ITEM_DB?.slingshot?.weapon?.maxDamage ?? slMin;
         let dmg =
             typeof payloadDmg === 'number'
                 ? payloadDmg
-                : (ITEM_DB?.slingshot?.weapon?.damage ?? 5);
+                : Phaser.Math.Between(slMin, slMax);
         let kb =
             typeof payloadKb === 'number'
                 ? payloadKb
@@ -239,8 +240,10 @@ export default function createCombatSystem(scene) {
         const uiPercent = Phaser.Math.Clamp(effectiveCharge / maxCap, 0, 1);
         scene.uiScene?.events?.emit('weapon:charge', uiPercent);
         const canCharge = wpn?.canCharge === true;
-        const baseDmg = wpn?.damage ?? 6;
-        const maxDmg = wpn?.maxChargeDamage ?? baseDmg;
+        const baseMin = wpn?.minDamage ?? wpn?.damage ?? 6;
+        const baseMax = wpn?.maxDamage ?? baseMin;
+        const baseDmg = Phaser.Math.Between(baseMin, baseMax);
+        const maxDmg = wpn?.maxChargeDamage ?? baseMax;
         let shotDmg = canCharge
             ? Phaser.Math.Linear(baseDmg, maxDmg, effectiveCharge)
             : baseDmg;
@@ -351,9 +354,11 @@ export default function createCombatSystem(scene) {
         if (lowStamina && st && typeof st.poorChargeClamp === 'number') {
             charge = Math.min(charge, st.poorChargeClamp);
         }
-        const baseDmg = wpn?.damage ?? 10;
+        const baseMin = wpn?.minDamage ?? wpn?.damage ?? 10;
+        const baseMax = wpn?.maxDamage ?? baseMin;
+        const baseDmg = Phaser.Math.Between(baseMin, baseMax);
         const baseKb = wpn?.knockback ?? 10;
-        const maxDmg = wpn?.maxChargeDamage ?? baseDmg;
+        const maxDmg = wpn?.maxChargeDamage ?? baseMax;
         const maxKb = wpn?.maxChargeKnockback ?? baseKb;
         let swingDamage = canCharge
             ? Phaser.Math.Linear(baseDmg, maxDmg, charge)
