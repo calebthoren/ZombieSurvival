@@ -20,7 +20,7 @@ export const WORLD_GEN = {
   dayNight: {
     dayMs: 240_000,          // 4 min day
     nightMs: 120_000,        // 2 min night
-    transitionMs: 15_000,    // 15s fade at start/end of night
+    transitionMs: 15_000,    // 15s fade before/after night
     nightOverlayAlpha: 0.55, // darkness amount at deepest night (0..1)
     // (You can tweak these freely without touching scene code.)
   },
