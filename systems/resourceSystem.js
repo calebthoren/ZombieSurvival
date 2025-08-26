@@ -129,6 +129,20 @@ export default function createResourceSystem(scene) {
         if (trunk.body) {
             trunk.body.setAllowGravity(false);
         }
+
+        if (def.collectible) {
+            trunk.setInteractive();
+            trunk.on('pointerdown', (pointer) => {
+                if (!pointer?.rightButtonDown || !pointer.rightButtonDown()) return;
+                const dx = scene.player.x - trunk.x;
+                const dy = scene.player.y - trunk.y;
+                if (dx * dx + dy * dy > 40 * 40) return;
+                if (def.givesItem) {
+                    scene.addItemToInventory(def.givesItem, def.giveAmount ?? 1);
+                }
+                trunk.destroy();
+            });
+        }
         return trunk;
     }
 
