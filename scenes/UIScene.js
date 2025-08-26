@@ -723,11 +723,13 @@ export default class UIScene extends Phaser.Scene {
         const vis = this.bottomHotbarVisuals[idx];
         if (!vis) return;
 
-        // ✅ Show charge bar for ANY equipped weapon that supports charging
+        // ✅ Show charge bar for any equipped item that supports charging
         const eq = this.inventory.getEquipped?.();
+        const item = eq ? ITEM_DB?.[eq.id] : null;
         const canCharge =
-            !!eq &&
-            ITEM_DB?.[eq.id]?.weapon?.canCharge === true;
+            !!item &&
+            (item?.weapon?.canCharge === true ||
+                (item?.ammo && item.tags?.includes('rock')));
 
         if (!canCharge) {
             this.#hideChargeUIForAll();
