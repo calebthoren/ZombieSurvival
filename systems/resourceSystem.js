@@ -1,9 +1,8 @@
 // systems/resourceSystem.js
-// Handles world resource spawning via chunk events.
+// Handles world resource spawning in a Phaser-agnostic way.
 import { WORLD_GEN } from '../data/worldGenConfig.js';
 import { DESIGN_RULES } from '../data/designRules.js';
 import { RESOURCE_DB } from '../data/resourceDatabase.js';
-import { CHUNK_WIDTH, CHUNK_HEIGHT } from './worldGen/ChunkManager.js';
 
 export default function createResourceSystem(scene) {
     const chunkResources = new Map();
@@ -13,48 +12,13 @@ export default function createResourceSystem(scene) {
     const onActivate = ({ chunkX, chunkY, rng }) => {
         const key = `${chunkX},${chunkY}`;
         if (chunkResources.has(key)) return;
+
         const all = WORLD_GEN?.spawns?.resources;
         if (!all) return;
-        const minX = chunkX * CHUNK_WIDTH;
-        const minY = chunkY * CHUNK_HEIGHT;
-        const maxX = minX + CHUNK_WIDTH;
-        const maxY = minY + CHUNK_HEIGHT;
-        const list = [];
-        for (const [gk, cfg] of Object.entries(all)) {
-            list.push(
-                ..._spawnGroup(gk, cfg, rng, minX, maxX, minY, maxY, chunkX, chunkY),
-            );
-        }
-        chunkResources.set(key, list);
-        _ensureColliders();
-    };
 
-    const onDeactivate = ({ chunkX, chunkY }) => {
-        const key = `${chunkX},${chunkY}`;
-        const list = chunkResources.get(key);
-        if (list) {
-            for (const obj of list) obj.destroy();
-            chunkResources.delete(key);
-        }
-        const timers = chunkRespawns.get(key);
-        if (timers) {
-            for (const t of timers) t.remove(false);
-            chunkRespawns.delete(key);
-        }
-    };
+        for (const [key, cfg] of Object.entries(all))
+            _spawnResourceGroup(key, cfg);
 
-    scene.events.on('chunk:activate', onActivate);
-    scene.events.on('chunk:deactivate', onDeactivate);
-    scene.events.once('shutdown', () => {
-        scene.events.off('chunk:activate', onActivate);
-        scene.events.off('chunk:deactivate', onDeactivate);
-        for (const timers of chunkRespawns.values()) {
-            for (const t of timers) t.remove(false);
-        }
-        chunkRespawns.clear();
-    });
-
-    function _ensureColliders() {
         if (!scene._resourcesCollider) {
             scene._resourcesCollider = scene.physics.add.collider(
                 scene.player,
@@ -64,6 +28,7 @@ export default function createResourceSystem(scene) {
                 scene,
             );
         }
+
         if (!scene._bushSlowOverlap) {
             const markBush = (ent, obj) => {
                 if (obj.getData('bush')) ent._inBush = true;
@@ -156,36 +121,286 @@ export default function createResourceSystem(scene) {
                         if (dx * dx + dy * dy < minSpacingSq) {
                             valid = false;
                             break;
+                        case 'topLeft':
+                        default:
+                            baseX = 0;
+                            baseY = 0;
+                            break;
+                    }
+
+                    const addX = useScale
+                        ? (bodyCfg.offsetX || 0) * scaleX
+                        : bodyCfg.offsetX || 0;
+                    const addY = useScale
+                        ? (bodyCfg.offsetY || 0) * scaleY
+                        : bodyCfg.offsetY || 0;
+                    const ox = baseX + addX;
+                    const oy = baseY + addY;
+
+                    if (bodyCfg.kind === 'circle') {
+                        trunk.body.setCircle(br, ox, oy);
+                    } else {
+                        trunk.body.setSize(bw, bh);
+                        trunk.body.setOffset(ox, oy);
+                    }
+                    trunk.body.setImmovable(blocking);
+                } else {
+                    if (blocking) {
+                        trunk.body.setImmovable(true);
+                    } else {
+                        if (trunk.getData('bush')) {
+                            const r =
+                                Math.min(
+                                    trunk.displayWidth,
+                                    trunk.displayHeight,
+                                ) * 0.45; // shrink hitbox by 10%
+                            const ox = trunk.displayWidth * 0.5 - r;
+                            const oy = trunk.displayHeight * 0.5 - r;
+                            trunk.body.setCircle(r, ox, oy);
+                        } else {
+                            trunk.body.setSize(trunk.displayWidth, trunk.displayHeight);
+                            trunk.body.setOffset(0, 0);
                         }
+                        trunk.body.setImmovable(true);
                     }
                 }
             }
-            if (!valid) continue;
-            const clusterSize = rng.between(clusterMin, clusterMax);
-            const radius = minSpacing * 0.5;
-            for (let i = 0; i < clusterSize; i++) {
-                let r = rng.frac() * totalWeight;
-                let id = variants[0].id;
-                for (const v of variants) {
-                    r -= v.weight || 0;
-                    if (r <= 0) {
-                        id = v.id;
+
+            const leavesCfg = def.world?.leaves;
+            if (leavesCfg) {
+                const frameW = trunk.width;
+                const frameH = trunk.height;
+
+                const lw = leavesCfg.width;
+                const lh = leavesCfg.height;
+
+                const anchor = leavesCfg.anchor || 'topLeft';
+                let baseX = 0,
+                    baseY = 0;
+                switch (anchor) {
+                    case 'center':
+                        baseX = (frameW - lw) * 0.5;
+                        baseY = (frameH - lh) * 0.5;
                         break;
-                    }
+                    case 'topCenter':
+                        baseX = (frameW - lw) * 0.5;
+                        baseY = 0;
+                        break;
+                    case 'bottomCenter':
+                        baseX = (frameW - lw) * 0.5;
+                        baseY = frameH - lh;
+                        break;
+                    case 'bottomLeft':
+                        baseX = 0;
+                        baseY = frameH - lh;
+                        break;
+                    case 'topLeft':
+                    default:
+                        baseX = 0;
+                        baseY = 0;
+                        break;
                 }
+
+                const addX = leavesCfg.offsetX || 0;
+                const addY = leavesCfg.offsetY || 0;
+                const cropX = baseX + addX;
+                const cropY = baseY + addY;
+
+                trunk.setCrop(0, cropY + lh, frameW, frameH - (cropY + lh));
+
+                const leaves = scene.add
+                    .image(x, y, texKey)
+                    .setOrigin(originX, originY)
+                    .setScale(scale)
+                    .setDepth(def.leavesDepth ?? def.depth ?? 5)
+                    .setCrop(cropX, cropY, lw, lh);
+
+                const dispW = trunk.displayWidth;
+                const dispH = trunk.displayHeight;
+                const scaleX = trunk.scaleX || 1;
+                const scaleY = trunk.scaleY || 1;
+                const useScale = !!leavesCfg.useScale;
+
+                const lwWorld = useScale ? lw * scaleX : lw;
+                const lhWorld = useScale ? lh * scaleY : lh;
+
+                const anchorSpaceW = useScale ? dispW : frameW;
+                const anchorSpaceH = useScale ? dispH : frameH;
+
+                switch (anchor) {
+                    case 'center':
+                        baseX = (anchorSpaceW - lwWorld) * 0.5;
+                        baseY = (anchorSpaceH - lhWorld) * 0.5;
+                        break;
+                    case 'topCenter':
+                        baseX = (anchorSpaceW - lwWorld) * 0.5;
+                        baseY = 0;
+                        break;
+                    case 'bottomCenter':
+                        baseX = (anchorSpaceW - lwWorld) * 0.5;
+                        baseY = anchorSpaceH - lhWorld;
+                        break;
+                    case 'bottomLeft':
+                        baseX = 0;
+                        baseY = anchorSpaceH - lhWorld;
+                        break;
+                    case 'topLeft':
+                    default:
+                        baseX = 0;
+                        baseY = 0;
+                        break;
+                }
+
+                const addXWorld = useScale ? addX * scaleX : addX;
+                const addYWorld = useScale ? addY * scaleY : addY;
+                const topLeftX = trunk.x - dispW * trunk.originX;
+                const topLeftY = trunk.y - dispH * trunk.originY;
+                const rect = new Phaser.Geom.Rectangle(
+                    topLeftX + baseX + addXWorld,
+                    topLeftY + baseY + addYWorld,
+                    lwWorld,
+                    lhWorld,
+                );
+
+                scene._treeLeaves = scene._treeLeaves || [];
+                const data = { leaves, rect };
+                scene._treeLeaves.push(data);
+                trunk.once('destroy', () => {
+                    leaves.destroy();
+                    const idx = scene._treeLeaves.indexOf(data);
+                    if (idx !== -1) scene._treeLeaves.splice(idx, 1);
+                });
+
+                if (!scene._treeLeavesUpdate) {
+                    const playerRect = new Phaser.Geom.Rectangle();
+                    scene._treeLeavesUpdate = () => {
+                        const pb = scene.player.body;
+                        playerRect.x = pb.x;
+                        playerRect.y = pb.y;
+                        playerRect.width = pb.width;
+                        playerRect.height = pb.height;
+                        for (const d of scene._treeLeaves) {
+                            const overlap =
+                                Phaser.Geom.Intersects.RectangleToRectangle(
+                                    playerRect,
+                                    d.rect,
+                                );
+                            d.leaves.setAlpha(overlap ? 0.5 : 1);
+                        }
+                    };
+                    scene.events.on('update', scene._treeLeavesUpdate);
+                    scene.events.once('shutdown', () => {
+                        scene.events.off('update', scene._treeLeavesUpdate);
+                        scene._treeLeaves = [];
+                        scene._treeLeavesUpdate = null;
+                    });
+                }
+            }
+
+            if (def.collectible) {
+                trunk.setInteractive();
+                trunk.on('pointerdown', (pointer) => {
+                    if (!pointer.rightButtonDown()) return;
+                    const pickupRange = 40;
+                    const d2 = Phaser.Math.Distance.Squared(
+                        scene.player.x,
+                        scene.player.y,
+                        trunk.x,
+                        trunk.y,
+                    );
+                    if (d2 > pickupRange * pickupRange) return;
+
+                    if (def.givesItem && scene.uiScene?.inventory) {
+                        scene.uiScene.inventory.addItem(
+                            def.givesItem,
+                            def.giveAmount || 1,
+                        );
+                    }
+                    trunk.destroy();
+                    scene.time.delayedCall(
+                        Phaser.Math.Between(respawnMin, respawnMax),
+                        () => {
+                            if (scene.resources.countActive(true) < maxActive)
+                                spawnCluster();
+                        },
+                    );
+                });
+            }
+        };
+
+        const spawnCluster = () => {
+            const baseId = pickVariantId();
+            const baseKey = baseId.replace(/[A-Za-z]$/, '');
+            const baseVariants = variants.filter((v) => v.id.startsWith(baseKey));
+            const baseTotalWeight = baseVariants.reduce(
+                (s, v) => s + (v.weight || 0),
+                0,
+            );
+            const pickBaseVariant = () => {
+                let r = Math.random() * baseTotalWeight;
+                for (const v of baseVariants) {
+                    r -= v.weight || 0;
+                    if (r <= 0) return v.id;
+                }
+                return baseVariants[0].id;
+            };
+
+            const firstId = pickBaseVariant();
+            const firstDef = RESOURCE_DB[firstId];
+            if (!firstDef) return 0;
+
+            const firstTex = scene.textures.get(
+                firstDef.world?.textureKey || firstId,
+            );
+            const src = firstTex.getSourceImage();
+            const scale = firstDef.world?.scale ?? 1;
+            const width = src.width * scale;
+            const height = src.height * scale;
+
+            let x,
+                y,
+                tries = 30;
+            do {
+                x = Phaser.Math.Between(minX, maxX);
+                y = Phaser.Math.Between(minY, maxY);
+                tries--;
+            } while (tries > 0 && tooClose(x, y, width, height));
+            if (tries <= 0) return 0;
+
+            createResourceAt(firstId, firstDef, x, y);
+            let spawned = 1;
+
+            const clusterCount = Phaser.Math.Between(clusterMin, clusterMax);
+            const radius =
+                groupCfg.clusterRadius ?? Math.max(width, height) * 1.1;
+            for (
+                let i = 1;
+                i < clusterCount && scene.resources.countActive(true) < maxActive;
+                i++
+            ) {
+                const id = pickBaseVariant();
                 const def = RESOURCE_DB[id];
                 if (!def) continue;
-                const ang = rng.angle();
-                const dist = radius * rng.frac();
-                const x = cx + Math.cos(ang) * dist;
-                const y = cy + Math.sin(ang) * dist;
-                const obj = _createResource(id, def, x, y, groupKey, chunkX, chunkY);
-                results.push(obj);
-                existing.push(obj);
+
+                const tex = scene.textures.get(def.world?.textureKey || id);
+                const src2 = tex.getSourceImage();
+                const scale2 = def.world?.scale ?? 1;
+                const w = src2.width * scale2;
+                const h = src2.height * scale2;
+
+                let x2,
+                    y2,
+                    t2 = 10;
+                do {
+                    const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
+                    x2 = x + Math.cos(ang) * radius;
+                    y2 = y + Math.sin(ang) * radius;
+                    t2--;
+                } while (t2 > 0 && tooClose(x2, y2, w, h));
+                if (t2 <= 0) continue;
+                createResourceAt(id, def, x2, y2);
+                spawned++;
             }
-        }
-        return results;
-    }
 
     function _createResource(id, def, x, y, groupKey, chunkX, chunkY) {
         const originX = def.world?.origin?.x ?? 0.5;
@@ -256,38 +471,16 @@ export default function createResourceSystem(scene) {
             trunk.once('destroy', () => top.destroy());
         }
 
-        if (def.tags?.includes('bush')) trunk.setData('bush', true);
-        if (trunk.body) {
-            if (trunk.body.setAllowGravity) trunk.body.setAllowGravity(false);
-            if (trunk.body.setImmovable) trunk.body.setImmovable(true);
-            if ('moves' in trunk.body) trunk.body.moves = false;
-        }
+        let spawned = 0,
+            attempts = 0;
+        while (spawned < maxActive && attempts < maxActive * 10) {
+            spawned += spawnCluster();
+            attempts++;
 
-        if (def.collectible) {
-            trunk.setInteractive();
-            trunk.on('pointerdown', (pointer) => {
-                if (!pointer?.rightButtonDown || !pointer.rightButtonDown()) return;
-                const dx = scene.player.x - trunk.x;
-                const dy = scene.player.y - trunk.y;
-                if (dx * dx + dy * dy > 40 * 40) return;
-                if (def.givesItem) {
-                    scene.addItemToInventory(def.givesItem, def.giveAmount ?? 1);
-                }
-                const cx = trunk.getData('chunkX');
-                const cy = trunk.getData('chunkY');
-                const key = `${cx},${cy}`;
-                const list = chunkResources.get(key);
-                if (list) {
-                    const idx = list.indexOf(trunk);
-                    if (idx !== -1) list.splice(idx, 1);
-                }
-                _scheduleRespawn(groupKey, id, cx, cy, trunk.x, trunk.y);
-                trunk.destroy();
-            });
         }
-        return trunk;
     }
 
+    // ----- Dev Helpers -----
     function _scheduleRespawn(groupKey, id, chunkX, chunkY, x, y) {
         const cfg = WORLD_GEN?.spawns?.resources?.[groupKey];
         const delayCfg = cfg?.respawnDelayMs;
@@ -330,5 +523,5 @@ export default function createResourceSystem(scene) {
         obj.body.setAllowGravity(false);
     }
 
-    return { spawnWorldItem };
+    return { spawnAllResources, spawnWorldItem };
 }
