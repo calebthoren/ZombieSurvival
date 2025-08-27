@@ -504,7 +504,10 @@ export default function createCombatSystem(scene) {
                 y = Phaser.Math.Between(y0, y1);
             }
         }
-        const zombie = scene.zombies.create(x, y, tex);
+        const zombie = (scene.zombiePool
+            ? scene.zombiePool.acquire(tex)
+            : scene.zombies.create(x, y, tex));
+        zombie.setPosition(x, y);
         if (!zombie.body) scene.physics.add.existing(zombie);
         zombie.body.setAllowGravity(false);
         zombie.setOrigin(0.5, 0.5);
@@ -629,7 +632,8 @@ export default function createCombatSystem(scene) {
             zombie.hpFill.destroy();
             zombie.hpFill = null;
         }
-        if (zombie.destroy) zombie.destroy();
+        if (scene.zombiePool) scene.zombiePool.release(zombie);
+        else if (zombie.destroy) zombie.destroy();
     }
 
     function _maybeDropLoot(zombie) {

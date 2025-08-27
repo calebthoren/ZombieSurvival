@@ -61,6 +61,7 @@ export default function createResourceSystem(scene) {
                             harvested: false,
                         }) - 1;
                         trunk.setData('chunkIdx', idx);
+                        trunk.setData('chunk', chunk);
                     },
                     onHarvest(trunk) {
                         const idx = trunk.getData('chunkIdx');
@@ -89,6 +90,7 @@ export default function createResourceSystem(scene) {
                     onCreate(trunk) {
                         chunk.group.add(trunk);
                         trunk.setData('chunkIdx', i);
+                        trunk.setData('chunk', chunk);
                     },
                     onHarvest() {
                         resources[i].harvested = true;
@@ -208,11 +210,13 @@ export default function createResourceSystem(scene) {
             const scale = def.world?.scale ?? 1;
             const texKey = def.world?.textureKey || id;
 
-            const trunk = scene.resources
-                .create(x, y, texKey)
+            const trunk = (scene.resourcePool
+                ? scene.resourcePool.acquire(texKey)
+                : scene.resources.create(x, y, texKey))
                 .setOrigin(originX, originY)
                 .setScale(scale)
-                .setDepth(def.trunkDepth ?? def.depth ?? 5);
+                .setDepth(def.trunkDepth ?? def.depth ?? 5)
+                .setPosition(x, y);
 
             const blocking = !!def.blocking;
             trunk.setData('blocking', blocking);
@@ -480,7 +484,8 @@ export default function createResourceSystem(scene) {
                         );
                     }
                     if (onHarvest) onHarvest(trunk, id, x, y);
-                    trunk.destroy();
+                    if (scene.resourcePool) scene.resourcePool.release(trunk);
+                    else trunk.destroy();
                     if (!noRespawn) {
                         scene.time.delayedCall(
                             Phaser.Math.Between(respawnMin, respawnMax),
