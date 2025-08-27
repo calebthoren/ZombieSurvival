@@ -8,8 +8,15 @@ export const WORLD_GEN = {
   // World bounds / scale (future)
   // -----------------------------
   world: {
-    width: 1200,   // logical world width (px). You can expand later.
-    height: 900,   // logical world height (px).
+    width: 10000,  // logical world width (px). You can expand later.
+    height: 10000, // logical world height (px).
+  },
+
+  // -----------------------------
+  // Chunk settings (session only)
+  // -----------------------------
+  chunk: {
+    size: 500,
   },
 
   // -----------------------------
@@ -126,3 +133,9 @@ export const WORLD_GEN = {
     },
   },
 };
+
+// Center spawn point
+export const spawn = { x: 5000, y: 5000 };
+
+// Session-scoped metadata for procedural chunks
+export const chunkMetadata = new Map();

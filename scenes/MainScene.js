@@ -1,5 +1,5 @@
 // scenes/MainScene.js
-import { WORLD_GEN } from '../systems/world_gen/worldGenConfig.js';
+import { WORLD_GEN, spawn } from '../systems/world_gen/worldGenConfig.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
 import DevTools from '../systems/DevTools.js';
@@ -131,12 +131,18 @@ export default class MainScene extends Phaser.Scene {
         this.resourceSystem = createResourceSystem(this);
         this.inputSystem = createInputSystem(this);
 
+        // Expand world bounds to config size
+        this.physics.world.setBounds(0, 0, WORLD_GEN.world.width, WORLD_GEN.world.height);
+        this.cameras.main.setBounds(0, 0, WORLD_GEN.world.width, WORLD_GEN.world.height);
+
         // Player
         this.player = this.physics.add
-            .sprite(400, 300, 'player')
+            .sprite(spawn.x, spawn.y, 'player')
             .setScale(0.5)
             .setDepth(900)
             .setCollideWorldBounds(true);
+
+        this.cameras.main.startFollow(this.player);
 
         this.player._speedMult = 1;
         this.player._inBush = false;
