@@ -9,6 +9,8 @@ import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
 import ChunkManager from '../systems/world_gen/chunks/ChunkManager.js';
 import { clearChunkStore } from '../systems/world_gen/chunks/chunkStore.js';
+import createZombiePool from '../systems/pools/zombiePool.js';
+import createResourcePool from '../systems/pools/resourcePool.js';
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -173,6 +175,10 @@ export default class MainScene extends Phaser.Scene {
         this.events.once(Phaser.Scenes.Events.DESTROY, () => {
             this._dropCleanupEvent?.remove(false);
         });
+
+        // Pools
+        this.zombiePool = createZombiePool(this);
+        this.resourcePool = createResourcePool(this);
 
         this.chunkManager = new ChunkManager(this, 1);
         this.chunkManager.update(this.player.x, this.player.y);

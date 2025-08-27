@@ -55,7 +55,7 @@ export default class ChunkManager {
             const distY = Math.min(dy, rows - dy);
             if (distX > radius || distY > radius) {
                 saveChunk(key, chunk.serialize());
-                chunk.unload();
+                chunk.unload(this.scene);
                 this.loadedChunks.delete(key);
                 this.scene.events.emit('chunk:unload', chunk);
             }
