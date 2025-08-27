@@ -30,9 +30,11 @@ export default class DevUIScene extends Phaser.Scene {
     constructor() { super({ key: 'DevUIScene' }); }
 
     init() {
-        this._rows = [];
+        this._contentHeight = 0; // total height of built rows
         this._scroll = 0;
         this._editing = null;  // currently focused editor API
+        this._scrollbarTrack = null;
+        this._scrollbarThumb = null;
 
         // Build zombie index (names for display; keys used to spawn)
         this._zIndex = this._buildZombieIndex();
@@ -127,8 +129,17 @@ export default class DevUIScene extends Phaser.Scene {
         // Back button
         this._makeButton(camW - 160, 10, 150, 30, '◀ Return', () => this._goBack(), 2);
 
-        // Content root
+        // Content root (clipped so rows can't overlap the header)
         this.content = this.add.container(0, 54).setDepth(1);
+        const viewH = this.scale.height - 54;
+        const maskRect = this.add.rectangle(0, 54, camW, viewH, 0xffffff)
+            .setOrigin(0, 0)
+            .setVisible(false);
+        this.content.setMask(maskRect.createGeometryMask());
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this.content.clearMask(true);
+            maskRect.destroy();
+        });
 
         let y = 0;
         y = this._sectionTitle('Cheats', y);
@@ -157,6 +168,8 @@ export default class DevUIScene extends Phaser.Scene {
         }, y);
         y = this._rowToggle('No Cooldown',     () => DevTools.cheats.noCooldown,   v => DevTools.cheats.noCooldown = v, y);
         y = this._rowToggle('Infinite Ammo',   () => DevTools.cheats.noAmmo,       v => DevTools.cheats.noAmmo = v, y);
+        y = this._rowToggle('Chunk Details',   () => DevTools.cheats.chunkDetails, v => DevTools.setChunkDetails(v, main), y);
+        y = this._rowToggle('Performance HUD', () => DevTools.cheats.performanceHud, v => DevTools.setPerformanceHud(v, main), y);
 
         y = this._sectionTitle('Spawners', y);
         y = this._enemySpawnerRow(y);
@@ -165,11 +178,16 @@ export default class DevUIScene extends Phaser.Scene {
         y = this._sectionTitle('Control', y);
         y = this._gameSpeedRow(y);
 
+        this._contentHeight = y; // record total content height for scrolling
+        this._createScrollbar();
+        this._scrollBy(0);
+
         // Keyboard handling
         this.input.keyboard.on('keydown', (ev) => this._onKey(ev));
 
         // Mouse wheel: page dropdown when pointer over it; otherwise scroll panel
-        this.input.on('wheel', (pointer, _dx, dy) => {
+        // Phaser passes (pointer, gameObjects, deltaX, deltaY, deltaZ)
+        this.input.on('wheel', (pointer, _objs, _dx, dy) => {
             let consumed = false;
             if (this._typeDD && this._typeDD.visible && this._isPointerInside(pointer, this._typeDDBounds)) {
                 consumed = this._scrollDropdownBy(dy);  // enemy dropdown
@@ -179,8 +197,10 @@ export default class DevUIScene extends Phaser.Scene {
             if (!consumed) this._scrollBy(dy); // otherwise scroll the whole panel
         });
 
-        // Make sure hitbox render and game speed react immediately
-        DevTools.applyHitboxCheat(this.scene.get('MainScene'));
+        // Make sure overlays and game speed react immediately
+        DevTools.applyHitboxCheat(main);
+        DevTools.setChunkDetails(DevTools.cheats.chunkDetails, main);
+        DevTools.setPerformanceHud(DevTools.cheats.performanceHud, main);
         DevTools.applyTimeScale(this);
     }
 
@@ -1192,22 +1212,65 @@ export default class DevUIScene extends Phaser.Scene {
     }
 
     _scrollBy(delta) {
-        const viewH = this.scale.height - 54 - 24;
+        const viewH = this.scale.height - 54;
         const totalH = this._estimateContentHeight();
         const maxScroll = Math.max(0, totalH - viewH);
         this._scroll = Phaser.Math.Clamp(this._scroll + delta * 0.3, 0, maxScroll);
         this.content.y = 54 - this._scroll;
+        this._updateScrollbar();
+    }
+
+    _createScrollbar() {
+        const viewH = this.scale.height - 54;
+        const trackW = 8;
+        const trackX = this.scale.width - trackW - 2;
+        const trackY = 54;
+        const trackH = viewH;
+        this._scrollbarTrack = this.add.rectangle(trackX, trackY, trackW, trackH, 0xffffff, 0.2)
+            .setOrigin(0, 0).setDepth(2);
+        this._scrollbarThumb = this.add.rectangle(trackX, trackY, trackW, 20, 0xffffff, 0.6)
+            .setOrigin(0, 0).setDepth(3).setInteractive({ useHandCursor: true });
+        this.input.setDraggable(this._scrollbarThumb);
+        this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
+            if (gameObject !== this._scrollbarThumb) return;
+            const maxY = trackY + trackH - this._scrollbarThumb.height;
+            const newY = Phaser.Math.Clamp(dragY, trackY, maxY);
+            this._scrollbarThumb.y = newY;
+            const totalH = this._estimateContentHeight();
+            const maxScroll = Math.max(0, totalH - viewH);
+            const ratio = (newY - trackY) / (trackH - this._scrollbarThumb.height);
+            this._scroll = ratio * maxScroll;
+            this.content.y = 54 - this._scroll;
+        });
+        this._updateScrollbar();
+    }
+
+    _updateScrollbar() {
+        if (!this._scrollbarTrack || !this._scrollbarThumb) return;
+        const viewH = this.scale.height - 54;
+        const totalH = this._estimateContentHeight();
+        const trackH = viewH;
+        const trackY = 54;
+        const visible = totalH > viewH;
+        this._scrollbarTrack.setVisible(visible);
+        this._scrollbarThumb.setVisible(visible);
+        if (!visible) return;
+        const thumbH = Math.max(20, trackH * (viewH / totalH));
+        this._scrollbarThumb.height = thumbH;
+        const maxScroll = Math.max(0, totalH - viewH);
+        const ratio = (maxScroll === 0) ? 0 : this._scroll / maxScroll;
+        this._scrollbarThumb.y = trackY + (trackH - thumbH) * ratio;
     }
 
     _estimateContentHeight() {
-        // Base content height
-        let base = this._rows.length * UI.rowH + 2 * UI.rowH;
+        // Base content height from built rows plus padding
+        let base = this._contentHeight;
 
         // If a dropdown is open, extend the page so the user can scroll to see it
         if (this._typeDD && this._typeDD.visible && this._typeDDBounds) {
-            base += this._typeDDBounds.height + 40;
+            base = Math.max(base, this._typeDDBounds.y + this._typeDDBounds.height);
         } else if (this._itemTypeDD && this._itemTypeDD.visible && this._itemDDBounds) {
-            base += this._itemDDBounds.height + 40;
+            base = Math.max(base, this._itemDDBounds.y + this._itemDDBounds.height);
         }
         return base;
     }
