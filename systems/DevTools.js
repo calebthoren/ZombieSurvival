@@ -220,6 +220,15 @@ const DevTools = {
         else this._stopPerformanceHud();
     },
 
+
+    _overlayBaseY(scene) {
+        const ui = scene?.uiScene;
+        if (ui && ui.staminaBarY != null && ui.staminaBarHeight != null) {
+            return ui.staminaBarY + ui.staminaBarHeight + 4;
+        }
+        return 60; // fallback below top HUD
+    },
+
     applyHitboxCheat(scene) {
         this._ensureLayers(scene);
         const vis = !!this.cheats.showHitboxes;
@@ -266,10 +275,16 @@ const DevTools = {
         if (!this._chunkGfx) {
             this._chunkGfx = scene.add.graphics().setDepth(998);
         }
+        const baseY = this._overlayBaseY(scene);
         if (!this._chunkText) {
-            this._chunkText = scene.add.text(4, 4, '', { fontSize: '12px', color: '#0f0' })
+            this._chunkText = scene.add.text(4, baseY, '', { fontSize: '12px', color: '#0f0' })
                 .setScrollFactor(0)
                 .setDepth(999);
+        } else {
+            this._chunkText.setY(baseY);
+        }
+        if (this._perfText) {
+            this._perfText.setY(baseY + 14);
         }
         if (!this._chunkTimer) {
             this._chunkTimer = scene.time.addEvent({ delay: 100, loop: true, callback: () => { this._drawChunkDetails(scene); } });
@@ -277,6 +292,7 @@ const DevTools = {
     },
 
     _stopChunkDetails() {
+        const scene = this._chunkScene || this._perfScene;
         if (this._chunkTimer) { try { this._chunkTimer.remove(); } catch {} }
         if (this._chunkGfx) { try { this._chunkGfx.destroy(); } catch {} }
         if (this._chunkText) { try { this._chunkText.destroy(); } catch {} }
@@ -284,6 +300,9 @@ const DevTools = {
         this._chunkGfx = null;
         this._chunkText = null;
         this._chunkScene = null;
+        if (this._perfText && scene) {
+            this._perfText.setY(this._overlayBaseY(scene));
+        }
     },
 
     _drawChunkDetails(scene) {
@@ -326,10 +345,14 @@ const DevTools = {
         if (!scene) return;
         if (this._perfScene && this._perfScene !== scene) this._stopPerformanceHud();
         this._perfScene = scene;
+        const baseY = this._overlayBaseY(scene);
+        const perfY = this._chunkText ? baseY + 14 : baseY;
         if (!this._perfText) {
-            this._perfText = scene.add.text(4, 32, '', { fontSize: '12px', color: '#0f0' })
+            this._perfText = scene.add.text(4, perfY, '', { fontSize: '12px', color: '#0f0' })
                 .setScrollFactor(0)
                 .setDepth(999);
+        } else {
+            this._perfText.setY(perfY);
         }
         if (!this._perfTimer) {
             this._perfTimer = scene.time.addEvent({ delay: 500, loop: true, callback: () => { this._drawPerformanceHud(scene); } });
