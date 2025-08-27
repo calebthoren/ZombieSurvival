@@ -157,6 +157,8 @@ export default class DevUIScene extends Phaser.Scene {
         }, y);
         y = this._rowToggle('No Cooldown',     () => DevTools.cheats.noCooldown,   v => DevTools.cheats.noCooldown = v, y);
         y = this._rowToggle('Infinite Ammo',   () => DevTools.cheats.noAmmo,       v => DevTools.cheats.noAmmo = v, y);
+        y = this._rowToggle('Chunk Details',   () => DevTools.cheats.chunkDetails, v => DevTools.setChunkDetails(v, main), y);
+        y = this._rowToggle('Performance HUD', () => DevTools.cheats.performanceHud, v => DevTools.setPerformanceHud(v, main), y);
 
         y = this._sectionTitle('Spawners', y);
         y = this._enemySpawnerRow(y);
@@ -179,8 +181,10 @@ export default class DevUIScene extends Phaser.Scene {
             if (!consumed) this._scrollBy(dy); // otherwise scroll the whole panel
         });
 
-        // Make sure hitbox render and game speed react immediately
-        DevTools.applyHitboxCheat(this.scene.get('MainScene'));
+        // Make sure overlays and game speed react immediately
+        DevTools.applyHitboxCheat(main);
+        DevTools.setChunkDetails(DevTools.cheats.chunkDetails, main);
+        DevTools.setPerformanceHud(DevTools.cheats.performanceHud, main);
         DevTools.applyTimeScale(this);
     }
 
