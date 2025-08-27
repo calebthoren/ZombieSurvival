@@ -7,6 +7,7 @@ import createCombatSystem from '../systems/combatSystem.js';
 import createDayNightSystem from '../systems/world_gen/dayNightSystem.js';
 import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
+import ChunkManager from '../systems/world_gen/chunks/ChunkManager.js';
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -146,6 +147,9 @@ export default class MainScene extends Phaser.Scene {
 
         this.player._speedMult = 1;
         this.player._inBush = false;
+
+        this.chunkManager = new ChunkManager(this, 1);
+        this.chunkManager.update(this.player.x, this.player.y);
 
         // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -612,6 +616,8 @@ export default class MainScene extends Phaser.Scene {
         }
 
         this.dayNight.tick(delta);
+
+        this.chunkManager.update(this.player.x, this.player.y);
 
         // Toggle player collision off/on in Invisible mode
         const invisibleNow = DevTools.isPlayerInvisible();
