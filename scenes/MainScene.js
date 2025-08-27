@@ -7,6 +7,7 @@ import createCombatSystem from '../systems/combatSystem.js';
 import createDayNightSystem from '../systems/dayNightSystem.js';
 import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
+import createWorldGenSystem from '../systems/world_gen/worldGenSystem.js';
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -129,6 +130,7 @@ export default class MainScene extends Phaser.Scene {
         this.combat = createCombatSystem(this);
         this.dayNight = createDayNightSystem(this);
         this.resourceSystem = createResourceSystem(this);
+        this.worldGen = createWorldGenSystem(this);
         this.inputSystem = createInputSystem(this);
 
         // Player
