@@ -30,7 +30,7 @@ export default class DevUIScene extends Phaser.Scene {
     constructor() { super({ key: 'DevUIScene' }); }
 
     init() {
-        this._rows = [];
+        this._contentHeight = 0; // total height of built rows
         this._scroll = 0;
         this._editing = null;  // currently focused editor API
         this._scrollbarTrack = null;
@@ -168,6 +168,8 @@ export default class DevUIScene extends Phaser.Scene {
 
         y = this._sectionTitle('Control', y);
         y = this._gameSpeedRow(y);
+
+        this._contentHeight = y; // record total content height for scrolling
 
         this._createScrollbar();
         this._scrollBy(0);
@@ -1251,8 +1253,8 @@ export default class DevUIScene extends Phaser.Scene {
     }
 
     _estimateContentHeight() {
-        // Base content height
-        let base = this._rows.length * UI.rowH + 2 * UI.rowH;
+        // Base content height from built rows plus padding
+        let base = this._contentHeight + 2 * UI.rowH;
 
         // If a dropdown is open, extend the page so the user can scroll to see it
         if (this._typeDD && this._typeDD.visible && this._typeDDBounds) {
