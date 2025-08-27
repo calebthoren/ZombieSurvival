@@ -1,6 +1,6 @@
 // systems/resourceSystem.js
 // Handles world resource spawning in a Phaser-agnostic way.
-import { WORLD_GEN } from '../data/worldGenConfig.js';
+import { WORLD_GEN } from './world_gen/worldGenConfig.js';
 import { DESIGN_RULES } from '../data/designRules.js';
 import { RESOURCE_DB } from '../data/resourceDatabase.js';
 

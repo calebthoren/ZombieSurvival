@@ -1,7 +1,7 @@
-// data/worldGenConfig.js
+// systems/world_gen/worldGenConfig.js
 // PURE DATA ONLY — no logic. Tunable world gen + day/night + spawn settings.
 
-import { RESOURCE_IDS } from './resourceDatabase.js';
+import { RESOURCE_IDS } from '../../data/resourceDatabase.js';
 
 export const WORLD_GEN = {
   // -----------------------------
