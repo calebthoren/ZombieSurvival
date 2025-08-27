@@ -141,6 +141,7 @@ export default class DevUIScene extends Phaser.Scene {
             maskRect.destroy();
         });
 
+
         let y = 0;
         y = this._sectionTitle('Cheats', y);
         y = this._rowToggle('Show Hitboxes', () => DevTools.cheats.showHitboxes, v => DevTools.setShowHitboxes(v), y);
