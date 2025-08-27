@@ -170,7 +170,6 @@ export default class DevUIScene extends Phaser.Scene {
         y = this._gameSpeedRow(y);
 
         this._contentHeight = y; // record total content height for scrolling
-
         this._createScrollbar();
         this._scrollBy(0);
 
@@ -178,7 +177,8 @@ export default class DevUIScene extends Phaser.Scene {
         this.input.keyboard.on('keydown', (ev) => this._onKey(ev));
 
         // Mouse wheel: page dropdown when pointer over it; otherwise scroll panel
-        this.input.on('wheel', (pointer, _dx, dy) => {
+        // Phaser passes (pointer, gameObjects, deltaX, deltaY, deltaZ)
+        this.input.on('wheel', (pointer, _objs, _dx, dy) => {
             let consumed = false;
             if (this._typeDD && this._typeDD.visible && this._isPointerInside(pointer, this._typeDDBounds)) {
                 consumed = this._scrollDropdownBy(dy);  // enemy dropdown
@@ -1213,9 +1213,9 @@ export default class DevUIScene extends Phaser.Scene {
 
     _createScrollbar() {
         const viewH = this.scale.height - 54 - 24;
-        const trackX = this.scale.width - 6;
+        const trackW = 8;
+        const trackX = this.scale.width - trackW - 2;
         const trackY = 54;
-        const trackW = 4;
         const trackH = viewH;
         this._scrollbarTrack = this.add.rectangle(trackX, trackY, trackW, trackH, 0xffffff, 0.2)
             .setOrigin(0, 0).setDepth(2);
