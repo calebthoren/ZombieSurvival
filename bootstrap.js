@@ -64,6 +64,6 @@ function applyPixelPerfectZoom() {
     game.scale.setZoom(zoom);
 }
 
-// Run once and on resize
-window.addEventListener('resize', applyPixelPerfectZoom);
+// Run once and whenever Phaser adjusts the canvas size
+game.scale.on('resize', applyPixelPerfectZoom);
 applyPixelPerfectZoom();
