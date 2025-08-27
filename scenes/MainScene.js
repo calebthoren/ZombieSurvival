@@ -1,5 +1,5 @@
 // scenes/MainScene.js
-import { WORLD_GEN, spawn } from '../systems/world_gen/worldGenConfig.js';
+import { WORLD_GEN } from '../systems/world_gen/worldGenConfig.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
 import DevTools from '../systems/DevTools.js';
@@ -137,7 +137,7 @@ export default class MainScene extends Phaser.Scene {
 
         // Player
         this.player = this.physics.add
-            .sprite(spawn.x, spawn.y, 'player')
+            .sprite(WORLD_GEN.spawn.x, WORLD_GEN.spawn.y, 'player')
             .setScale(0.5)
             .setDepth(900)
             .setCollideWorldBounds(true);
