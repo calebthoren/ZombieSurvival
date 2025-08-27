@@ -170,6 +170,7 @@ export default class DevUIScene extends Phaser.Scene {
         y = this._gameSpeedRow(y);
 
         this._contentHeight = y; // record total content height for scrolling
+
         this._createScrollbar();
         this._scrollBy(0);
 
