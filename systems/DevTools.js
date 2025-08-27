@@ -220,6 +220,7 @@ const DevTools = {
         else this._stopPerformanceHud();
     },
 
+
     _overlayBaseY(scene) {
         const ui = scene?.uiScene;
         if (ui && ui.staminaBarY != null && ui.staminaBarHeight != null) {
