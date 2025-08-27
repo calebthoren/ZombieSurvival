@@ -1,10 +1,10 @@
 // scenes/MainScene.js
-import { WORLD_GEN } from '../data/worldGenConfig.js';
+import { WORLD_GEN } from '../systems/world_gen/worldGenConfig.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
 import DevTools from '../systems/DevTools.js';
 import createCombatSystem from '../systems/combatSystem.js';
-import createDayNightSystem from '../systems/dayNightSystem.js';
+import createDayNightSystem from '../systems/world_gen/dayNightSystem.js';
 import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
 
