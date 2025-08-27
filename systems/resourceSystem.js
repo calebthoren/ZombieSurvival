@@ -10,8 +10,10 @@ export default function createResourceSystem(scene) {
         const all = WORLD_GEN?.spawns?.resources;
         if (!all) return;
 
-        for (const [key, cfg] of Object.entries(all))
-            _spawnResourceGroup(key, cfg);
+        for (const [key, cfg] of Object.entries(all)) {
+            const count = _spawnResourceGroup(key, cfg);
+            console.log(`resources: ${key}=${count}`);
+        }
 
         if (!scene._resourcesCollider) {
             scene._resourcesCollider = scene.physics.add.collider(
@@ -75,10 +77,14 @@ export default function createResourceSystem(scene) {
 
         const w = WORLD_GEN.world.width;
         const h = WORLD_GEN.world.height;
-        const minX = 0,
-            maxX = w,
-            minY = 0,
-            maxY = h;
+        const centerX = WORLD_GEN.spawn?.x ?? w * 0.5;
+        const centerY = WORLD_GEN.spawn?.y ?? h * 0.5;
+        const halfArea = 750;
+        // TODO: remove spawn-area clamp once chunk-based spawning is in place
+        const minX = Math.max(0, centerX - halfArea),
+            maxX = Math.min(w, centerX + halfArea),
+            minY = Math.max(0, centerY - halfArea),
+            maxY = Math.min(h, centerY + halfArea);
 
         const tooClose = (x, y, w, h) => {
             const children = scene.resources.getChildren();
@@ -475,6 +481,7 @@ export default function createResourceSystem(scene) {
             spawned += spawnCluster();
             attempts++;
         }
+        return spawned;
     }
 
     // ----- Dev Helpers -----
