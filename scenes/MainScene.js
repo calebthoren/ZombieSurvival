@@ -8,6 +8,7 @@ import createDayNightSystem from '../systems/world_gen/dayNightSystem.js';
 import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
 import ChunkManager from '../systems/world_gen/chunks/ChunkManager.js';
+import { clearChunkStore } from '../systems/world_gen/chunks/chunkStore.js';
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -122,6 +123,10 @@ export default class MainScene extends Phaser.Scene {
         this._sprintDrainPerSec = 2; // -2 / sec
         this._isSprinting = false;
 
+        // Reset any previous chunk metadata and UI state
+        clearChunkStore();
+        // Ensure fresh UI on respawn
+        this.scene.stop('UIScene');
         // Launch UI and keep a reference
         this.scene.launch('UIScene', {
             playerData: { health: this.health, stamina: this.stamina, ammo: 0 },
