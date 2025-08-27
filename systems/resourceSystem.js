@@ -3,14 +3,18 @@
 import { WORLD_GEN } from './world_gen/worldGenConfig.js';
 import { DESIGN_RULES } from '../data/designRules.js';
 import { RESOURCE_DB } from '../data/resourceDatabase.js';
+import { getResourceRegistry } from './world_gen/resources/registry.js';
+import './world_gen/resources/rocks.js';
+import './world_gen/resources/trees.js';
+import './world_gen/resources/bushes.js';
 
 export default function createResourceSystem(scene) {
     // ----- Public API -----
     function spawnAllResources() {
-        const all = WORLD_GEN?.spawns?.resources;
-        if (!all) return;
-
-        for (const [key, cfg] of Object.entries(all)) {
+        const registry = getResourceRegistry();
+        for (const [key, gen] of registry.entries()) {
+            const cfg = gen();
+            if (!cfg) continue;
             const count = _spawnResourceGroup(key, cfg);
             console.log(`resources: ${key}=${count}`);
         }
