@@ -10,6 +10,94 @@ import './world_gen/resources/bushes.js';
 
 export default function createResourceSystem(scene) {
     // ----- Public API -----
+    function spawnChunkResources(chunk) {
+        const registry = getResourceRegistry();
+        const size = WORLD_GEN.chunk.size;
+        const bounds = {
+            minX: chunk.cx * size,
+            minY: chunk.cy * size,
+            maxX: (chunk.cx + 1) * size,
+            maxY: (chunk.cy + 1) * size,
+        };
+
+        const meta = chunk.meta;
+        meta.resources = meta.resources || [];
+        const resources = meta.resources;
+
+        if (resources.length === 0) {
+            const total = Phaser.Math.Between(35, 45);
+            const keys = Array.from(registry.keys());
+            const counts = {};
+            let remaining = total;
+            for (let i = 0; i < keys.length; i++) {
+                const left = keys.length - i - 1;
+                const min = 10;
+                const max = 15;
+                const maxAllowed = Math.min(max, remaining - min * left);
+                const minAllowed = Math.max(min, remaining - max * left);
+                const c =
+                    i === keys.length - 1
+                        ? remaining
+                        : Phaser.Math.Between(minAllowed, maxAllowed);
+                counts[keys[i]] = c;
+                remaining -= c;
+            }
+
+            for (const key of keys) {
+                const gen = registry.get(key);
+                const cfg = gen();
+                if (!cfg) continue;
+                _spawnResourceGroup(key, cfg, {
+                    bounds,
+                    count: counts[key],
+                    noRespawn: true,
+                    onCreate(trunk, id, x, y) {
+                        chunk.group.add(trunk);
+                        const idx = resources.push({
+                            type: key,
+                            id,
+                            x,
+                            y,
+                            harvested: false,
+                        }) - 1;
+                        trunk.setData('chunkIdx', idx);
+                    },
+                    onHarvest(trunk) {
+                        const idx = trunk.getData('chunkIdx');
+                        if (idx != null) resources[idx].harvested = true;
+                    },
+                });
+            }
+        } else {
+            for (let i = 0; i < resources.length; i++) {
+                const r = resources[i];
+                if (r.harvested) continue;
+                const cfg = {
+                    variants: [{ id: r.id, weight: 1 }],
+                    clusterMin: 1,
+                    clusterMax: 1,
+                };
+                _spawnResourceGroup(r.type, cfg, {
+                    bounds: {
+                        minX: r.x,
+                        maxX: r.x,
+                        minY: r.y,
+                        maxY: r.y,
+                    },
+                    count: 1,
+                    noRespawn: true,
+                    onCreate(trunk) {
+                        chunk.group.add(trunk);
+                        trunk.setData('chunkIdx', i);
+                    },
+                    onHarvest() {
+                        resources[i].harvested = true;
+                    },
+                });
+            }
+        }
+    }
+
     function spawnAllResources() {
         const registry = getResourceRegistry();
         for (const [key, gen] of registry.entries()) {
@@ -60,13 +148,14 @@ export default function createResourceSystem(scene) {
     }
 
     // ----- Internal Helpers -----
-    function _spawnResourceGroup(groupKey, groupCfg) {
+    function _spawnResourceGroup(groupKey, groupCfg, opts = {}) {
         const variants = Array.isArray(groupCfg?.variants)
             ? groupCfg.variants
             : null;
         if (!variants || variants.length === 0) return;
 
         const maxActive =
+            opts.count ??
             groupCfg.maxActive ??
             Phaser.Math.Between(
                 groupCfg.minCount ?? 8,
@@ -81,14 +170,14 @@ export default function createResourceSystem(scene) {
 
         const w = WORLD_GEN.world.width;
         const h = WORLD_GEN.world.height;
-        const centerX = WORLD_GEN.spawn?.x ?? w * 0.5;
-        const centerY = WORLD_GEN.spawn?.y ?? h * 0.5;
-        const halfArea = 750;
-        // TODO: remove spawn-area clamp once chunk-based spawning is in place
-        const minX = Math.max(0, centerX - halfArea),
-            maxX = Math.min(w, centerX + halfArea),
-            minY = Math.max(0, centerY - halfArea),
-            maxY = Math.min(h, centerY + halfArea);
+        const bounds = opts.bounds || {};
+        const minX = bounds.minX ?? 0;
+        const maxX = bounds.maxX ?? w;
+        const minY = bounds.minY ?? 0;
+        const maxY = bounds.maxY ?? h;
+        const noRespawn = !!opts.noRespawn;
+        const onCreate = opts.onCreate;
+        const onHarvest = opts.onHarvest;
 
         const tooClose = (x, y, w, h) => {
             const children = scene.resources.getChildren();
@@ -390,16 +479,20 @@ export default function createResourceSystem(scene) {
                             def.giveAmount || 1,
                         );
                     }
+                    if (onHarvest) onHarvest(trunk, id, x, y);
                     trunk.destroy();
-                    scene.time.delayedCall(
-                        Phaser.Math.Between(respawnMin, respawnMax),
-                        () => {
-                            if (scene.resources.countActive(true) < maxActive)
-                                spawnCluster();
-                        },
-                    );
+                    if (!noRespawn) {
+                        scene.time.delayedCall(
+                            Phaser.Math.Between(respawnMin, respawnMax),
+                            () => {
+                                if (scene.resources.countActive(true) < maxActive)
+                                    spawnCluster();
+                            },
+                        );
+                    }
                 });
             }
+            if (onCreate) onCreate(trunk, id, x, y);
         };
 
         const spawnCluster = () => {
@@ -499,6 +592,11 @@ export default function createResourceSystem(scene) {
         scene.physics.add.existing(obj);
         obj.body.setAllowGravity(false);
     }
+
+    scene.events.on('chunk:load', spawnChunkResources);
+    scene.events.once('shutdown', () => {
+        scene.events.off('chunk:load', spawnChunkResources);
+    });
 
     return { spawnAllResources, spawnWorldItem };
 }
