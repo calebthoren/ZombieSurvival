@@ -141,7 +141,7 @@ export default class MainScene extends Phaser.Scene {
             .sprite(WORLD_GEN.spawn.x, WORLD_GEN.spawn.y, 'player')
             .setScale(0.5)
             .setDepth(900)
-            .setCollideWorldBounds(true);
+            .setCollideWorldBounds(false);
 
         this.cameras.main.startFollow(this.player);
 
@@ -617,7 +617,30 @@ export default class MainScene extends Phaser.Scene {
 
         this.dayNight.tick(delta);
 
-        this.chunkManager.update(this.player.x, this.player.y);
+        const w = WORLD_GEN.world.width;
+        const h = WORLD_GEN.world.height;
+        let x = this.player.x;
+        let y = this.player.y;
+        let wrapped = false;
+        if (x < 0) {
+            x += w;
+            wrapped = true;
+        } else if (x >= w) {
+            x -= w;
+            wrapped = true;
+        }
+        if (y < 0) {
+            y += h;
+            wrapped = true;
+        } else if (y >= h) {
+            y -= h;
+            wrapped = true;
+        }
+        if (wrapped) {
+            this.player.setPosition(x, y);
+            this.cameras.main.centerOn(x, y);
+        }
+        this.chunkManager.update(x, y);
 
         // Toggle player collision off/on in Invisible mode
         const invisibleNow = DevTools.isPlayerInvisible();

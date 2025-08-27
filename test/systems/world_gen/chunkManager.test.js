@@ -27,3 +27,26 @@ test('ChunkManager loads and unloads chunks around player movement', () => {
     assert.equal(unloadCount, 3);
     assert(cm.loadedChunks.size <= 9);
 });
+
+test('ChunkManager wraps coordinates across world bounds', () => {
+    const scene = {
+        events: new EventEmitter(),
+        add: { group: () => ({ active: true, destroy() {} }) },
+    };
+    const cm = new ChunkManager(scene, 1);
+    let loadCount = 0;
+    let unloadCount = 0;
+    scene.events.on('chunk:load', () => loadCount++);
+    scene.events.on('chunk:unload', () => unloadCount++);
+
+    cm.update(0, 0);
+    loadCount = 0;
+    unloadCount = 0;
+    cm.update(
+        WORLD_GEN.world.width + 1,
+        WORLD_GEN.world.height + 1,
+    );
+    assert.equal(loadCount, 0);
+    assert.equal(unloadCount, 0);
+    assert(cm.loadedChunks.has('0,0'));
+});
