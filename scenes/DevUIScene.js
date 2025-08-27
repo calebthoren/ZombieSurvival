@@ -129,8 +129,14 @@ export default class DevUIScene extends Phaser.Scene {
         // Back button
         this._makeButton(camW - 160, 10, 150, 30, '◀ Return', () => this._goBack(), 2);
 
-        // Content root
+        // Content root (clipped so rows can't overlap the header)
         this.content = this.add.container(0, 54).setDepth(1);
+        const viewH = this.scale.height - 54;
+        const maskRect = this.add.rectangle(0, 54, camW, viewH, 0xffffff)
+            .setOrigin(0, 0)
+            .setVisible(false);
+        this.content.setMask(maskRect.createGeometryMask());
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => maskRect.destroy());
 
         let y = 0;
         y = this._sectionTitle('Cheats', y);
@@ -1203,7 +1209,7 @@ export default class DevUIScene extends Phaser.Scene {
     }
 
     _scrollBy(delta) {
-        const viewH = this.scale.height - 54 - 24;
+        const viewH = this.scale.height - 54;
         const totalH = this._estimateContentHeight();
         const maxScroll = Math.max(0, totalH - viewH);
         this._scroll = Phaser.Math.Clamp(this._scroll + delta * 0.3, 0, maxScroll);
@@ -1212,7 +1218,7 @@ export default class DevUIScene extends Phaser.Scene {
     }
 
     _createScrollbar() {
-        const viewH = this.scale.height - 54 - 24;
+        const viewH = this.scale.height - 54;
         const trackW = 8;
         const trackX = this.scale.width - trackW - 2;
         const trackY = 54;
@@ -1220,9 +1226,10 @@ export default class DevUIScene extends Phaser.Scene {
         this._scrollbarTrack = this.add.rectangle(trackX, trackY, trackW, trackH, 0xffffff, 0.2)
             .setOrigin(0, 0).setDepth(2);
         this._scrollbarThumb = this.add.rectangle(trackX, trackY, trackW, 20, 0xffffff, 0.6)
-            .setOrigin(0, 0).setDepth(3).setInteractive();
+            .setOrigin(0, 0).setDepth(3).setInteractive({ useHandCursor: true });
         this.input.setDraggable(this._scrollbarThumb);
-        this._scrollbarThumb.on('drag', (pointer, dragX, dragY) => {
+        this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
+            if (gameObject !== this._scrollbarThumb) return;
             const maxY = trackY + trackH - this._scrollbarThumb.height;
             const newY = Phaser.Math.Clamp(dragY, trackY, maxY);
             this._scrollbarThumb.y = newY;
@@ -1237,7 +1244,7 @@ export default class DevUIScene extends Phaser.Scene {
 
     _updateScrollbar() {
         if (!this._scrollbarTrack || !this._scrollbarThumb) return;
-        const viewH = this.scale.height - 54 - 24;
+        const viewH = this.scale.height - 54;
         const totalH = this._estimateContentHeight();
         const trackH = viewH;
         const trackY = 54;
@@ -1254,13 +1261,13 @@ export default class DevUIScene extends Phaser.Scene {
 
     _estimateContentHeight() {
         // Base content height from built rows plus padding
-        let base = this._contentHeight + 2 * UI.rowH;
+        let base = this._contentHeight;
 
         // If a dropdown is open, extend the page so the user can scroll to see it
         if (this._typeDD && this._typeDD.visible && this._typeDDBounds) {
-            base += this._typeDDBounds.height + 40;
+            base = Math.max(base, this._typeDDBounds.y + this._typeDDBounds.height);
         } else if (this._itemTypeDD && this._itemTypeDD.visible && this._itemDDBounds) {
-            base += this._itemDDBounds.height + 40;
+            base = Math.max(base, this._itemDDBounds.y + this._itemDDBounds.height);
         }
         return base;
     }
