@@ -136,7 +136,11 @@ export default class DevUIScene extends Phaser.Scene {
             .setOrigin(0, 0)
             .setVisible(false);
         this.content.setMask(maskRect.createGeometryMask());
-        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => maskRect.destroy());
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this.content.clearMask(true);
+            maskRect.destroy();
+        });
+
 
         let y = 0;
         y = this._sectionTitle('Cheats', y);
