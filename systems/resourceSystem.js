@@ -73,8 +73,8 @@ export default function createResourceSystem(scene) {
         const clusterMax = groupCfg.clusterMax ?? 6;
         const totalWeight = variants.reduce((s, v) => s + (v.weight || 0), 0);
 
-        const w = scene.sys.game.config.width;
-        const h = scene.sys.game.config.height;
+        const w = WORLD_GEN.world.width;
+        const h = WORLD_GEN.world.height;
         const minX = 0,
             maxX = w,
             minY = 0,
