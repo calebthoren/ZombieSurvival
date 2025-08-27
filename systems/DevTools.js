@@ -40,6 +40,12 @@ const DevTools = {
     _lastSlowDraw: 0,
     _lastScene: null,
 
+    // Chunk detail overlay state
+    _chunkTimer: null,
+    _chunkGfx: null,
+    _chunkScene: null,
+    _chunkShutdown: null,
+
     // Public helpers used by scenes
     isPlayerInvisible() { return !!this.cheats.invisible; },
     shouldConsumeAmmo() { return !this.cheats.noAmmo; },
@@ -224,6 +230,53 @@ const DevTools = {
             this._drawSlow(scene);
             this._lastSlowDraw = now;
         }
+    },
+
+    // Toggle chunk detail overlay (draws player chunk boundary)
+    setChunkDetails(value, scene) {
+        if (value) {
+            if (scene) this._chunkScene = scene;
+            if (this._chunkScene) this._startChunkDetails(this._chunkScene);
+        } else {
+            this._stopChunkDetails();
+        }
+    },
+
+    _startChunkDetails(scene) {
+        if (this._chunkTimer || !scene?.time || !scene.add) return;
+        this._chunkScene = scene;
+        this._chunkGfx = scene.add.graphics().setDepth(998).setVisible(true);
+        const draw = () => {
+            try {
+                const g = this._chunkGfx;
+                const p = this._chunkScene?.player;
+                if (!g || !p) return;
+                const size = 256;
+                const cx = Math.floor(p.x / size) * size;
+                const cy = Math.floor(p.y / size) * size;
+                g.clear().lineStyle(1, 0x00ff00, 1).strokeRect(cx, cy, size, size);
+            } catch {}
+        };
+        draw();
+        this._chunkTimer = scene.time.addEvent({ delay: 200, loop: true, callback: draw });
+        this._chunkShutdown = () => this._stopChunkDetails();
+        scene.events?.once?.('shutdown', this._chunkShutdown);
+    },
+
+    _stopChunkDetails() {
+        if (this._chunkTimer) {
+            try { this._chunkTimer.remove(); } catch {}
+            this._chunkTimer = null;
+        }
+        if (this._chunkScene?.events && this._chunkShutdown) {
+            try { this._chunkScene.events.off('shutdown', this._chunkShutdown); } catch {}
+        }
+        if (this._chunkGfx) {
+            try { this._chunkGfx.destroy(); } catch {}
+            this._chunkGfx = null;
+        }
+        this._chunkScene = null;
+        this._chunkShutdown = null;
     },
 
     // ─────────────────────────────────────────────────────────────
