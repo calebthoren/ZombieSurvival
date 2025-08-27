@@ -148,6 +148,27 @@ export default class MainScene extends Phaser.Scene {
         this.player._speedMult = 1;
         this.player._inBush = false;
 
+        // Groups
+        this.zombies = this.physics.add.group();
+        this.bullets = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Image,
+            maxSize: 32,
+        });
+        this.meleeHits = this.physics.add.group();
+        this.resources = this.physics.add.group();
+        this.droppedItems = this.add.group();
+        this._dropCleanupEvent = this.time.addEvent({
+            delay: 1000,
+            loop: true,
+            callback: () => this._cleanupDroppedItems(),
+        });
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this._dropCleanupEvent?.remove(false);
+        });
+        this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+            this._dropCleanupEvent?.remove(false);
+        });
+
         this.chunkManager = new ChunkManager(this, 1);
         this.chunkManager.update(this.player.x, this.player.y);
 
@@ -219,27 +240,6 @@ export default class MainScene extends Phaser.Scene {
             this.events.once(Phaser.Scenes.Events.SHUTDOWN, _teardown);
             this.events.once(Phaser.Scenes.Events.DESTROY, _teardown);
         }
-
-        // Groups
-        this.zombies = this.physics.add.group();
-        this.bullets = this.physics.add.group({
-            classType: Phaser.Physics.Arcade.Image,
-            maxSize: 32,
-        });
-        this.meleeHits = this.physics.add.group();
-        this.resources = this.physics.add.group();
-        this.droppedItems = this.add.group();
-        this._dropCleanupEvent = this.time.addEvent({
-            delay: 1000,
-            loop: true,
-            callback: () => this._cleanupDroppedItems(),
-        });
-        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-            this._dropCleanupEvent?.remove(false);
-        });
-        this.events.once(Phaser.Scenes.Events.DESTROY, () => {
-            this._dropCleanupEvent?.remove(false);
-        });
 
         // Spawn resources from WORLD_GEN (all resource groups)
         this.spawnAllResources();
