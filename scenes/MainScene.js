@@ -181,7 +181,19 @@ export default class MainScene extends Phaser.Scene {
         this.resourcePool = createResourcePool(this);
 
         this.chunkManager = new ChunkManager(this, 1);
-        this.chunkManager.update(this.player.x, this.player.y);
+        this.checkChunks();
+        this._chunkCheckEvent = this.time.addEvent({
+            delay: 200,
+            loop: true,
+            callback: this.checkChunks,
+            callbackScope: this,
+        });
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this._chunkCheckEvent?.remove(false);
+        });
+        this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+            this._chunkCheckEvent?.remove(false);
+        });
 
         // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -520,6 +532,13 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
+    // Periodic chunk loading/unloading
+    checkChunks() {
+        const p = this.player;
+        if (!p) return;
+        this.chunkManager.update(p.x, p.y);
+    }
+
     // Remove expired dropped items to keep performance steady
     _cleanupDroppedItems() {
         const cycleMs = WORLD_GEN.dayNight.dayMs + WORLD_GEN.dayNight.nightMs;
@@ -651,7 +670,6 @@ export default class MainScene extends Phaser.Scene {
             this.player.setPosition(x, y);
             this.cameras.main.centerOn(x, y);
         }
-        this.chunkManager.update(x, y);
 
         // Toggle player collision off/on in Invisible mode
         const invisibleNow = DevTools.isPlayerInvisible();
