@@ -5,6 +5,7 @@
 // - Melee cones draw as time-synced thin slices. Batch size (1 or 2) is configurable.
 
 import { ITEM_DB } from '../data/itemDatabase.js';
+import { WORLD_GEN } from './world_gen/worldGenConfig.js';
 
 const DevTools = {
     // ─────────────────────────────────────────────────────────────
@@ -17,6 +18,10 @@ const DevTools = {
         noAmmo:       false,
         noStamina:    false,
         noCooldown:   false,
+
+        // Debug overlays
+        chunkDetails:    false,
+        performanceHud:  false,
 
         // NEW: how many slices to draw per fast tick (1 or 2)
         meleeSliceBatch: 1,
@@ -39,6 +44,15 @@ const DevTools = {
     _lastFastDraw: 0,
     _lastSlowDraw: 0,
     _lastScene: null,
+
+    // Chunk grid & performance HUD
+    _chunkGfx: null,
+    _chunkText: null,
+    _chunkTimer: null,
+    _chunkScene: null,
+    _perfText: null,
+    _perfTimer: null,
+    _perfScene: null,
 
     // Public helpers used by scenes
     isPlayerInvisible() { return !!this.cheats.invisible; },
@@ -78,10 +92,14 @@ const DevTools = {
         this.cheats.noAmmo         = false;
         this.cheats.noStamina      = false;
         this.cheats.noCooldown     = false;
+        this.cheats.chunkDetails   = false;
+        this.cheats.performanceHud = false;
         this.cheats.meleeSliceBatch = 1;
         this.cheats.timeScale       = 1;
         this._enemySpawnPrefs = null;
         this._itemSpawnPrefs  = null;
+        this._stopChunkDetails();
+        this._stopPerformanceHud();
         // Re-apply hitbox visibility immediately (hides layers if they were on)
         try { this.applyHitboxCheat(scene || this._lastScene); } catch {}
         // Reset global game speed
@@ -190,6 +208,26 @@ const DevTools = {
         if (this._lastScene) this.applyHitboxCheat(this._lastScene);
     },
 
+    setChunkDetails(value, scene) {
+        this.cheats.chunkDetails = !!value;
+        if (value) this._startChunkDetails(scene);
+        else this._stopChunkDetails();
+    },
+
+    setPerformanceHud(value, scene) {
+        this.cheats.performanceHud = !!value;
+        if (value) this._startPerformanceHud(scene);
+        else this._stopPerformanceHud();
+    },
+
+    _overlayBaseY(scene) {
+        const ui = scene?.uiScene;
+        if (ui && ui.staminaBarY != null && ui.staminaBarHeight != null) {
+            return ui.staminaBarY + ui.staminaBarHeight + 4;
+        }
+        return 60; // fallback below top HUD
+    },
+
     applyHitboxCheat(scene) {
         this._ensureLayers(scene);
         const vis = !!this.cheats.showHitboxes;
@@ -224,6 +262,116 @@ const DevTools = {
             this._drawSlow(scene);
             this._lastSlowDraw = now;
         }
+    },
+
+    // ─────────────────────────────────────────────────────────────
+    // Chunk details overlay
+    // ─────────────────────────────────────────────────────────────
+    _startChunkDetails(scene) {
+        if (!scene) return;
+        if (this._chunkScene && this._chunkScene !== scene) this._stopChunkDetails();
+        this._chunkScene = scene;
+        if (!this._chunkGfx) {
+            this._chunkGfx = scene.add.graphics().setDepth(998);
+        }
+        const baseY = this._overlayBaseY(scene);
+        if (!this._chunkText) {
+            this._chunkText = scene.add.text(4, baseY, '', { fontSize: '12px', color: '#0f0' })
+                .setScrollFactor(0)
+                .setDepth(999);
+        } else {
+            this._chunkText.setY(baseY);
+        }
+        if (this._perfText) {
+            this._perfText.setY(baseY + 14);
+        }
+        if (!this._chunkTimer) {
+            this._chunkTimer = scene.time.addEvent({ delay: 100, loop: true, callback: () => { this._drawChunkDetails(scene); } });
+        }
+    },
+
+    _stopChunkDetails() {
+        const scene = this._chunkScene || this._perfScene;
+        if (this._chunkTimer) { try { this._chunkTimer.remove(); } catch {} }
+        if (this._chunkGfx) { try { this._chunkGfx.destroy(); } catch {} }
+        if (this._chunkText) { try { this._chunkText.destroy(); } catch {} }
+        this._chunkTimer = null;
+        this._chunkGfx = null;
+        this._chunkText = null;
+        this._chunkScene = null;
+        if (this._perfText && scene) {
+            this._perfText.setY(this._overlayBaseY(scene));
+        }
+    },
+
+    _drawChunkDetails(scene) {
+        const g = this._chunkGfx;
+        if (!g || !scene) return;
+        const cm = scene.chunkManager;
+        const size = WORLD_GEN.chunk.size;
+        const cam = scene.cameras?.main;
+        const view = cam?.worldView;
+        if (!view) return;
+        g.clear().lineStyle(1, 0x00ffff, 1);
+        const startX = Math.floor(view.x / size);
+        const endX = Math.floor(view.right / size);
+        const startY = Math.floor(view.y / size);
+        const endY = Math.floor(view.bottom / size);
+        for (let cx = startX; cx <= endX; cx++) {
+            for (let cy = startY; cy <= endY; cy++) {
+                const x = cx * size;
+                const y = cy * size;
+                const key = `${cx},${cy}`;
+                if (cm?.loadedChunks?.has(key)) {
+                    g.fillStyle(0x00ff00, 0.15).fillRect(x, y, size, size);
+                }
+                g.strokeRect(x, y, size, size);
+            }
+        }
+        const player = scene.player;
+        const pcx = Math.floor((player?.x || 0) / size);
+        const pcy = Math.floor((player?.y || 0) / size);
+        const loaded = cm?.loadedChunks?.size || 0;
+        if (this._chunkText) {
+            this._chunkText.setText(`Chunk (${pcx},${pcy}) loaded: ${loaded}`);
+        }
+    },
+
+    // ─────────────────────────────────────────────────────────────
+    // Performance HUD
+    // ─────────────────────────────────────────────────────────────
+    _startPerformanceHud(scene) {
+        if (!scene) return;
+        if (this._perfScene && this._perfScene !== scene) this._stopPerformanceHud();
+        this._perfScene = scene;
+        const baseY = this._overlayBaseY(scene);
+        const perfY = this._chunkText ? baseY + 14 : baseY;
+        if (!this._perfText) {
+            this._perfText = scene.add.text(4, perfY, '', { fontSize: '12px', color: '#0f0' })
+                .setScrollFactor(0)
+                .setDepth(999);
+        } else {
+            this._perfText.setY(perfY);
+        }
+        if (!this._perfTimer) {
+            this._perfTimer = scene.time.addEvent({ delay: 500, loop: true, callback: () => { this._drawPerformanceHud(scene); } });
+        }
+    },
+
+    _stopPerformanceHud() {
+        if (this._perfTimer) { try { this._perfTimer.remove(); } catch {} }
+        if (this._perfText) { try { this._perfText.destroy(); } catch {} }
+        this._perfTimer = null;
+        this._perfText = null;
+        this._perfScene = null;
+    },
+
+    _drawPerformanceHud(scene) {
+        if (!this._perfText || !scene) return;
+        const fps = Math.round(scene.game?.loop?.actualFps || 0);
+        const heap = performance?.memory?.usedJSHeapSize ? Math.round(performance.memory.usedJSHeapSize / 1048576) : 0;
+        const timers = scene.time?.events?.size || 0;
+        this._perfText.setText(`FPS: ${fps}\nHeap: ${heap}MB\nTimers: ${timers}`);
     },
 
     // ─────────────────────────────────────────────────────────────
