@@ -317,7 +317,9 @@ const DevTools = {
         g.clear();
         const color = 0x00ffff;
         const thin = 1;
-        const thick = 3;
+
+        const edgeColor = 0x0000aa;
+        const edgeThick = 4;
         const startX = Math.floor(view.x / size);
         const endX = Math.floor(view.right / size);
         const startY = Math.floor(view.y / size);
@@ -331,9 +333,32 @@ const DevTools = {
                 // Wrap indices to match ChunkManager keys
                 const kx = ((cx % cols) + cols) % cols;
                 const ky = ((cy % rows) + rows) % rows;
-                const isEdge = kx === 0 || ky === 0 || kx === cols - 1 || ky === rows - 1;
-                g.lineStyle(isEdge ? thick : thin, color, 1);
+                g.lineStyle(thin, color, 1);
                 g.strokeRect(x, y, size, size);
+                if (kx === 0) {
+                    g.lineStyle(edgeThick, edgeColor, 1).beginPath();
+                    g.moveTo(x, y);
+                    g.lineTo(x, y + size);
+                    g.strokePath();
+                }
+                if (ky === 0) {
+                    g.lineStyle(edgeThick, edgeColor, 1).beginPath();
+                    g.moveTo(x, y);
+                    g.lineTo(x + size, y);
+                    g.strokePath();
+                }
+                if (kx === cols - 1) {
+                    g.lineStyle(edgeThick, edgeColor, 1).beginPath();
+                    g.moveTo(x + size, y);
+                    g.lineTo(x + size, y + size);
+                    g.strokePath();
+                }
+                if (ky === rows - 1) {
+                    g.lineStyle(edgeThick, edgeColor, 1).beginPath();
+                    g.moveTo(x, y + size);
+                    g.lineTo(x + size, y + size);
+                    g.strokePath();
+                }
             }
         }
         const player = scene.player;
@@ -368,6 +393,8 @@ const DevTools = {
         if (!this._perfTimer) {
             this._perfTimer = scene.time.addEvent({ delay: 500, loop: true, callback: () => { this._drawPerformanceHud(scene); } });
         }
+        // Draw once immediately so overlay toggles even when the game is paused
+        this._drawPerformanceHud(scene);
     },
 
     _stopPerformanceHud() {
