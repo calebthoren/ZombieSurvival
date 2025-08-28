@@ -15,4 +15,3 @@ export function deleteChunk(id) {
 export function clearChunkStore() {
     store.clear();
 }
-

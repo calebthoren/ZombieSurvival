@@ -473,6 +473,8 @@ export default class DevUIScene extends Phaser.Scene {
                 this._renderDropdown();
             });
             rowC.on('pointerdown', () => {
+                this._enemy.resHL = i;
+                this._renderDropdown();
                 const sel = this._visibleDropdownItem(i);
                 if (sel) this._confirmTypeSelection(sel.name, true);
             });
@@ -566,23 +568,25 @@ export default class DevUIScene extends Phaser.Scene {
             const hlRect = this.add.rectangle(0, 0, listW - 4, rowH, 0xffffff, 0.08)
                 .setOrigin(0, 0)
                 .setDepth(3)
-                .setVisible(false)
-                .setInteractive({ useHandCursor: true });
+                .setVisible(false);
             const pre = this.add.text(2, 0, '', UI.font).setDepth(4);
             const mid = this.add.text(2, 0, '', { ...UI.font, fontStyle: 'bold' }).setDepth(4);
             const post = this.add.text(2, 0, '', UI.font).setDepth(4);
             rowC.add([hlRect, pre, mid, post]);
             rowC.setSize(listW - 4, rowH);
+            rowC.setInteractive(new Phaser.Geom.Rectangle(0, 0, listW - 4, rowH), Phaser.Geom.Rectangle.Contains);
             this._itemTypeRows.push(rowC);
             this._itemTypeDD.add(rowC);
             rowC._hlRect = hlRect; rowC._pre = pre; rowC._mid = mid; rowC._post = post;
             rowC._index = i;
 
-            hlRect.on('pointerover', () => {
+            rowC.on('pointerover', () => {
                 this._item.resHL = i;
                 this._renderItemDropdown();
             });
-            hlRect.on('pointerdown', () => {
+            rowC.on('pointerdown', () => {
+                this._item.resHL = i;
+                this._renderItemDropdown();
                 const sel = this._visibleItemDropdownItem(i);
                 if (sel) this._confirmItemSelection(sel.name, true);
             });
@@ -689,14 +693,16 @@ export default class DevUIScene extends Phaser.Scene {
                 const max = t.text.includes('.') ? 4 : 3;
                 if (t.text.length < max) {
                     const candidate = t.text + ev.key;
-                    let allow = true;
                     if (this._editing === this._gameSpeedText) {
-                        allow = parseFloat(candidate) <= 10;
+                        const num = parseFloat(candidate);
+                        t.setText(num > 10 ? '10' : candidate);
                     } else if (this._editing === this._itemCountText) {
                         const maxStack = this._item?.maxStack || 1;
-                        allow = parseInt(candidate, 10) <= maxStack;
+                        const num = parseInt(candidate, 10);
+                        t.setText(num > maxStack ? String(maxStack) : candidate);
+                    } else {
+                        t.setText(candidate);
                     }
-                    if (allow) t.setText(candidate);
                 }
                 return;
             }
