@@ -61,6 +61,7 @@ test('chunkDetails toggle manages overlay and timer', () => {
     DevTools.setChunkDetails(true, scene);
     assert.ok(DevTools._chunkGfx);
     assert.ok(DevTools._chunkTimer);
+    assert.match(DevTools._chunkText.text, /loaded/);
     DevTools._chunkTimer.callback();
     assert.match(DevTools._chunkText.text, /loaded/);
     DevTools.setChunkDetails(false);
