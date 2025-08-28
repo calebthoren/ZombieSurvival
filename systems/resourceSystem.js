@@ -732,7 +732,6 @@ export default function createResourceSystem(scene) {
             attempts++;
         }
         return spawned;
-    }
 
     // ----- Dev Helpers -----
     function spawnWorldItem(id, pos) {
@@ -746,10 +745,13 @@ export default function createResourceSystem(scene) {
         obj.body.setAllowGravity(false);
     }
 
-    // Expose API on the scene; return nothing to avoid top-level return issues
+    // Expose API on the scene and return it for convenience
     scene.resourceSystem = {
         spawnAllResources,
         spawnWorldItem,
         spawnChunkResources,
         cancelChunkJob: _cancelChunkJob,
     };
+
+    return scene.resourceSystem;
+}
