@@ -136,7 +136,14 @@ export default class MainScene extends Phaser.Scene {
         this.uiScene = this.scene.get('UIScene');
         this.combat = createCombatSystem(this);
         this.dayNight = createDayNightSystem(this);
-        this.resourceSystem = createResourceSystem(this);
+        this.resourceSystem = createResourceSystem(this) || this.resourceSystem;
+        // Wire chunk events to resource system
+        this.events.on('chunk:load', (chunk) => this.resourceSystem.spawnChunkResources(chunk));
+        this.events.on('chunk:unload', (chunk) => this.resourceSystem.cancelChunkJob(chunk));
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this.events.off('chunk:load');
+            this.events.off('chunk:unload');
+        });
         this.inputSystem = createInputSystem(this);
 
         // Expand world bounds to config size
@@ -162,7 +169,13 @@ export default class MainScene extends Phaser.Scene {
             maxSize: 32,
         });
         this.meleeHits = this.physics.add.group();
-        this.resources = this.physics.add.group();
+        // Split resources:
+        // - resources: static physics (AABBs) for blocking/bush where rect is fine
+        // - resourcesDyn: dynamic immovable physics for circular bodies (rocks with circle colliders)
+        // - resourcesDecor: non-physics collectibles
+        this.resources = this.physics.add.staticGroup();
+        this.resourcesDyn = this.physics.add.group();
+        this.resourcesDecor = this.add.group();
         this.droppedItems = this.add.group();
         this._dropCleanupEvent = this.time.addEvent({
             delay: 1000,
@@ -181,9 +194,13 @@ export default class MainScene extends Phaser.Scene {
         this.resourcePool = createResourcePool(this);
 
         this.chunkManager = new ChunkManager(this, 1);
+        // Tune chunk streaming budgets for smoother movement on your machine
+        this.chunkManager.maxLoadsPerTick = 2;
+        this.chunkManager.maxUnloadsPerTick = 2;
+        this.chunkManager.unloadGraceMs = 900; // delay unload slightly to avoid thrash
         this.checkChunks();
         this._chunkCheckEvent = this.time.addEvent({
-            delay: 200,
+            delay: 300,
             loop: true,
             callback: this.checkChunks,
             callbackScope: this,
@@ -264,8 +281,8 @@ export default class MainScene extends Phaser.Scene {
             this.events.once(Phaser.Scenes.Events.DESTROY, _teardown);
         }
 
-        // Spawn resources from WORLD_GEN (all resource groups)
-        this.spawnAllResources();
+        // Chunk-based resources: loaded per nearby chunk via ChunkManager
+        // (Avoid global spawn to prevent startup hitch.)
 
         // Physics interactions
         this.physics.add.overlap(
@@ -300,11 +317,27 @@ export default class MainScene extends Phaser.Scene {
             (bullet, res) => !!res.getData('blocking'),
             this,
         );
+        this.physics.add.collider(
+            this.bullets,
+            this.resourcesDyn,
+            (bullet) => {
+                if (bullet && bullet.destroy) bullet.destroy();
+            },
+            (bullet, res) => !!res.getData('blocking'),
+            this,
+        );
 
         // Zombies vs resources (only blocking ones separate)
         this._zombieResourceCollider = this.physics.add.collider(
             this.zombies,
             this.resources,
+            null,
+            (zombie, obj) => !!obj.getData('blocking'),
+            this,
+        );
+        this._zombieResourceColliderDyn = this.physics.add.collider(
+            this.zombies,
+            this.resourcesDyn,
             null,
             (zombie, obj) => !!obj.getData('blocking'),
             this,
@@ -517,18 +550,22 @@ export default class MainScene extends Phaser.Scene {
             if (this._pickupItem(item)) break;
         }
 
-        const resources = this.resources.getChildren();
-        for (let i = 0; i < resources.length; i++) {
-            const res = resources[i];
-            if (!res.active) continue;
-            if (!Phaser.Geom.Rectangle.Contains(res.getBounds(), px, py))
-                continue;
-            const dx = this.player.x - res.x;
-            const dy = this.player.y - res.y;
-            const d2 = dx * dx + dy * dy;
-            if (d2 > pickupRangeSq) continue;
-            res.emit('pointerdown', this._autoPickupPointer);
-            if (!res.active) break;
+        const scanGroups = [this.resources, this.resourcesDecor];
+        for (const grp of scanGroups) {
+            if (!grp || !grp.getChildren) continue;
+            const resources = grp.getChildren();
+            for (let i = 0; i < resources.length; i++) {
+                const res = resources[i];
+                if (!res.active) continue;
+                if (!Phaser.Geom.Rectangle.Contains(res.getBounds(), px, py))
+                    continue;
+                const dx = this.player.x - res.x;
+                const dy = this.player.y - res.y;
+                const d2 = dx * dx + dy * dy;
+                if (d2 > pickupRangeSq) continue;
+                res.emit('pointerdown', this._autoPickupPointer);
+                if (!res.active) break;
+            }
         }
     }
 
@@ -536,6 +573,30 @@ export default class MainScene extends Phaser.Scene {
     checkChunks() {
         const p = this.player;
         if (!p) return;
+        // Adaptive streaming based on FPS and movement speed
+        const fps = Math.round(this.game?.loop?.actualFps || 0);
+        const body = this.player.body;
+        const speed = body ? Math.hypot(body.velocity.x, body.velocity.y) : 0;
+        const targetLoads = fps < 50 ? 1 : 2;
+        const targetUnloads = fps < 50 ? 1 : 2;
+        if (
+            this.chunkManager.maxLoadsPerTick !== targetLoads ||
+            this.chunkManager.maxUnloadsPerTick !== targetUnloads
+        ) {
+            this.chunkManager.maxLoadsPerTick = targetLoads;
+            this.chunkManager.maxUnloadsPerTick = targetUnloads;
+        }
+        const baseDelay = 300;
+        const targetDelay = speed > 140 ? 380 : baseDelay;
+        if (this._chunkCheckEvent && this._chunkCheckEvent.delay !== targetDelay) {
+            try { this._chunkCheckEvent.remove(false); } catch {}
+            this._chunkCheckEvent = this.time.addEvent({
+                delay: targetDelay,
+                loop: true,
+                callback: this.checkChunks,
+                callbackScope: this,
+            });
+        }
         this.chunkManager.update(p.x, p.y);
     }
 

@@ -286,7 +286,7 @@ const DevTools = {
             this._perfText.setY(baseY + 14);
         }
         if (!this._chunkTimer) {
-            this._chunkTimer = scene.time.addEvent({ delay: 100, loop: true, callback: () => { this._drawChunkDetails(scene); } });
+            this._chunkTimer = scene.time.addEvent({ delay: 250, loop: true, callback: () => { this._drawChunkDetails(scene); } });
         }
     },
 
@@ -317,14 +317,17 @@ const DevTools = {
         const endX = Math.floor(view.right / size);
         const startY = Math.floor(view.y / size);
         const endY = Math.floor(view.bottom / size);
+        const cols = Math.max(1, Math.floor(WORLD_GEN.world.width / size));
+        const rows = Math.max(1, Math.floor(WORLD_GEN.world.height / size));
         for (let cx = startX; cx <= endX; cx++) {
             for (let cy = startY; cy <= endY; cy++) {
                 const x = cx * size;
                 const y = cy * size;
-                const key = `${cx},${cy}`;
-                if (cm?.loadedChunks?.has(key)) {
-                    g.fillStyle(0x00ff00, 0.15).fillRect(x, y, size, size);
-                }
+                // Wrap indices to match ChunkManager keys
+                const kx = ((cx % cols) + cols) % cols;
+                const ky = ((cy % rows) + rows) % rows;
+                const key = `${kx},${ky}`;
+                // Only stroke to minimize fill overdraw
                 g.strokeRect(x, y, size, size);
             }
         }
@@ -335,6 +338,10 @@ const DevTools = {
         if (this._chunkText) {
             this._chunkText.setText(`Chunk (${pcx},${pcy}) loaded: ${loaded}`);
         }
+        // Lightly mark the player's current chunk
+        const px = pcx * size;
+        const py = pcy * size;
+        g.fillStyle(0x00ff00, 0.1).fillRect(px, py, size, size);
     },
 
     // ─────────────────────────────────────────────────────────────
@@ -514,21 +521,38 @@ const DevTools = {
         if (!g) return;
 
         g.clear().lineStyle(1, 0xffff00, 1).fillStyle(0xffff00, 0.25); // yellow
-        const list = (scene.resources && scene.resources.getChildren) ? scene.resources.getChildren() : [];
-        for (let i = 0; i < list.length; i++) {
-            const obj = list[i];
-            const body = obj && obj.body;
-            if (!body) continue;
+        const lists = [];
+        if (scene.resources && scene.resources.getChildren) lists.push(scene.resources.getChildren());
+        if (scene.resourcesDyn && scene.resourcesDyn.getChildren) lists.push(scene.resourcesDyn.getChildren());
+        if (scene.resourcesDecor && scene.resourcesDecor.getChildren) lists.push(scene.resourcesDecor.getChildren());
 
-            if (body.isCircle) {
-                const cx = body.x + body.halfWidth;
-                const cy = body.y + body.halfHeight;
-                const r  = body.halfWidth;
-                g.fillCircle(cx, cy, r);
-                g.strokeCircle(cx, cy, r);
-            } else {
-                g.fillRect(body.x, body.y, body.width, body.height);
-                g.strokeRect(body.x, body.y, body.width, body.height);
+        for (const list of lists) {
+            for (let i = 0; i < list.length; i++) {
+                const obj = list[i];
+                if (!obj || !obj.active || !obj.visible) continue;
+                const body = obj.body;
+                if (body) {
+                    if (body.isCircle) {
+                        const cx = (body.x ?? 0) + (body.halfWidth ?? (body.width || 0) / 2);
+                        const cy = (body.y ?? 0) + (body.halfHeight ?? (body.height || 0) / 2);
+                        const r = body.halfWidth ?? (body.width || 0) / 2;
+                        g.fillCircle(cx, cy, r);
+                        g.strokeCircle(cx, cy, r);
+                    } else {
+                        const x = body.x ?? (obj.x - (body.width || obj.displayWidth) * (obj.originX || 0.5));
+                        const y = body.y ?? (obj.y - (body.height || obj.displayHeight) * (obj.originY || 0.5));
+                        const w = body.width ?? obj.displayWidth;
+                        const h = body.height ?? obj.displayHeight;
+                        g.fillRect(x, y, w, h);
+                        g.strokeRect(x, y, w, h);
+                    }
+                } else {
+                    // Non-physics decor: approximate using display bounds
+                    const b = obj.getBounds ? obj.getBounds() : null;
+                    if (!b) continue;
+                    g.fillRect(b.x, b.y, b.width, b.height);
+                    g.strokeRect(b.x, b.y, b.width, b.height);
+                }
             }
         }
     },

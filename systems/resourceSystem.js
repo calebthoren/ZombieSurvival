@@ -9,107 +9,13 @@ import './world_gen/resources/trees.js';
 import './world_gen/resources/bushes.js';
 
 export default function createResourceSystem(scene) {
-    // ----- Public API -----
-    function spawnChunkResources(chunk) {
-        const registry = getResourceRegistry();
-        const size = WORLD_GEN.chunk.size;
-        const bounds = {
-            minX: chunk.cx * size,
-            minY: chunk.cy * size,
-            maxX: (chunk.cx + 1) * size,
-            maxY: (chunk.cy + 1) * size,
-        };
-
-        const meta = chunk.meta;
-        meta.resources = meta.resources || [];
-        const resources = meta.resources;
-
-        if (resources.length === 0) {
-            const total = Phaser.Math.Between(35, 45);
-            const keys = Array.from(registry.keys());
-            const counts = {};
-            let remaining = total;
-            for (let i = 0; i < keys.length; i++) {
-                const left = keys.length - i - 1;
-                const min = 10;
-                const max = 15;
-                const maxAllowed = Math.min(max, remaining - min * left);
-                const minAllowed = Math.max(min, remaining - max * left);
-                const c =
-                    i === keys.length - 1
-                        ? remaining
-                        : Phaser.Math.Between(minAllowed, maxAllowed);
-                counts[keys[i]] = c;
-                remaining -= c;
-            }
-
-            for (const key of keys) {
-                const gen = registry.get(key);
-                const cfg = gen();
-                if (!cfg) continue;
-                _spawnResourceGroup(key, cfg, {
-                    bounds,
-                    count: counts[key],
-                    noRespawn: true,
-                    onCreate(trunk, id, x, y) {
-                        chunk.group.add(trunk);
-                        const idx = resources.push({
-                            type: key,
-                            id,
-                            x,
-                            y,
-                            harvested: false,
-                        }) - 1;
-                        trunk.setData('chunkIdx', idx);
-                        trunk.setData('chunk', chunk);
-                    },
-                    onHarvest(trunk) {
-                        const idx = trunk.getData('chunkIdx');
-                        if (idx != null) resources[idx].harvested = true;
-                    },
-                });
-            }
-        } else {
-            for (let i = 0; i < resources.length; i++) {
-                const r = resources[i];
-                if (r.harvested) continue;
-                const cfg = {
-                    variants: [{ id: r.id, weight: 1 }],
-                    clusterMin: 1,
-                    clusterMax: 1,
-                };
-                _spawnResourceGroup(r.type, cfg, {
-                    bounds: {
-                        minX: r.x,
-                        maxX: r.x,
-                        minY: r.y,
-                        maxY: r.y,
-                    },
-                    count: 1,
-                    noRespawn: true,
-                    onCreate(trunk) {
-                        chunk.group.add(trunk);
-                        trunk.setData('chunkIdx', i);
-                        trunk.setData('chunk', chunk);
-                    },
-                    onHarvest() {
-                        resources[i].harvested = true;
-                    },
-                });
-            }
-        }
-    }
-
-    function spawnAllResources() {
-        const registry = getResourceRegistry();
-        for (const [key, gen] of registry.entries()) {
-            const cfg = gen();
-            if (!cfg) continue;
-            const count = _spawnResourceGroup(key, cfg);
-            console.log(`resources: ${key}=${count}`);
-        }
-
+    // Background job timers for time-sliced chunk population
+    const _chunkJobs = new Map(); // key: "cx,cy" -> Phaser.TimerEvent
+    // Ensure resource collision/overlap systems are set up once
+    function ensureColliders() {
+        if (!scene.player || !scene.physics) return;
         if (!scene._resourcesCollider) {
+            if (!scene.resources) return; // wait until group exists
             scene._resourcesCollider = scene.physics.add.collider(
                 scene.player,
                 scene.resources,
@@ -118,14 +24,51 @@ export default function createResourceSystem(scene) {
                 scene,
             );
         }
+        if (!scene._resourcesColliderDyn) {
+            if (!scene.resourcesDyn) return;
+            scene._resourcesColliderDyn = scene.physics.add.collider(
+                scene.player,
+                scene.resourcesDyn,
+                null,
+                (player, obj) => !!obj.getData('blocking'),
+                scene,
+            );
+        }
 
         if (!scene._bushSlowOverlap) {
+            if (!scene.player || !scene.resources || !scene.zombies) return;
             const markBush = (ent, obj) => {
                 if (obj.getData('bush')) ent._inBush = true;
             };
             scene._bushSlowOverlap = [
-                scene.physics.add.overlap(scene.player, scene.resources, markBush, null, scene),
-                scene.physics.add.overlap(scene.zombies, scene.resources, markBush, null, scene),
+                scene.physics.add.overlap(
+                    scene.player,
+                    scene.resources,
+                    markBush,
+                    null,
+                    scene,
+                ),
+                scene.physics.add.overlap(
+                    scene.zombies,
+                    scene.resources,
+                    markBush,
+                    null,
+                    scene,
+                ),
+                scene.physics.add.overlap(
+                    scene.player,
+                    scene.resourcesDyn,
+                    markBush,
+                    null,
+                    scene,
+                ),
+                scene.physics.add.overlap(
+                    scene.zombies,
+                    scene.resourcesDyn,
+                    markBush,
+                    null,
+                    scene,
+                ),
             ];
             const slow = DESIGN_RULES.movement?.bushSlowMultiplier ?? 0.5;
             scene._bushSlowUpdate = () => {
@@ -147,6 +90,163 @@ export default function createResourceSystem(scene) {
                 scene._bushSlowUpdate = null;
             });
         }
+    }
+    // ----- Public API -----
+    function _keyForChunk(c) {
+        return `${c.cx},${c.cy}`;
+    }
+
+    function _cancelChunkJob(chunk) {
+        const key = _keyForChunk(chunk);
+        const t = _chunkJobs.get(key);
+        if (t) {
+            try { t.remove(false); } catch {}
+            _chunkJobs.delete(key);
+        }
+    }
+
+    function spawnChunkResources(chunk) {
+        // Make sure physics interactions exist before creating any resources
+        ensureColliders();
+        const registry = getResourceRegistry();
+        const size = WORLD_GEN.chunk.size;
+        const bounds = {
+            minX: chunk.cx * size,
+            minY: chunk.cy * size,
+            maxX: (chunk.cx + 1) * size,
+            maxY: (chunk.cy + 1) * size,
+        };
+
+        const meta = chunk.meta;
+        meta.resources = meta.resources || [];
+        const resources = meta.resources;
+
+        if (resources.length === 0) {
+            // Lower per-chunk density: target 25–35 total resources
+            const total = Phaser.Math.Between(25, 35);
+            const keys = Array.from(registry.keys());
+            const counts = {};
+            let remaining = total;
+            for (let i = 0; i < keys.length; i++) {
+                const left = keys.length - i - 1;
+                // Per-group bounds tuned to match 25–35 total across 3 groups
+                const min = 8;
+                const max = 12;
+                const maxAllowed = Math.min(max, remaining - min * left);
+                const minAllowed = Math.max(min, remaining - max * left);
+                const c =
+                    i === keys.length - 1
+                        ? remaining
+                        : Phaser.Math.Between(minAllowed, maxAllowed);
+                counts[keys[i]] = c;
+                remaining -= c;
+            }
+
+            // Time-sliced population: spawn small batches over several ticks
+            const tasks = keys
+                .map((k) => {
+                    const gen = registry.get(k);
+                    const cfg = gen && gen();
+                    return cfg ? { key: k, cfg, remaining: counts[k] | 0 } : null;
+                })
+                .filter(Boolean);
+
+            // Cancel any prior job for this chunk and start a new one
+            _cancelChunkJob(chunk);
+            const perBatch = 4; // aim to create up to ~4 resources per step
+            const keyStr = _keyForChunk(chunk);
+            const step = () => {
+                // Stop if chunk got unloaded
+                if (!chunk.group || chunk.group.active === false) {
+                    _cancelChunkJob(chunk);
+                    return;
+                }
+                let producedThisStep = 0;
+                for (let i = 0; i < tasks.length; i++) {
+                    const t = tasks[i];
+                    if (!t || t.remaining <= 0) continue;
+                    const want = Math.min(perBatch, t.remaining);
+                const spawned = _spawnResourceGroup(t.key, t.cfg, {
+                    bounds,
+                    count: want,
+                    noRespawn: true,
+                    proximityGroup: chunk.group,
+                    onCreate(trunk, id, x, y) {
+                        chunk.group.add(trunk);
+                        const idx = resources.push({
+                            type: t.key,
+                            id,
+                                x,
+                                y,
+                                harvested: false,
+                            }) - 1;
+                            trunk.setData('chunkIdx', idx);
+                            trunk.setData('chunk', chunk);
+                        },
+                        onHarvest(trunk) {
+                            const idx = trunk.getData('chunkIdx');
+                            if (idx != null) resources[idx].harvested = true;
+                        },
+                    }) | 0;
+                    t.remaining = Math.max(0, t.remaining - spawned);
+                    producedThisStep += spawned;
+                    // Light cap per step to keep frame time stable
+                    if (producedThisStep >= perBatch) break;
+                }
+
+                // If all tasks finished, stop; else schedule next slice
+                const done = tasks.every((t) => !t || t.remaining <= 0);
+                if (done) {
+                    _cancelChunkJob(chunk);
+                } else {
+                    const ev = scene.time.addEvent({ delay: 60, callback: step });
+                    _chunkJobs.set(keyStr, ev);
+                }
+            };
+            const ev = scene.time.addEvent({ delay: 20, callback: step });
+            _chunkJobs.set(keyStr, ev);
+        } else {
+            for (let i = 0; i < resources.length; i++) {
+                const r = resources[i];
+                if (r.harvested) continue;
+                const cfg = {
+                    variants: [{ id: r.id, weight: 1 }],
+                    clusterMin: 1,
+                    clusterMax: 1,
+                };
+                _spawnResourceGroup(r.type, cfg, {
+                    bounds: {
+                        minX: r.x,
+                        maxX: r.x,
+                        minY: r.y,
+                        maxY: r.y,
+                    },
+                    count: 1,
+                    noRespawn: true,
+                    proximityGroup: chunk.group,
+                    onCreate(trunk) {
+                        chunk.group.add(trunk);
+                        trunk.setData('chunkIdx', i);
+                        trunk.setData('chunk', chunk);
+                    },
+                    onHarvest() {
+                        resources[i].harvested = true;
+                    },
+                });
+            }
+        }
+    }
+
+    function spawnAllResources() {
+        const registry = getResourceRegistry();
+        for (const [key, gen] of registry.entries()) {
+            const cfg = gen();
+            if (!cfg) continue;
+            const count = _spawnResourceGroup(key, cfg);
+            console.log(`resources: ${key}=${count}`);
+        }
+        // After global spawn, set up interactions once
+        ensureColliders();
     }
 
     // ----- Internal Helpers -----
@@ -182,12 +282,22 @@ export default function createResourceSystem(scene) {
         const onHarvest = opts.onHarvest;
 
         const tooClose = (x, y, w, h) => {
-            const children = scene.resources.getChildren();
+            // Prefer proximity-limited list (e.g., the current chunk's group) to avoid global N^2 scans
+            const proxGroup = opts.proximityGroup;
+            let children = [];
+            if (proxGroup && proxGroup.getChildren) {
+                children = proxGroup.getChildren();
+            } else {
+                const a = (scene.resources && scene.resources.getChildren) ? scene.resources.getChildren() : [];
+                const b = (scene.resourcesDyn && scene.resourcesDyn.getChildren) ? scene.resourcesDyn.getChildren() : [];
+                children = a.concat(b);
+            }
             for (let i = 0; i < children.length; i++) {
                 const c = children[i];
                 if (!c.active) continue;
-                const halfW = (c.displayWidth + w) * 0.5;
-                const halfH = (c.displayHeight + h) * 0.5;
+                const margin = (groupCfg.minSpacing ?? 0) * 0.5; // use half-spacing per axis
+                const halfW = (c.displayWidth + w) * 0.5 + margin;
+                const halfH = (c.displayHeight + h) * 0.5 + margin;
                 const dx = c.x - x;
                 const dy = c.y - y;
                 if (Math.abs(dx) < halfW && Math.abs(dy) < halfH) return true;
@@ -210,18 +320,34 @@ export default function createResourceSystem(scene) {
             const scale = def.world?.scale ?? 1;
             const texKey = def.world?.textureKey || id;
 
-            const trunk = (scene.resourcePool
-                ? scene.resourcePool.acquire(texKey)
-                : scene.resources.create(x, y, texKey))
-                .setOrigin(originX, originY)
-                .setScale(scale)
-                .setDepth(def.trunkDepth ?? def.depth ?? 5)
-                .setPosition(x, y);
+            const isBush = !!def.tags?.includes('bush');
+            const isBlocking = !!def.blocking;
+            const needsPhysics = isBlocking || isBush;
 
-            const blocking = !!def.blocking;
-            trunk.setData('blocking', blocking);
+            let trunk;
+            const bodyCfg = def.world?.body;
+            // REVERT: Always create dynamic physics bodies for resources that need physics
+            if (needsPhysics) {
+                trunk = scene.physics.add
+                    .image(x, y, texKey)
+                    .setOrigin(originX, originY)
+                    .setScale(scale)
+                    .setDepth(def.trunkDepth ?? def.depth ?? 5)
+                    .setImmovable(true)
+                    .setPosition(x, y);
+                if (scene.resourcesDyn && scene.resourcesDyn.add) scene.resourcesDyn.add(trunk);
+            } else {
+                trunk = scene.add
+                    .image(x, y, texKey)
+                    .setOrigin(originX, originY)
+                    .setScale(scale)
+                    .setDepth(def.trunkDepth ?? def.depth ?? 5);
+                scene.resourcesDecor && scene.resourcesDecor.add(trunk);
+            }
 
-            if (blocking && def.tags?.includes('rock')) {
+            trunk.setData('blocking', isBlocking);
+
+            if (isBlocking && def.tags?.includes('rock')) {
                 const frameW = trunk.width;
                 const frameH = trunk.height;
                 const topH = frameH * 0.5;
@@ -236,13 +362,24 @@ export default function createResourceSystem(scene) {
                 trunk.once('destroy', () => top.destroy());
             }
 
-            if (def.tags?.includes('bush')) trunk.setData('bush', true);
+            if (isBush) trunk.setData('bush', true);
 
-            const bodyCfg = def.world?.body;
-            if (trunk.body) {
-                trunk.body.setAllowGravity(false);
+            if (needsPhysics && trunk.body) {
+                const b = trunk.body;
+                if (typeof b.setAllowGravity === 'function') b.setAllowGravity(false);
 
-                if (bodyCfg) {
+                if (isBush) {
+                    // Prefer circular slow zone, centered slightly above geometric center
+                    const dispW = trunk.displayWidth;
+                    const dispH = trunk.displayHeight;
+                    const r = Math.min(dispW, dispH) * 0.45;
+                    const lift = r * 0.2; // nudge up a bit
+                    const ox = (trunk.displayOriginX || dispW * 0.5) - r;
+                    const oy = (trunk.displayOriginY || dispH * 0.5) - r - lift;
+                    if (typeof b.setCircle === 'function') b.setCircle(r, ox, oy);
+                    else if (typeof b.setSize === 'function') b.setSize(2 * r, 2 * r);
+                    if (typeof b.setOffset === 'function') b.setOffset(ox, oy);
+                } else if (bodyCfg) {
                     const frameW = trunk.width;
                     const frameH = trunk.height;
                     const dispW = trunk.displayWidth;
@@ -304,32 +441,32 @@ export default function createResourceSystem(scene) {
                     const ox = baseX + addX;
                     const oy = baseY + addY;
 
-                    if (bodyCfg.kind === 'circle') {
-                        trunk.body.setCircle(br, ox, oy);
+                    if (bodyCfg.kind === 'circle' && typeof b.setCircle === 'function') {
+                        b.setCircle(br, ox, oy);
                     } else {
-                        trunk.body.setSize(bw, bh);
-                        trunk.body.setOffset(ox, oy);
+                        if (typeof b.setSize === 'function') b.setSize(bw, bh);
+                        if (typeof b.setOffset === 'function') b.setOffset(ox, oy);
                     }
-                    trunk.body.setImmovable(blocking);
+                    // static bodies are inherently immovable; for dynamic, guard the call
+                    if (typeof b.setImmovable === 'function') b.setImmovable(true);
                 } else {
-                    if (blocking) {
-                        trunk.body.setImmovable(true);
+                    if (isBlocking) {
+                        if (typeof b.setImmovable === 'function') b.setImmovable(true);
                     } else {
-                        if (trunk.getData('bush')) {
-                            const r =
-                                Math.min(
-                                    trunk.displayWidth,
-                                    trunk.displayHeight,
-                                ) * 0.45; // shrink hitbox by 10%
-                            const ox = trunk.displayWidth * 0.5 - r;
-                            const oy = trunk.displayHeight * 0.5 - r;
-                            trunk.body.setCircle(r, ox, oy);
-                        } else {
-                            trunk.body.setSize(trunk.displayWidth, trunk.displayHeight);
-                            trunk.body.setOffset(0, 0);
+                            if (typeof b.setSize === 'function') b.setSize(trunk.displayWidth, trunk.displayHeight);
+                            // Center align rect within the sprite's display frame
+                            if (typeof b.setOffset === 'function') {
+                                const ox = (trunk.displayOriginX || trunk.displayWidth * 0.5) - trunk.displayWidth * 0.5;
+                                const oy = (trunk.displayOriginY || trunk.displayHeight * 0.5) - trunk.displayHeight * 0.5;
+                                b.setOffset(ox, oy);
+                            }
                         }
-                        trunk.body.setImmovable(true);
+                        if (typeof b.setImmovable === 'function') b.setImmovable(true);
                     }
+                }
+                // Important for static bodies: refresh after size/offset/scale/origin/crop changes
+                if (b.moves === false && typeof trunk.refreshBody === 'function') {
+                    try { trunk.refreshBody(); } catch {}
                 }
             }
 
@@ -455,9 +592,15 @@ export default function createResourceSystem(scene) {
                             d.leaves.setAlpha(overlap ? 0.5 : 1);
                         }
                     };
-                    scene.events.on('update', scene._treeLeavesUpdate);
+                    // Throttle updates with a timer instead of every frame
+                    scene._treeLeavesTimer = scene.time.addEvent({
+                        delay: 120,
+                        loop: true,
+                        callback: scene._treeLeavesUpdate,
+                    });
                     scene.events.once('shutdown', () => {
-                        scene.events.off('update', scene._treeLeavesUpdate);
+                        try { scene._treeLeavesTimer?.remove(false); } catch {}
+                        scene._treeLeavesTimer = null;
                         scene._treeLeaves = [];
                         scene._treeLeavesUpdate = null;
                     });
@@ -484,8 +627,13 @@ export default function createResourceSystem(scene) {
                         );
                     }
                     if (onHarvest) onHarvest(trunk, id, x, y);
-                    if (scene.resourcePool) scene.resourcePool.release(trunk);
-                    else trunk.destroy();
+                    if (needsPhysics) {
+                        try { trunk.destroy(); } catch {}
+                    } else if (scene.resourcePool) {
+                        scene.resourcePool.release(trunk);
+                    } else {
+                        trunk.destroy();
+                    }
                     if (!noRespawn) {
                         scene.time.delayedCall(
                             Phaser.Math.Between(respawnMin, respawnMax),
@@ -598,10 +746,10 @@ export default function createResourceSystem(scene) {
         obj.body.setAllowGravity(false);
     }
 
-    scene.events.on('chunk:load', spawnChunkResources);
-    scene.events.once('shutdown', () => {
-        scene.events.off('chunk:load', spawnChunkResources);
-    });
-
-    return { spawnAllResources, spawnWorldItem };
-}
+    // Expose API on the scene; return nothing to avoid top-level return issues
+    scene.resourceSystem = {
+        spawnAllResources,
+        spawnWorldItem,
+        spawnChunkResources,
+        cancelChunkJob: _cancelChunkJob,
+    };

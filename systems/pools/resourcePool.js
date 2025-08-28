@@ -25,6 +25,16 @@ export default function createResourcePool(scene) {
         if (chunk && chunk.group) {
             chunk.group.remove(obj, false);
         }
+        // If this is a non-physics decor object, just destroy it
+        if (!obj.body) {
+            try { obj.destroy(); } catch {}
+            return;
+        }
+        // If this is a static physics body (StaticGroup), don't pool; destroy
+        if (obj.body && obj.body.moves === false) {
+            try { obj.destroy(); } catch {}
+            return;
+        }
         scene.resources.remove(obj, false);
         obj.body && obj.body.stop && obj.body.stop();
         if (obj.body) obj.body.enable = false;

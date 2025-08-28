@@ -131,12 +131,27 @@ export default class DevUIScene extends Phaser.Scene {
 
         // Content root (clipped so rows can't overlap the header)
         this.content = this.add.container(0, 54).setDepth(1);
+        // Use a Graphics-based geometry mask. This avoids a Phaser WebGL crash that can
+        // occur with Shape-based masks during browser resize/devtools open on some GPUs.
         const viewH = this.scale.height - 54;
-        const maskRect = this.add.rectangle(0, 54, camW, viewH, 0xffffff)
-            .setOrigin(0, 0)
-            .setVisible(false);
-        this.content.setMask(maskRect.createGeometryMask());
-        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => maskRect.destroy());
+        this._maskGfx = this.make.graphics({ x: 0, y: 0, add: false });
+        this._redrawContentMask(camW, viewH);
+        const geomMask = this._maskGfx.createGeometryMask();
+        this.content.setMask(geomMask);
+        // Cleanup on shutdown
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            try { geomMask.destroy(); } catch {}
+            try { this._maskGfx.destroy(); } catch {}
+            this._maskGfx = null;
+        });
+        // Keep mask in sync on resize (dev tools opening can resize the canvas)
+        const onResize = (gameSize) => {
+            const w = gameSize?.width ?? this.scale.width;
+            const h = gameSize?.height ?? this.scale.height;
+            this._redrawContentMask(w, h - 54);
+        };
+        this.scale.on('resize', onResize);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off('resize', onResize));
 
         let y = 0;
         y = this._sectionTitle('Cheats', y);
@@ -1257,6 +1272,15 @@ export default class DevUIScene extends Phaser.Scene {
         const maxScroll = Math.max(0, totalH - viewH);
         const ratio = (maxScroll === 0) ? 0 : this._scroll / maxScroll;
         this._scrollbarThumb.y = trackY + (trackH - thumbH) * ratio;
+    }
+
+    // Redraws the content viewport mask to match current size
+    _redrawContentMask(width, viewH) {
+        if (!this._maskGfx) return;
+        this._maskGfx.clear();
+        this._maskGfx.fillStyle(0xffffff, 1);
+        // Mask area: full width, from y=54 down to bottom
+        this._maskGfx.fillRect(0, 54, Math.max(1, width), Math.max(1, viewH));
     }
 
     _estimateContentHeight() {
