@@ -111,7 +111,7 @@ export default function createCombatSystem(scene) {
                 .rectangle(0, 0, cam.width, cam.height, 0x000000, 0.5)
                 .setOrigin(0, 0)
                 .setScrollFactor(0)
-                .setDepth(999);
+                .setDepth(20000);
             const cx = cam.worldView.x + cam.worldView.width * 0.5;
             const cy = cam.worldView.y + cam.worldView.height * 0.5;
             scene.gameOverText = scene.add
@@ -121,7 +121,7 @@ export default function createCombatSystem(scene) {
                     color: '#ffffff',
                 })
                 .setOrigin(0.5)
-                .setDepth(1000);
+                .setDepth(20001);
             scene.gameOverText.setStroke('#720c0c', 4);
             scene.respawnPrompt = scene.add
                 .text(cx, cy + 20, 'Press SPACE to Respawn', {
@@ -130,7 +130,7 @@ export default function createCombatSystem(scene) {
                     color: '#ffffff',
                 })
                 .setOrigin(0.5)
-                .setDepth(1000);
+                .setDepth(20001);
             return;
         }
         try {

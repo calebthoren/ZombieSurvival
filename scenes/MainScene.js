@@ -364,7 +364,8 @@ export default class MainScene extends Phaser.Scene {
             .rectangle(0, 0, w, h, 0x000000)
             .setOrigin(0, 0)
             .setScrollFactor(0)
-            .setDepth(999)
+            // Render above all world sprites so night affects trees/rocks
+            .setDepth(10000)
             .setAlpha(0);
 
         // --- DevTools integration ---
