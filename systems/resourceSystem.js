@@ -8,7 +8,7 @@ import './world_gen/resources/rocks.js';
 import './world_gen/resources/trees.js';
 import './world_gen/resources/bushes.js';
 
-export default function createResourceSystem(scene) {
+function createResourceSystem(scene) {
     // Background job timers for time-sliced chunk population
     const _chunkJobs = new Map(); // key: "cx,cy" -> Phaser.TimerEvent
     // Ensure resource collision/overlap systems are set up once
@@ -732,6 +732,7 @@ export default function createResourceSystem(scene) {
             attempts++;
         }
         return spawned;
+    }
 
     // ----- Dev Helpers -----
     function spawnWorldItem(id, pos) {
@@ -755,3 +756,5 @@ export default function createResourceSystem(scene) {
 
     return scene.resourceSystem;
 }
+
+export default createResourceSystem;
