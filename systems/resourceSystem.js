@@ -324,6 +324,9 @@ function createResourceSystem(scene) {
             const isBlocking = !!def.blocking;
             const needsPhysics = isBlocking || isBush;
 
+            const depthOff = Math.floor(y) % 899;
+            const trunkDepthBase = def.trunkDepth ?? def.depth ?? 5;
+
             let trunk;
             const bodyCfg = def.world?.body;
             // REVERT: Always create dynamic physics bodies for resources that need physics
@@ -332,7 +335,7 @@ function createResourceSystem(scene) {
                     .image(x, y, texKey)
                     .setOrigin(originX, originY)
                     .setScale(scale)
-                    .setDepth(def.trunkDepth ?? def.depth ?? 5)
+                    .setDepth(trunkDepthBase + depthOff)
                     .setImmovable(true)
                     .setPosition(x, y);
                 if (scene.resourcesDyn && scene.resourcesDyn.add) scene.resourcesDyn.add(trunk);
@@ -341,7 +344,7 @@ function createResourceSystem(scene) {
                     .image(x, y, texKey)
                     .setOrigin(originX, originY)
                     .setScale(scale)
-                    .setDepth(def.trunkDepth ?? def.depth ?? 5);
+                    .setDepth(trunkDepthBase + depthOff);
                 scene.resourcesDecor && scene.resourcesDecor.add(trunk);
             }
 
@@ -355,7 +358,7 @@ function createResourceSystem(scene) {
                     .image(x, y, texKey)
                     .setOrigin(originX, originY)
                     .setScale(scale)
-                    .setDepth((scene.player?.depth ?? 900) + 2)
+                    .setDepth((scene.player?.depth ?? 900) + 2 + depthOff)
                     .setCrop(0, 0, frameW, topH);
                 trunk.setCrop(0, topH, frameW, frameH - topH);
                 trunk.setData('topSprite', top);
@@ -369,13 +372,12 @@ function createResourceSystem(scene) {
                 if (typeof b.setAllowGravity === 'function') b.setAllowGravity(false);
 
                 if (isBush) {
-                    // Prefer circular slow zone, centered slightly above geometric center
+                    // Circular slow zone centered on the bush sprite
                     const dispW = trunk.displayWidth;
                     const dispH = trunk.displayHeight;
                     const r = Math.min(dispW, dispH) * 0.45;
-                    const lift = r * 0.2; // nudge up a bit
-                    const ox = (trunk.displayOriginX || dispW * 0.5) - r;
-                    const oy = (trunk.displayOriginY || dispH * 0.5) - r - lift;
+                    const ox = dispW * 0.5 - r;
+                    const oy = dispH * 0.5 - r;
                     if (typeof b.setCircle === 'function') b.setCircle(r, ox, oy);
                     else if (typeof b.setSize === 'function') b.setSize(2 * r, 2 * r);
                     if (typeof b.setOffset === 'function') b.setOffset(ox, oy);
@@ -515,7 +517,7 @@ function createResourceSystem(scene) {
                     .image(x, y, texKey)
                     .setOrigin(originX, originY)
                     .setScale(scale)
-                    .setDepth(def.leavesDepth ?? def.depth ?? 5)
+                    .setDepth((def.leavesDepth ?? def.depth ?? 5) + depthOff)
                     .setCrop(cropX, cropY, lw, lh);
 
                 const dispW = trunk.displayWidth;
@@ -737,9 +739,10 @@ function createResourceSystem(scene) {
     function spawnWorldItem(id, pos) {
         const def = RESOURCE_DB[id];
         if (!def) return;
+        const depthOff = Math.floor(pos.y) % 899;
         const obj = scene.add
             .image(pos.x, pos.y, def.world?.textureKey || id)
-            .setDepth(def.depth ?? 5)
+            .setDepth((def.depth ?? 5) + depthOff)
             .setScale(def.world?.scale ?? 1);
         scene.physics.add.existing(obj);
         obj.body.setAllowGravity(false);
