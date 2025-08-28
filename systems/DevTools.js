@@ -425,11 +425,11 @@ const DevTools = {
             if (this._gfx[k]) { this._gfx[k].destroy(); this._gfx[k] = null; }
         }
 
-        // Create pooled graphics (drawn above gameplay, below UI)
-        this._gfx.resources = scene.add.graphics().setDepth(994).setVisible(false);
-        this._gfx.enemies   = scene.add.graphics().setDepth(995).setVisible(false);
-        this._gfx.attacks   = scene.add.graphics().setDepth(996).setVisible(false);
-        this._gfx.player    = scene.add.graphics().setDepth(997).setVisible(false);
+        // Create pooled graphics above night overlay and world sprites
+        this._gfx.resources = scene.add.graphics().setDepth(10001).setVisible(false);
+        this._gfx.enemies   = scene.add.graphics().setDepth(10002).setVisible(false);
+        this._gfx.attacks   = scene.add.graphics().setDepth(10003).setVisible(false);
+        this._gfx.player    = scene.add.graphics().setDepth(10004).setVisible(false);
 
         this._lastScene = scene;
     },
