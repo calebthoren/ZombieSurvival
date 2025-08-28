@@ -11,6 +11,9 @@ test('ChunkManager loads and unloads chunks around player movement', () => {
         add: { group: () => ({ active: true, destroy() {} }) },
     };
     const cm = new ChunkManager(scene, 1);
+    cm.maxLoadsPerTick = 9;
+    cm.maxUnloadsPerTick = 9;
+    cm.unloadGraceMs = 0;
     let loadCount = 0;
     let unloadCount = 0;
     scene.events.on('chunk:load', () => loadCount++);
@@ -34,6 +37,9 @@ test('ChunkManager wraps coordinates across world bounds', () => {
         add: { group: () => ({ active: true, destroy() {} }) },
     };
     const cm = new ChunkManager(scene, 1);
+    cm.maxLoadsPerTick = 9;
+    cm.maxUnloadsPerTick = 9;
+    cm.unloadGraceMs = 0;
     let loadCount = 0;
     let unloadCount = 0;
     scene.events.on('chunk:load', () => loadCount++);

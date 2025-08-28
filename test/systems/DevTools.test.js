@@ -17,20 +17,25 @@ function makeStubScene() {
         },
         events,
     };
+    const styles = [];
+    const gfx = {
+        destroyed: false,
+        styles,
+        clear() { return this; },
+        lineStyle(width, color) { styles.push({ width, color }); return this; },
+        beginPath() { return this; },
+        moveTo() { return this; },
+        lineTo() { return this; },
+        strokePath() { return this; },
+        strokeRect() { return this; },
+        fillStyle() { return this; },
+        fillRect() { return this; },
+        setDepth() { return this; },
+        setScrollFactor() { return this; },
+        destroy() { this.destroyed = true; },
+    };
     const add = {
-        graphics() {
-            return {
-                destroyed: false,
-                clear() { return this; },
-                lineStyle() { return this; },
-                strokeRect() { return this; },
-                fillStyle() { return this; },
-                fillRect() { return this; },
-                setDepth() { return this; },
-                setScrollFactor() { return this; },
-                destroy() { this.destroyed = true; },
-            };
-        },
+        graphics() { return gfx; },
         text(x, y, msg, style) {
             return {
                 x, y, text: msg, style,
@@ -46,7 +51,7 @@ function makeStubScene() {
     const player = { x: 250, y: 250 };
     const chunkManager = { loadedChunks: new Map([['0,0', {}]]), cols: 20, rows: 20 };
     const game = { loop: { actualFps: 60 } };
-    return { time, add, cameras, player, chunkManager, game };
+    return { time, add, cameras, player, chunkManager, game, gfxStyles: styles };
 }
 
 test('setMeleeSliceBatch clamps to 1 or 2', () => {
@@ -61,6 +66,8 @@ test('chunkDetails toggle manages overlay and timer', () => {
     DevTools.setChunkDetails(true, scene);
     assert.ok(DevTools._chunkGfx);
     assert.ok(DevTools._chunkTimer);
+    assert.match(DevTools._chunkText.text, /loaded/);
+    assert.ok(scene.gfxStyles.some(s => s.width === 4 && s.color === 0x0000aa));
     DevTools._chunkTimer.callback();
     assert.match(DevTools._chunkText.text, /loaded/);
     DevTools.setChunkDetails(false);
@@ -73,6 +80,7 @@ test('performanceHud toggle manages HUD and timer', () => {
     DevTools.setPerformanceHud(true, scene);
     assert.ok(DevTools._perfText);
     assert.ok(DevTools._perfTimer);
+    assert.match(DevTools._perfText.text, /FPS/);
     DevTools._perfTimer.callback();
     assert.match(DevTools._perfText.text, /FPS/);
     DevTools.setPerformanceHud(false);
