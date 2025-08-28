@@ -317,6 +317,7 @@ const DevTools = {
         g.clear();
         const color = 0x00ffff;
         const thin = 1;
+
         const edgeColor = 0x0000aa;
         const edgeThick = 4;
         const startX = Math.floor(view.x / size);
