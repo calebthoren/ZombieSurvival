@@ -288,6 +288,8 @@ const DevTools = {
         if (!this._chunkTimer) {
             this._chunkTimer = scene.time.addEvent({ delay: 250, loop: true, callback: () => { this._drawChunkDetails(scene); } });
         }
+        // Draw once immediately so overlay toggles even when the game is paused
+        this._drawChunkDetails(scene);
     },
 
     _stopChunkDetails() {
