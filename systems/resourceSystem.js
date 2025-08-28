@@ -369,13 +369,12 @@ function createResourceSystem(scene) {
                 if (typeof b.setAllowGravity === 'function') b.setAllowGravity(false);
 
                 if (isBush) {
-                    // Prefer circular slow zone, centered slightly above geometric center
+                    // Circular slow zone centered on the bush sprite
                     const dispW = trunk.displayWidth;
                     const dispH = trunk.displayHeight;
                     const r = Math.min(dispW, dispH) * 0.45;
-                    const lift = r * 0.2; // nudge up a bit
-                    const ox = (trunk.displayOriginX || dispW * 0.5) - r;
-                    const oy = (trunk.displayOriginY || dispH * 0.5) - r - lift;
+                    const ox = dispW * 0.5 - r;
+                    const oy = dispH * 0.5 - r;
                     if (typeof b.setCircle === 'function') b.setCircle(r, ox, oy);
                     else if (typeof b.setSize === 'function') b.setSize(2 * r, 2 * r);
                     if (typeof b.setOffset === 'function') b.setOffset(ox, oy);
