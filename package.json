@@ -5,6 +5,7 @@
     "main": "bootstrap.js",
     "type": "module",
     "scripts": {
+        "start": "node bootstrap.js",
         "test": "node --test"
     },
     "keywords": [],

@@ -1004,7 +1004,8 @@ export default class UIScene extends Phaser.Scene {
     // Day/Night HUD update (called by MainScene)
     // -------------------------
     updateTimeDisplay(dayIndex, phaseLabel, progress) {
-        if (!this.dayNightLabel || !this.timeBarFill) return;
+        // skip if elements were destroyed (e.g., during scene restart)
+        if (!this.dayNightLabel?.active || !this.timeBarFill?.active || !this.timeBarBg?.active) return;
         this.dayNightLabel.setText(`Day ${dayIndex} — ${phaseLabel}`);
         const barW = this.timeBarBg.width;
         const clamped = Phaser.Math.Clamp(progress, 0, 1);

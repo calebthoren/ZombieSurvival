@@ -28,6 +28,7 @@ test('spawned zombies use player depth for tree overlap', () => {
         setOrigin() { return this; },
         setScale() { return this; },
         setDepth(d) { this.depth = d; return this; },
+        setPosition() { return this; },
     };
     const scene = {
         zombies: { create: () => zombie },

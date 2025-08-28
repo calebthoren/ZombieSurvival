@@ -1,13 +1,16 @@
 // scenes/MainScene.js
-import { WORLD_GEN } from '../data/worldGenConfig.js';
+import { WORLD_GEN } from '../systems/world_gen/worldGenConfig.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
 import DevTools from '../systems/DevTools.js';
 import createCombatSystem from '../systems/combatSystem.js';
-import createDayNightSystem from '../systems/dayNightSystem.js';
+import createDayNightSystem from '../systems/world_gen/dayNightSystem.js';
 import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
-import createWorldGenSystem from '../systems/world_gen/worldGenSystem.js';
+import ChunkManager from '../systems/world_gen/chunks/ChunkManager.js';
+import { clearChunkStore } from '../systems/world_gen/chunks/chunkStore.js';
+import createZombiePool from '../systems/pools/zombiePool.js';
+import createResourcePool from '../systems/pools/resourcePool.js';
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -122,6 +125,10 @@ export default class MainScene extends Phaser.Scene {
         this._sprintDrainPerSec = 2; // -2 / sec
         this._isSprinting = false;
 
+        // Reset any previous chunk metadata and UI state
+        clearChunkStore();
+        // Ensure fresh UI on respawn
+        this.scene.stop('UIScene');
         // Launch UI and keep a reference
         this.scene.launch('UIScene', {
             playerData: { health: this.health, stamina: this.stamina, ammo: 0 },
@@ -129,19 +136,82 @@ export default class MainScene extends Phaser.Scene {
         this.uiScene = this.scene.get('UIScene');
         this.combat = createCombatSystem(this);
         this.dayNight = createDayNightSystem(this);
-        this.resourceSystem = createResourceSystem(this);
-        this.worldGen = createWorldGenSystem(this);
+        this.resourceSystem = createResourceSystem(this) || this.resourceSystem;
+        // Wire chunk events to resource system
+        this.events.on('chunk:load', (chunk) => this.resourceSystem.spawnChunkResources(chunk));
+        this.events.on('chunk:unload', (chunk) => this.resourceSystem.cancelChunkJob(chunk));
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this.events.off('chunk:load');
+            this.events.off('chunk:unload');
+        });
         this.inputSystem = createInputSystem(this);
+
+        // Expand world bounds to config size
+        this.physics.world.setBounds(0, 0, WORLD_GEN.world.width, WORLD_GEN.world.height);
+        this.cameras.main.setBounds(0, 0, WORLD_GEN.world.width, WORLD_GEN.world.height);
 
         // Player
         this.player = this.physics.add
-            .sprite(400, 300, 'player')
+            .sprite(WORLD_GEN.spawn.x, WORLD_GEN.spawn.y, 'player')
             .setScale(0.5)
             .setDepth(900)
-            .setCollideWorldBounds(true);
+            .setCollideWorldBounds(false);
+
+        this.cameras.main.startFollow(this.player, true);
+        this.cameras.main.setRoundPixels(true);
 
         this.player._speedMult = 1;
         this.player._inBush = false;
+
+        // Groups
+        this.zombies = this.physics.add.group();
+        this.bullets = this.physics.add.group({
+            classType: Phaser.Physics.Arcade.Image,
+            maxSize: 32,
+        });
+        this.meleeHits = this.physics.add.group();
+        // Split resources:
+        // - resources: static physics (AABBs) for blocking/bush where rect is fine
+        // - resourcesDyn: dynamic immovable physics for circular bodies (rocks with circle colliders)
+        // - resourcesDecor: non-physics collectibles
+        this.resources = this.physics.add.staticGroup();
+        this.resourcesDyn = this.physics.add.group();
+        this.resourcesDecor = this.add.group();
+        this.droppedItems = this.add.group();
+        this._dropCleanupEvent = this.time.addEvent({
+            delay: 1000,
+            loop: true,
+            callback: () => this._cleanupDroppedItems(),
+        });
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this._dropCleanupEvent?.remove(false);
+        });
+        this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+            this._dropCleanupEvent?.remove(false);
+        });
+
+        // Pools
+        this.zombiePool = createZombiePool(this);
+        this.resourcePool = createResourcePool(this);
+
+        this.chunkManager = new ChunkManager(this, 1);
+        // Tune chunk streaming budgets for smoother movement on your machine
+        this.chunkManager.maxLoadsPerTick = 2;
+        this.chunkManager.maxUnloadsPerTick = 2;
+        this.chunkManager.unloadGraceMs = 900; // delay unload slightly to avoid thrash
+        this.checkChunks();
+        this._chunkCheckEvent = this.time.addEvent({
+            delay: 300,
+            loop: true,
+            callback: this.checkChunks,
+            callbackScope: this,
+        });
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this._chunkCheckEvent?.remove(false);
+        });
+        this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+            this._chunkCheckEvent?.remove(false);
+        });
 
         // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -212,29 +282,8 @@ export default class MainScene extends Phaser.Scene {
             this.events.once(Phaser.Scenes.Events.DESTROY, _teardown);
         }
 
-        // Groups
-        this.zombies = this.physics.add.group();
-        this.bullets = this.physics.add.group({
-            classType: Phaser.Physics.Arcade.Image,
-            maxSize: 32,
-        });
-        this.meleeHits = this.physics.add.group();
-        this.resources = this.physics.add.group();
-        this.droppedItems = this.add.group();
-        this._dropCleanupEvent = this.time.addEvent({
-            delay: 1000,
-            loop: true,
-            callback: () => this._cleanupDroppedItems(),
-        });
-        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-            this._dropCleanupEvent?.remove(false);
-        });
-        this.events.once(Phaser.Scenes.Events.DESTROY, () => {
-            this._dropCleanupEvent?.remove(false);
-        });
-
-        // Spawn resources from WORLD_GEN (all resource groups)
-        this.spawnAllResources();
+        // Chunk-based resources: loaded per nearby chunk via ChunkManager
+        // (Avoid global spawn to prevent startup hitch.)
 
         // Physics interactions
         this.physics.add.overlap(
@@ -269,11 +318,27 @@ export default class MainScene extends Phaser.Scene {
             (bullet, res) => !!res.getData('blocking'),
             this,
         );
+        this.physics.add.collider(
+            this.bullets,
+            this.resourcesDyn,
+            (bullet) => {
+                if (bullet && bullet.destroy) bullet.destroy();
+            },
+            (bullet, res) => !!res.getData('blocking'),
+            this,
+        );
 
         // Zombies vs resources (only blocking ones separate)
         this._zombieResourceCollider = this.physics.add.collider(
             this.zombies,
             this.resources,
+            null,
+            (zombie, obj) => !!obj.getData('blocking'),
+            this,
+        );
+        this._zombieResourceColliderDyn = this.physics.add.collider(
+            this.zombies,
+            this.resourcesDyn,
             null,
             (zombie, obj) => !!obj.getData('blocking'),
             this,
@@ -299,7 +364,8 @@ export default class MainScene extends Phaser.Scene {
             .rectangle(0, 0, w, h, 0x000000)
             .setOrigin(0, 0)
             .setScrollFactor(0)
-            .setDepth(999)
+            // Render above all world sprites so night affects trees/rocks
+            .setDepth(10000)
             .setAlpha(0);
 
         // --- DevTools integration ---
@@ -438,7 +504,7 @@ export default class MainScene extends Phaser.Scene {
 
     _scheduleAutoPickup() {
         this._cancelAutoPickup();
-        this._autoPickupTimer = this.time.delayedCall(1000, () => {
+        this._autoPickupTimer = this.time.delayedCall(500, () => {
             if (this.isCharging || !this.input.activePointer.rightButtonDown())
                 return;
             this._autoPickupActive = true;
@@ -486,19 +552,54 @@ export default class MainScene extends Phaser.Scene {
             if (this._pickupItem(item)) break;
         }
 
-        const resources = this.resources.getChildren();
-        for (let i = 0; i < resources.length; i++) {
-            const res = resources[i];
-            if (!res.active) continue;
-            if (!Phaser.Geom.Rectangle.Contains(res.getBounds(), px, py))
-                continue;
-            const dx = this.player.x - res.x;
-            const dy = this.player.y - res.y;
-            const d2 = dx * dx + dy * dy;
-            if (d2 > pickupRangeSq) continue;
-            res.emit('pointerdown', this._autoPickupPointer);
-            if (!res.active) break;
+        const scanGroups = [this.resources, this.resourcesDecor];
+        for (const grp of scanGroups) {
+            if (!grp || !grp.getChildren) continue;
+            const resources = grp.getChildren();
+            for (let i = 0; i < resources.length; i++) {
+                const res = resources[i];
+                if (!res.active) continue;
+                if (!Phaser.Geom.Rectangle.Contains(res.getBounds(), px, py))
+                    continue;
+                const dx = this.player.x - res.x;
+                const dy = this.player.y - res.y;
+                const d2 = dx * dx + dy * dy;
+                if (d2 > pickupRangeSq) continue;
+                res.emit('pointerdown', this._autoPickupPointer);
+                if (!res.active) break;
+            }
         }
+    }
+
+    // Periodic chunk loading/unloading
+    checkChunks() {
+        const p = this.player;
+        if (!p) return;
+        // Adaptive streaming based on FPS and movement speed
+        const fps = Math.round(this.game?.loop?.actualFps || 0);
+        const body = this.player.body;
+        const speed = body ? Math.hypot(body.velocity.x, body.velocity.y) : 0;
+        const targetLoads = fps < 50 ? 1 : 2;
+        const targetUnloads = fps < 50 ? 1 : 2;
+        if (
+            this.chunkManager.maxLoadsPerTick !== targetLoads ||
+            this.chunkManager.maxUnloadsPerTick !== targetUnloads
+        ) {
+            this.chunkManager.maxLoadsPerTick = targetLoads;
+            this.chunkManager.maxUnloadsPerTick = targetUnloads;
+        }
+        const baseDelay = 300;
+        const targetDelay = speed > 140 ? 380 : baseDelay;
+        if (this._chunkCheckEvent && this._chunkCheckEvent.delay !== targetDelay) {
+            try { this._chunkCheckEvent.remove(false); } catch {}
+            this._chunkCheckEvent = this.time.addEvent({
+                delay: targetDelay,
+                loop: true,
+                callback: this.checkChunks,
+                callbackScope: this,
+            });
+        }
+        this.chunkManager.update(p.x, p.y);
     }
 
     // Remove expired dropped items to keep performance steady
@@ -608,6 +709,30 @@ export default class MainScene extends Phaser.Scene {
         }
 
         this.dayNight.tick(delta);
+
+        const w = WORLD_GEN.world.width;
+        const h = WORLD_GEN.world.height;
+        let x = this.player.x;
+        let y = this.player.y;
+        let wrapped = false;
+        if (x < 0) {
+            x += w;
+            wrapped = true;
+        } else if (x >= w) {
+            x -= w;
+            wrapped = true;
+        }
+        if (y < 0) {
+            y += h;
+            wrapped = true;
+        } else if (y >= h) {
+            y -= h;
+            wrapped = true;
+        }
+        if (wrapped) {
+            this.player.setPosition(x, y);
+            this.cameras.main.centerOn(x, y);
+        }
 
         // Toggle player collision off/on in Invisible mode
         const invisibleNow = DevTools.isPlayerInvisible();

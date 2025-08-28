@@ -1,15 +1,22 @@
-// data/worldGenConfig.js
+// systems/world_gen/worldGenConfig.js
 // PURE DATA ONLY — no logic. Tunable world gen + day/night + spawn settings.
 
-import { RESOURCE_IDS } from './resourceDatabase.js';
+import { RESOURCE_IDS } from '../../data/resourceDatabase.js';
 
 export const WORLD_GEN = {
   // -----------------------------
   // World bounds / scale (future)
   // -----------------------------
   world: {
-    width: 1200,   // logical world width (px). You can expand later.
-    height: 900,   // logical world height (px).
+    width: 10000,  // logical world width (px). You can expand later.
+    height: 10000, // logical world height (px).
+  },
+
+  // -----------------------------
+  // Chunk settings (session only)
+  // -----------------------------
+  chunk: {
+    size: 500,
   },
 
   // -----------------------------
@@ -33,7 +40,7 @@ export const WORLD_GEN = {
     resources: {
         // Weighted rock variants A–E (A most common → E rarest)
         rocks: {
-          maxActive: 13,
+          maxActive: 20,
           minSpacing: 100,  // pixels between rock centers
           clusterMin: 3,
           clusterMax: 6,
@@ -57,7 +64,7 @@ export const WORLD_GEN = {
         },
         // Weighted tree variants
         trees: {
-          maxActive: 13,
+          maxActive: 30,
           minSpacing: 100,
           clusterMin: 3,
           clusterMax: 6,
@@ -125,4 +132,11 @@ export const WORLD_GEN = {
       },
     },
   },
+  spawn: { x: 5000, y: 5000 },
 };
+
+// Center spawn point (re-export for convenience)
+export const spawn = WORLD_GEN.spawn;
+
+// Session-scoped metadata for procedural chunks
+export const chunkMetadata = new Map();

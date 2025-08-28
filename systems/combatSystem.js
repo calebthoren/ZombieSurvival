@@ -111,7 +111,7 @@ export default function createCombatSystem(scene) {
                 .rectangle(0, 0, cam.width, cam.height, 0x000000, 0.5)
                 .setOrigin(0, 0)
                 .setScrollFactor(0)
-                .setDepth(999);
+                .setDepth(20000);
             const cx = cam.worldView.x + cam.worldView.width * 0.5;
             const cy = cam.worldView.y + cam.worldView.height * 0.5;
             scene.gameOverText = scene.add
@@ -121,7 +121,7 @@ export default function createCombatSystem(scene) {
                     color: '#ffffff',
                 })
                 .setOrigin(0.5)
-                .setDepth(1000);
+                .setDepth(20001);
             scene.gameOverText.setStroke('#720c0c', 4);
             scene.respawnPrompt = scene.add
                 .text(cx, cy + 20, 'Press SPACE to Respawn', {
@@ -130,7 +130,7 @@ export default function createCombatSystem(scene) {
                     color: '#ffffff',
                 })
                 .setOrigin(0.5)
-                .setDepth(1000);
+                .setDepth(20001);
             return;
         }
         try {
@@ -504,7 +504,10 @@ export default function createCombatSystem(scene) {
                 y = Phaser.Math.Between(y0, y1);
             }
         }
-        const zombie = scene.zombies.create(x, y, tex);
+        const zombie = (scene.zombiePool
+            ? scene.zombiePool.acquire(tex)
+            : scene.zombies.create(x, y, tex));
+        zombie.setPosition(x, y);
         if (!zombie.body) scene.physics.add.existing(zombie);
         zombie.body.setAllowGravity(false);
         zombie.setOrigin(0.5, 0.5);
@@ -629,7 +632,8 @@ export default function createCombatSystem(scene) {
             zombie.hpFill.destroy();
             zombie.hpFill = null;
         }
-        if (zombie.destroy) zombie.destroy();
+        if (scene.zombiePool) scene.zombiePool.release(zombie);
+        else if (zombie.destroy) zombie.destroy();
     }
 
     function _maybeDropLoot(zombie) {
