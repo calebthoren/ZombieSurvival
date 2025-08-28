@@ -463,12 +463,11 @@ function createResourceSystem(scene) {
                         }
                         if (typeof b.setImmovable === 'function') b.setImmovable(true);
                     }
-                }
                 // Important for static bodies: refresh after size/offset/scale/origin/crop changes
                 if (b.moves === false && typeof trunk.refreshBody === 'function') {
                     try { trunk.refreshBody(); } catch {}
                 }
-            }
+                }
 
             const leavesCfg = def.world?.leaves;
             if (leavesCfg) {
