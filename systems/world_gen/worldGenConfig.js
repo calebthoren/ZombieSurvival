@@ -55,7 +55,7 @@ export const WORLD_GEN = {
         rocks: {
           maxActive: 20,
           minSpacing: 100,  // pixels between rock centers
-          clusterMin: 3,
+          clusterMin: 1,
           clusterMax: 6,
           respawnDelayMs: { min: 5000, max: 7000 },
           variants: [
@@ -79,7 +79,7 @@ export const WORLD_GEN = {
         trees: {
           maxActive: 30,
           minSpacing: 100,
-          clusterMin: 3,
+          clusterMin: 1,
           clusterMax: 6,
           variants: [
             { id: RESOURCE_IDS.TREE1A, weight: 20 },
@@ -97,7 +97,7 @@ export const WORLD_GEN = {
         bushes: {
           maxActive: 18,
           minSpacing: 50,
-          clusterMin: 3,
+          clusterMin: 1,
           clusterMax: 6,
           variants: [
             { id: RESOURCE_IDS.BUSH1A, weight: 20 },

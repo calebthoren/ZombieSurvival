@@ -10,6 +10,15 @@ import './world_gen/resources/rocks.js';
 import './world_gen/resources/trees.js';
 import './world_gen/resources/bushes.js';
 
+const CLUSTER_GROWTH_CHANCE = 0.3;
+
+// Biased cluster size picker favors single spawns
+export function pickClusterCount(min, max, rng = Math.random) {
+    let count = min;
+    while (count < max && rng() < CLUSTER_GROWTH_CHANCE) count++;
+    return count;
+}
+
 function createResourceSystem(scene) {
     // Background job timers for time-sliced chunk population
     const _chunkJobs = new Map(); // key: "cx,cy" -> Phaser.TimerEvent
@@ -700,7 +709,7 @@ function createResourceSystem(scene) {
             createResourceAt(firstId, firstDef, x, y);
             let spawned = 1;
 
-            const clusterCount = Phaser.Math.Between(clusterMin, clusterMax);
+            const clusterCount = pickClusterCount(clusterMin, clusterMax);
             const radius =
                 groupCfg.clusterRadius ?? Math.max(width, height) * 1.1;
             for (

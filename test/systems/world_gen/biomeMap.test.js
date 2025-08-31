@@ -36,3 +36,15 @@ test('changing a biome seed only affects that biome\'s densities', () => {
     assert.strictEqual(dB1, dB2);
     WORLD_GEN.biomeSeeds[biomeA] = oldSeed;
 });
+
+test('getDensity spans 0..1 range', () => {
+    let min = 1,
+        max = 0;
+    for (let i = 0; i < 1000; i++) {
+        const d = getDensity(i * 17, i * 29, 12345);
+        if (d < min) min = d;
+        if (d > max) max = d;
+    }
+    assert(min < 0.1);
+    assert(max > 0.9);
+});
