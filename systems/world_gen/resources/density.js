@@ -1,4 +1,4 @@
-import { createNoise2D } from '../../../node_modules/simplex-noise/dist/esm/simplex-noise.js';
+import { createNoise2D } from '../../../lib/simplex-noise.js';
 
 const _noiseCache = new Map();
 

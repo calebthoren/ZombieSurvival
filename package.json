@@ -8,9 +8,7 @@
         "start": "node bootstrap.js",
         "test": "node --test"
     },
-    "dependencies": {
-        "simplex-noise": "^4.0.1"
-    },
+    "dependencies": {},
     "keywords": [],
     "author": "",
     "license": "ISC"
