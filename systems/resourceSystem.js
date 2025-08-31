@@ -8,6 +8,7 @@ import './world_gen/resources/rocks.js';
 import './world_gen/resources/trees.js';
 import './world_gen/resources/bushes.js';
 import { getDensity } from './world_gen/resources/density.js';
+import { generate as poissonGenerate } from './world_gen/resources/poissonSampler.js';
 
 function createResourceSystem(scene) {
     // Background job timers for time-sliced chunk population
@@ -123,16 +124,16 @@ function createResourceSystem(scene) {
         const resources = meta.resources;
 
         if (resources.length === 0) {
-            // Lower per-chunk density: target 25–35 total resources
-            const total = getDensity(chunk.cx, chunk.cy, WORLD_GEN?.seed ?? 0);
+            // Target 35–45 total resources per chunk
+            const total = getDensity(chunk.cx, chunk.cy, WORLD_GEN?.seed ?? 0) + 10;
             const keys = Array.from(registry.keys());
             const counts = {};
             let remaining = total;
             for (let i = 0; i < keys.length; i++) {
                 const left = keys.length - i - 1;
-                // Per-group bounds tuned to match 25–35 total across 3 groups
-                const min = 8;
-                const max = 12;
+                // Per-group bounds tuned to match 35–45 total across 3 groups
+                const min = 10;
+                const max = 15;
                 const maxAllowed = Math.min(max, remaining - min * left);
                 const minAllowed = Math.max(min, remaining - max * left);
                 const c =
@@ -143,18 +144,41 @@ function createResourceSystem(scene) {
                 remaining -= c;
             }
 
-            // Time-sliced population: spawn small batches over several ticks
-            const tasks = keys
-                .map((k) => {
-                    const gen = registry.get(k);
-                    const cfg = gen && gen();
-                    return cfg ? { key: k, cfg, remaining: counts[k] | 0 } : null;
-                })
-                .filter(Boolean);
+            const centerRadius = 60;
+            const centersRaw = poissonGenerate(bounds, centerRadius);
+            const centerTasks = [];
+            const usedCenters = [];
+            let ci = 0;
+            while (Object.values(counts).some((v) => v > 0) && ci < centersRaw.length) {
+                const center = centersRaw[ci++];
+                const avail = keys.filter((k) => counts[k] > 0);
+                if (avail.length === 0) break;
+                const key = avail[Math.floor(Math.random() * avail.length)];
+                const gen = registry.get(key);
+                const baseCfg = gen && gen();
+                if (!baseCfg) continue;
+                const cfg = { ...baseCfg };
+                const wantCluster = counts[key] > 1 && Math.random() < 0.7;
+                let want = 1;
+                if (wantCluster) {
+                    const cMin = cfg.clusterMin ?? 3;
+                    const cMax = cfg.clusterMax ?? 6;
+                    want = Phaser.Math.Between(cMin, cMax);
+                    want = Math.min(want, counts[key]);
+                } else {
+                    cfg.clusterMin = 1;
+                    cfg.clusterMax = 1;
+                }
+                counts[key] -= want;
+                centerTasks.push({ key, cfg, count: want, center });
+                usedCenters.push(center);
+            }
+
+            meta.centerPoints = usedCenters;
 
             // Cancel any prior job for this chunk and start a new one
             _cancelChunkJob(chunk);
-            const perBatch = 4; // aim to create up to ~4 resources per step
+            const perBatch = 2; // aim to spawn up to ~2 centers per step
             const keyStr = _keyForChunk(chunk);
             const step = () => {
                 // Stop if chunk got unloaded
@@ -163,20 +187,25 @@ function createResourceSystem(scene) {
                     return;
                 }
                 let producedThisStep = 0;
-                for (let i = 0; i < tasks.length; i++) {
-                    const t = tasks[i];
-                    if (!t || t.remaining <= 0) continue;
-                    const want = Math.min(perBatch, t.remaining);
-                const spawned = _spawnResourceGroup(t.key, t.cfg, {
-                    bounds,
-                    count: want,
-                    noRespawn: true,
-                    proximityGroup: chunk.group,
-                    onCreate(trunk, id, x, y) {
-                        chunk.group.add(trunk);
-                        const idx = resources.push({
-                            type: t.key,
-                            id,
+                for (let i = 0; i < centerTasks.length; i++) {
+                    const t = centerTasks[i];
+                    if (!t || t.count <= 0) continue;
+                    const cBounds = {
+                        minX: t.center.x - centerRadius,
+                        maxX: t.center.x + centerRadius,
+                        minY: t.center.y - centerRadius,
+                        maxY: t.center.y + centerRadius,
+                    };
+                    const spawned = _spawnResourceGroup(t.key, t.cfg, {
+                        bounds: cBounds,
+                        count: t.count,
+                        noRespawn: true,
+                        proximityGroup: chunk.group,
+                        onCreate(trunk, id, x, y) {
+                            chunk.group.add(trunk);
+                            const idx = resources.push({
+                                type: t.key,
+                                id,
                                 x,
                                 y,
                                 harvested: false,
@@ -189,14 +218,13 @@ function createResourceSystem(scene) {
                             if (idx != null) resources[idx].harvested = true;
                         },
                     }) | 0;
-                    t.remaining = Math.max(0, t.remaining - spawned);
+                    t.count = Math.max(0, t.count - spawned);
                     producedThisStep += spawned;
-                    // Light cap per step to keep frame time stable
                     if (producedThisStep >= perBatch) break;
                 }
 
                 // If all tasks finished, stop; else schedule next slice
-                const done = tasks.every((t) => !t || t.remaining <= 0);
+                const done = centerTasks.every((t) => !t || t.count <= 0);
                 if (done) {
                     _cancelChunkJob(chunk);
                 } else {
