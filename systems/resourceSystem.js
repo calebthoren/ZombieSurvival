@@ -7,6 +7,7 @@ import { getResourceRegistry } from './world_gen/resources/registry.js';
 import './world_gen/resources/rocks.js';
 import './world_gen/resources/trees.js';
 import './world_gen/resources/bushes.js';
+import { getDensity } from './world_gen/resources/density.js';
 
 function createResourceSystem(scene) {
     // Background job timers for time-sliced chunk population
@@ -123,7 +124,7 @@ function createResourceSystem(scene) {
 
         if (resources.length === 0) {
             // Lower per-chunk density: target 25–35 total resources
-            const total = Phaser.Math.Between(25, 35);
+            const total = getDensity(chunk.cx, chunk.cy, WORLD_GEN?.seed ?? 0);
             const keys = Array.from(registry.keys());
             const counts = {};
             let remaining = total;
