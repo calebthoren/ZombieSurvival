@@ -135,7 +135,7 @@ function createResourceSystem(scene) {
 
         if (resources.length === 0) {
             const totalTarget = Phaser.Math.Between(35, 45);
-            const centers = poissonSampler.generate(bounds, 100);
+            const centers = poissonSampler.generate(bounds, 40);
             Phaser.Utils.Array.Shuffle(centers);
             const keys = Array.from(registry.keys());
             let total = 0;
@@ -149,15 +149,18 @@ function createResourceSystem(scene) {
                 const clusterRadius = cfg.clusterRadius ?? cfg.minSpacing ?? 50;
                 const clusterMin = cfg.clusterMin ?? 1;
                 const clusterMax = cfg.clusterMax ?? 1;
-                const clusterCount =
+                let clusterCount =
                     Math.random() < clusterChance
                         ? Phaser.Math.Between(clusterMin, clusterMax)
                         : 1;
+                const remaining = totalTarget - total;
+                clusterCount = Math.min(clusterCount, remaining);
                 const cfgOverride = {
                     ...cfg,
                     clusterMin: clusterCount,
                     clusterMax: clusterCount,
                     clusterRadius,
+                    minSpacing: clusterCount > 1 ? 0 : cfg.minSpacing,
                 };
                 const spawned =
                     _spawnResourceGroup(key, cfgOverride, {
@@ -641,7 +644,7 @@ function createResourceSystem(scene) {
 
         const spawnCluster = () => {
             const baseId = pickVariantId();
-            const baseKey = baseId.replace(/[A-Za-z]$/, '');
+            const baseKey = baseId.replace(/[A-Za-z0-9]$/, '');
             const baseVariants = variants.filter((v) => v.id.startsWith(baseKey));
             const baseTotalWeight = baseVariants.reduce(
                 (s, v) => s + (v.weight || 0),
