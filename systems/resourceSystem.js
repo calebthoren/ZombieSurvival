@@ -4,6 +4,8 @@ import { WORLD_GEN } from './world_gen/worldGenConfig.js';
 import { DESIGN_RULES } from '../data/designRules.js';
 import { RESOURCE_DB } from '../data/resourceDatabase.js';
 import { getResourceRegistry } from './world_gen/resources/registry.js';
+import { getBiome } from './world_gen/biomes/biomeMap.js';
+import { getDensity } from './world_gen/noise.js';
 import './world_gen/resources/rocks.js';
 import './world_gen/resources/trees.js';
 import './world_gen/resources/bushes.js';
@@ -277,6 +279,7 @@ function createResourceSystem(scene) {
         const maxX = bounds.maxX ?? w;
         const minY = bounds.minY ?? 0;
         const maxY = bounds.maxY ?? h;
+        const chunkSize = WORLD_GEN.chunk.size;
         const noRespawn = !!opts.noRespawn;
         const onCreate = opts.onCreate;
         const onHarvest = opts.onHarvest;
@@ -682,12 +685,16 @@ function createResourceSystem(scene) {
 
             let x,
                 y,
-                tries = 30;
+                tries = 30,
+                density = 0;
             do {
                 x = Phaser.Math.Between(minX, maxX);
                 y = Phaser.Math.Between(minY, maxY);
+                const biome = getBiome((x / chunkSize) | 0, (y / chunkSize) | 0);
+                const seed = WORLD_GEN.biomeSeeds[biome] || 0;
+                density = getDensity(x, y, seed);
                 tries--;
-            } while (tries > 0 && tooClose(x, y, width, height));
+            } while (tries > 0 && (density < 0.5 || tooClose(x, y, width, height)));
             if (tries <= 0) return 0;
 
             createResourceAt(firstId, firstDef, x, y);
@@ -713,13 +720,17 @@ function createResourceSystem(scene) {
 
                 let x2,
                     y2,
-                    t2 = 10;
+                    t2 = 10,
+                    d2 = 0;
                 do {
                     const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
                     x2 = x + Math.cos(ang) * radius;
                     y2 = y + Math.sin(ang) * radius;
+                    const biome2 = getBiome((x2 / chunkSize) | 0, (y2 / chunkSize) | 0);
+                    const seed2 = WORLD_GEN.biomeSeeds[biome2] || 0;
+                    d2 = getDensity(x2, y2, seed2);
                     t2--;
-                } while (t2 > 0 && tooClose(x2, y2, w, h));
+                } while (t2 > 0 && (d2 < 0.5 || tooClose(x2, y2, w, h)));
                 if (t2 <= 0) continue;
                 createResourceAt(id, def, x2, y2);
                 spawned++;
