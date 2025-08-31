@@ -710,7 +710,6 @@ function createResourceSystem(scene) {
 
             createResourceAt(firstId, firstDef, x, y);
             let spawned = 1;
-
             const growthChance = groupCfg.clusterGrowth ?? DEFAULT_CLUSTER_GROWTH;
             const clusterCount = pickClusterCount(
                 clusterMin,

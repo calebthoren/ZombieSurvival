@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import DevTools from '../../systems/DevTools.js';
+import { WORLD_GEN, BIOME_IDS } from '../../systems/world_gen/worldGenConfig.js';
+import { getBiome } from '../../systems/world_gen/biomes/biomeMap.js';
+
+const BIOME_NAMES = {
+    [BIOME_IDS.PLAINS]: 'Plains',
+    [BIOME_IDS.FOREST]: 'Forest',
+    [BIOME_IDS.DESERT]: 'Desert',
+};
 
 function makeStubScene() {
     const events = new Set();
@@ -48,8 +56,10 @@ function makeStubScene() {
         },
     };
     const cameras = { main: { worldView: { x: 0, y: 0, width: 1000, height: 1000, right: 1000, bottom: 1000 } } };
-    const player = { x: 250, y: 250 };
-    const chunkManager = { loadedChunks: new Map([['0,0', {}]]), cols: 20, rows: 20 };
+    const player = { x: WORLD_GEN.spawn.x, y: WORLD_GEN.spawn.y };
+    const cx = Math.floor(WORLD_GEN.spawn.x / WORLD_GEN.chunk.size);
+    const cy = Math.floor(WORLD_GEN.spawn.y / WORLD_GEN.chunk.size);
+    const chunkManager = { loadedChunks: new Map([[`${cx},${cy}`, {}]]), cols: 20, rows: 20 };
     const game = { loop: { actualFps: 60 } };
     return { time, add, cameras, player, chunkManager, game, gfxStyles: styles };
 }
@@ -69,7 +79,11 @@ test('chunkDetails toggle manages overlay and timer', () => {
     assert.match(DevTools._chunkText.text, /loaded/);
     assert.ok(scene.gfxStyles.some(s => s.width === 4 && s.color === 0x0000aa));
     DevTools._chunkTimer.callback();
-    assert.match(DevTools._chunkText.text, /loaded/);
+    const spawnCx = Math.floor(WORLD_GEN.spawn.x / WORLD_GEN.chunk.size);
+    const spawnCy = Math.floor(WORLD_GEN.spawn.y / WORLD_GEN.chunk.size);
+    const biomeId = getBiome(spawnCx, spawnCy);
+    const expected = BIOME_NAMES[biomeId];
+    assert.match(DevTools._chunkText.text, new RegExp(`Biome: ${expected}`));
     DevTools.setChunkDetails(false);
     assert.equal(DevTools._chunkGfx, null);
     assert.equal(DevTools._chunkTimer, null);
