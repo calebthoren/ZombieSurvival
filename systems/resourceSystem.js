@@ -292,6 +292,8 @@ function createResourceSystem(scene) {
         const noRespawn = !!opts.noRespawn;
         const onCreate = opts.onCreate;
         const onHarvest = opts.onHarvest;
+        const densityFn = opts.getDensity || getDensity;
+        const biomeFn = opts.getBiome || getBiome;
 
         const tooClose = (x, y, w, h) => {
             // Prefer proximity-limited list (e.g., the current chunk's group) to avoid global N^2 scans
@@ -699,9 +701,9 @@ function createResourceSystem(scene) {
             do {
                 x = Phaser.Math.Between(minX, maxX);
                 y = Phaser.Math.Between(minY, maxY);
-                const biome = getBiome((x / chunkSize) | 0, (y / chunkSize) | 0);
+                const biome = biomeFn((x / chunkSize) | 0, (y / chunkSize) | 0);
                 const seed = WORLD_GEN.biomeSeeds[biome] || 0;
-                density = getDensity(x, y, seed);
+                density = densityFn(x, y, seed);
                 tries--;
             } while (tries > 0 && (density < 0.5 || tooClose(x, y, width, height)));
             if (tries <= 0) return 0;
@@ -733,11 +735,15 @@ function createResourceSystem(scene) {
                     d2 = 0;
                 do {
                     const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
-                    x2 = x + Math.cos(ang) * radius;
-                    y2 = y + Math.sin(ang) * radius;
-                    const biome2 = getBiome((x2 / chunkSize) | 0, (y2 / chunkSize) | 0);
+                    const dist = Phaser.Math.FloatBetween(
+                        Math.max(width, height),
+                        radius,
+                    );
+                    x2 = x + Math.cos(ang) * dist;
+                    y2 = y + Math.sin(ang) * dist;
+                    const biome2 = biomeFn((x2 / chunkSize) | 0, (y2 / chunkSize) | 0);
                     const seed2 = WORLD_GEN.biomeSeeds[biome2] || 0;
-                    d2 = getDensity(x2, y2, seed2);
+                    d2 = densityFn(x2, y2, seed2);
                     t2--;
                 } while (t2 > 0 && (d2 < 0.5 || tooClose(x2, y2, w, h)));
                 if (t2 <= 0) continue;
@@ -776,6 +782,7 @@ function createResourceSystem(scene) {
         spawnWorldItem,
         spawnChunkResources,
         cancelChunkJob: _cancelChunkJob,
+        __testSpawnResourceGroup: _spawnResourceGroup,
     };
 
     return scene.resourceSystem;
