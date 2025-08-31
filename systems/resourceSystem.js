@@ -10,12 +10,12 @@ import './world_gen/resources/rocks.js';
 import './world_gen/resources/trees.js';
 import './world_gen/resources/bushes.js';
 
-const CLUSTER_GROWTH_CHANCE = 0.3;
+const DEFAULT_CLUSTER_GROWTH = 0.3;
 
 // Biased cluster size picker favors single spawns
-export function pickClusterCount(min, max, rng = Math.random) {
+export function pickClusterCount(min, max, rng = Math.random, growthChance = DEFAULT_CLUSTER_GROWTH) {
     let count = min;
-    while (count < max && rng() < CLUSTER_GROWTH_CHANCE) count++;
+    while (count < max && rng() < growthChance) count++;
     return count;
 }
 
@@ -711,7 +711,13 @@ function createResourceSystem(scene) {
             createResourceAt(firstId, firstDef, x, y);
             let spawned = 1;
 
-            const clusterCount = pickClusterCount(clusterMin, clusterMax);
+            const growthChance = groupCfg.clusterGrowth ?? DEFAULT_CLUSTER_GROWTH;
+            const clusterCount = pickClusterCount(
+                clusterMin,
+                clusterMax,
+                Math.random,
+                growthChance,
+            );
             const radius =
                 groupCfg.clusterRadius ?? Math.max(width, height) * 1.1;
             for (
