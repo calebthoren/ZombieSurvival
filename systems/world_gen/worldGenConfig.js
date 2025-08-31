@@ -57,6 +57,7 @@ export const WORLD_GEN = {
           minSpacing: 100,  // pixels between rock centers
           clusterMin: 1,
           clusterMax: 6,
+          clusterGrowth: 0.2,
           respawnDelayMs: { min: 5000, max: 7000 },
           variants: [
             { id: RESOURCE_IDS.ROCK1A, weight: 40 }, // collectible, non-blocking

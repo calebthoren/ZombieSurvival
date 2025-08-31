@@ -13,3 +13,11 @@ test('pickClusterCount favors single clusters', () => {
     const seq3 = [0.2, 0.2, 0.9];
     assert.equal(pickClusterCount(1, 6, () => seq3.shift()), 3);
 });
+
+test('pickClusterCount accepts growth chance parameter', () => {
+    const rng1 = [0.2, 0.9];
+    assert.equal(pickClusterCount(1, 6, () => rng1.shift(), 0.3), 2);
+
+    const rng2 = [0.2, 0.9];
+    assert.equal(pickClusterCount(1, 6, () => rng2.shift(), 0.1), 1);
+});
