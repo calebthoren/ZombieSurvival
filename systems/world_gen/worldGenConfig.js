@@ -3,6 +3,12 @@
 
 import { RESOURCE_IDS } from '../../data/resourceDatabase.js';
 
+export const BIOME_IDS = {
+    PLAINS: 0,
+    FOREST: 1,
+    DESERT: 2,
+};
+
 export const WORLD_GEN = {
   // -----------------------------
   // World bounds / scale (future)
@@ -17,6 +23,13 @@ export const WORLD_GEN = {
   // -----------------------------
   chunk: {
     size: 500,
+  },
+
+  // Biome-specific RNG seeds
+  biomeSeeds: {
+    [BIOME_IDS.PLAINS]: 12345,
+    [BIOME_IDS.FOREST]: 67890,
+    [BIOME_IDS.DESERT]: 13579,
   },
 
   // -----------------------------
@@ -42,7 +55,7 @@ export const WORLD_GEN = {
         rocks: {
           maxActive: 20,
           minSpacing: 100,  // pixels between rock centers
-          clusterMin: 3,
+          clusterMin: 1,
           clusterMax: 6,
           respawnDelayMs: { min: 5000, max: 7000 },
           variants: [
@@ -66,7 +79,7 @@ export const WORLD_GEN = {
         trees: {
           maxActive: 30,
           minSpacing: 100,
-          clusterMin: 3,
+          clusterMin: 1,
           clusterMax: 6,
           variants: [
             { id: RESOURCE_IDS.TREE1A, weight: 20 },
@@ -84,7 +97,7 @@ export const WORLD_GEN = {
         bushes: {
           maxActive: 18,
           minSpacing: 50,
-          clusterMin: 3,
+          clusterMin: 1,
           clusterMax: 6,
           variants: [
             { id: RESOURCE_IDS.BUSH1A, weight: 20 },

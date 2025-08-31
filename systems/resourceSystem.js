@@ -4,9 +4,20 @@ import { WORLD_GEN } from './world_gen/worldGenConfig.js';
 import { DESIGN_RULES } from '../data/designRules.js';
 import { RESOURCE_DB } from '../data/resourceDatabase.js';
 import { getResourceRegistry } from './world_gen/resources/registry.js';
+import { getBiome } from './world_gen/biomes/biomeMap.js';
+import { getDensity } from './world_gen/noise.js';
 import './world_gen/resources/rocks.js';
 import './world_gen/resources/trees.js';
 import './world_gen/resources/bushes.js';
+
+const CLUSTER_GROWTH_CHANCE = 0.3;
+
+// Biased cluster size picker favors single spawns
+export function pickClusterCount(min, max, rng = Math.random) {
+    let count = min;
+    while (count < max && rng() < CLUSTER_GROWTH_CHANCE) count++;
+    return count;
+}
 
 function createResourceSystem(scene) {
     // Background job timers for time-sliced chunk population
@@ -277,9 +288,12 @@ function createResourceSystem(scene) {
         const maxX = bounds.maxX ?? w;
         const minY = bounds.minY ?? 0;
         const maxY = bounds.maxY ?? h;
+        const chunkSize = WORLD_GEN.chunk.size;
         const noRespawn = !!opts.noRespawn;
         const onCreate = opts.onCreate;
         const onHarvest = opts.onHarvest;
+        const densityFn = opts.getDensity || getDensity;
+        const biomeFn = opts.getBiome || getBiome;
 
         const tooClose = (x, y, w, h) => {
             // Prefer proximity-limited list (e.g., the current chunk's group) to avoid global N^2 scans
@@ -682,18 +696,22 @@ function createResourceSystem(scene) {
 
             let x,
                 y,
-                tries = 30;
+                tries = 30,
+                density = 0;
             do {
                 x = Phaser.Math.Between(minX, maxX);
                 y = Phaser.Math.Between(minY, maxY);
+                const biome = biomeFn((x / chunkSize) | 0, (y / chunkSize) | 0);
+                const seed = WORLD_GEN.biomeSeeds[biome] || 0;
+                density = densityFn(x, y, seed);
                 tries--;
-            } while (tries > 0 && tooClose(x, y, width, height));
+            } while (tries > 0 && (density < 0.5 || tooClose(x, y, width, height)));
             if (tries <= 0) return 0;
 
             createResourceAt(firstId, firstDef, x, y);
             let spawned = 1;
 
-            const clusterCount = Phaser.Math.Between(clusterMin, clusterMax);
+            const clusterCount = pickClusterCount(clusterMin, clusterMax);
             const radius =
                 groupCfg.clusterRadius ?? Math.max(width, height) * 1.1;
             for (
@@ -713,13 +731,21 @@ function createResourceSystem(scene) {
 
                 let x2,
                     y2,
-                    t2 = 10;
+                    t2 = 10,
+                    d2 = 0;
                 do {
                     const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
-                    x2 = x + Math.cos(ang) * radius;
-                    y2 = y + Math.sin(ang) * radius;
+                    const dist = Phaser.Math.FloatBetween(
+                        Math.max(width, height),
+                        radius,
+                    );
+                    x2 = x + Math.cos(ang) * dist;
+                    y2 = y + Math.sin(ang) * dist;
+                    const biome2 = biomeFn((x2 / chunkSize) | 0, (y2 / chunkSize) | 0);
+                    const seed2 = WORLD_GEN.biomeSeeds[biome2] || 0;
+                    d2 = densityFn(x2, y2, seed2);
                     t2--;
-                } while (t2 > 0 && tooClose(x2, y2, w, h));
+                } while (t2 > 0 && (d2 < 0.5 || tooClose(x2, y2, w, h)));
                 if (t2 <= 0) continue;
                 createResourceAt(id, def, x2, y2);
                 spawned++;
@@ -756,6 +782,7 @@ function createResourceSystem(scene) {
         spawnWorldItem,
         spawnChunkResources,
         cancelChunkJob: _cancelChunkJob,
+        __testSpawnResourceGroup: _spawnResourceGroup,
     };
 
     return scene.resourceSystem;
