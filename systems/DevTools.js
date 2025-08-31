@@ -5,7 +5,14 @@
 // - Melee cones draw as time-synced thin slices. Batch size (1 or 2) is configurable.
 
 import { ITEM_DB } from '../data/itemDatabase.js';
-import { WORLD_GEN } from './world_gen/worldGenConfig.js';
+import { WORLD_GEN, BIOME_IDS } from './world_gen/worldGenConfig.js';
+import { getBiome } from './world_gen/biomes/biomeMap.js';
+
+const BIOME_NAMES = {
+    [BIOME_IDS.PLAINS]: 'Plains',
+    [BIOME_IDS.FOREST]: 'Forest',
+    [BIOME_IDS.DESERT]: 'Desert',
+};
 
 const DevTools = {
     // ─────────────────────────────────────────────────────────────
@@ -412,8 +419,10 @@ const DevTools = {
         const pcx = Math.floor((player?.x || 0) / size);
         const pcy = Math.floor((player?.y || 0) / size);
         const loaded = cm?.loadedChunks?.size || 0;
+        const biomeId = getBiome(pcx, pcy);
+        const name = BIOME_NAMES[biomeId] || 'Unknown';
         if (this._chunkText) {
-            this._chunkText.setText(`Chunk (${pcx},${pcy}) loaded: ${loaded}`);
+            this._chunkText.setText(`Chunk (${pcx},${pcy}) loaded: ${loaded} Biome: ${name}`);
         }
         // Lightly mark the player's current chunk
         const px = pcx * size;
