@@ -11,7 +11,12 @@ globalThis.Phaser = {
     },
 };
 
-test('clusters spawn same base type without overlap', async () => {
+// Deterministic RNG sequence
+const randSeq = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+let ri = 0;
+
+test('cluster members share base prefix without overlap', async (t) => {
+    t.mock.method(Math, 'random', () => randSeq[ri++ % randSeq.length]);
 
     const { default: createResourceSystem } = await import('../../systems/resourceSystem.js');
 
@@ -70,6 +75,7 @@ test('clusters spawn same base type without overlap', async () => {
         ],
         clusterMin: 3,
         clusterMax: 3,
+        clusterRadius: 80,
         minSpacing: 0,
     };
 
@@ -94,5 +100,14 @@ test('clusters spawn same base type without overlap', async () => {
         assert.ok(s.id.startsWith(base));
     }
     assert.ok(spawned.some((s) => s.id !== spawned[0].id));
+
+    const center = spawned[0];
+    const dists = spawned.slice(1).map((s) =>
+        Math.hypot(s.x - center.x, s.y - center.y),
+    );
+    for (const d of dists) {
+        assert.ok(d <= cfg.clusterRadius);
+    }
+    assert.ok(dists.some((d) => Math.abs(d - dists[0]) > 1));
 
 });
