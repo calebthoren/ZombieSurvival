@@ -659,17 +659,17 @@ function createResourceSystem(scene) {
                 return baseVariants[0].id;
             };
 
-            const firstId = pickBaseVariant();
-            const firstDef = RESOURCE_DB[firstId];
-            if (!firstDef) return 0;
+            const baseDef = RESOURCE_DB[baseId];
+            if (!baseDef) return 0;
 
-            const firstTex = scene.textures.get(
-                firstDef.world?.textureKey || firstId,
+            const baseTex = scene.textures.get(
+                baseDef.world?.textureKey || baseId,
             );
-            const src = firstTex.getSourceImage();
-            const scale = firstDef.world?.scale ?? 1;
-            const width = src.width * scale;
-            const height = src.height * scale;
+            // derive width/height from base variant for spacing
+            const baseSrc = baseTex.getSourceImage();
+            const baseScale = baseDef.world?.scale ?? 1;
+            const width = baseSrc.width * baseScale;
+            const height = baseSrc.height * baseScale;
 
             let x,
                 y,
@@ -685,7 +685,7 @@ function createResourceSystem(scene) {
             } while (tries > 0 && (density < 0.5 || tooClose(x, y, width, height)));
             if (tries <= 0) return 0;
 
-            createResourceAt(firstId, firstDef, x, y);
+            createResourceAt(baseId, baseDef, x, y);
             let spawned = 1;
             const growthChance = groupCfg.clusterGrowth ?? DEFAULT_CLUSTER_GROWTH;
             const clusterCount = pickClusterCount(
@@ -717,10 +717,7 @@ function createResourceSystem(scene) {
                     d2 = 0;
                 do {
                     const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
-                    const dist = Phaser.Math.FloatBetween(
-                        Math.max(width, height),
-                        radius,
-                    );
+                    const dist = radius * Math.sqrt(Math.random());
                     x2 = x + Math.cos(ang) * dist;
                     y2 = y + Math.sin(ang) * dist;
                     const biome2 = biomeFn((x2 / chunkSize) | 0, (y2 / chunkSize) | 0);
