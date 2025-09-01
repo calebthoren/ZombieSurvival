@@ -49,6 +49,7 @@ function makeStubScene() {
                 x, y, text: msg, style,
                 destroyed: false,
                 setText(t) { this.text = t; return this; },
+                setY(y) { this.y = y; return this; },
                 setScrollFactor() { return this; },
                 setDepth() { return this; },
                 destroy() { this.destroyed = true; },
@@ -78,6 +79,10 @@ test('chunkDetails toggle manages overlay and timer', () => {
     assert.ok(DevTools._chunkTimer);
     assert.match(DevTools._chunkText.text, /loaded/);
     assert.ok(scene.gfxStyles.some(s => s.width === 4 && s.color === 0x0000aa));
+    // Simulate reopening Dev UI which re-applies current toggle
+    assert.equal(DevTools.cheats.chunkDetails, true);
+    DevTools.setChunkDetails(DevTools.cheats.chunkDetails, scene);
+    assert.ok(DevTools._chunkGfx);
     DevTools._chunkTimer.callback();
     const spawnCx = Math.floor(WORLD_GEN.spawn.x / WORLD_GEN.chunk.size);
     const spawnCy = Math.floor(WORLD_GEN.spawn.y / WORLD_GEN.chunk.size);
