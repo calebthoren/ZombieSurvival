@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Stub Phaser math utilities
+// Stub Phaser math utilities with deterministic sequence
+const seq = [80, 160, 0, 21, Math.PI / 2, 21];
+let si = 0;
 globalThis.Phaser = {
     Math: {
-        Between: (min, max) => Math.floor(min + (max - min) * Math.random()),
-        FloatBetween: (min, max) => min + (max - min) * Math.random(),
+        Between: () => seq[si++],
+        FloatBetween: () => seq[si++],
     },
 };
 
