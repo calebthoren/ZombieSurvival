@@ -675,16 +675,6 @@ function createResourceSystem(scene) {
             const baseDef = RESOURCE_DB[baseId];
             if (!baseDef) return 0;
 
-            const baseTex = scene.textures.get(
-                baseDef.world?.textureKey || baseId,
-            );
-          
-            // derive width/height from base variant for spacing
-            const baseSrc = baseTex.getSourceImage();
-            const baseScale = baseDef.world?.scale ?? 1;
-            const width = baseSrc.width * baseScale;
-            const height = baseSrc.height * baseScale;
-
             let x,
                 y,
                 tries = 30,
