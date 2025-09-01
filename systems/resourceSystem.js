@@ -671,15 +671,15 @@ function createResourceSystem(scene) {
                 }
                 return baseVariants[0].id;
             };
-            const firstId = baseId;
-            const firstDef = RESOURCE_DB[firstId];
-            if (!firstDef) return 0;
 
-            const firstTex = scene.textures.get(
-                firstDef.world?.textureKey || firstId,
+            const baseDef = RESOURCE_DB[baseId];
+            if (!baseDef) return 0;
+
+            const baseTex = scene.textures.get(
+                baseDef.world?.textureKey || baseId,
             );
-            const src = firstTex.getSourceImage();
-            const scale = firstDef.world?.scale ?? 1;
+            const src = baseTex.getSourceImage();
+            const scale = baseDef.world?.scale ?? 1;
             const width = src.width * scale;
             const height = src.height * scale;
 
@@ -711,7 +711,7 @@ function createResourceSystem(scene) {
             } while (tries > 0 && (density < 0.5 || tooClose(x, y, width, height)));
             if (tries <= 0) return 0;
 
-            createResourceAt(firstId, firstDef, x, y);
+            createResourceAt(baseId, baseDef, x, y);
             let spawned = 1;
             const growthChance = groupCfg.clusterGrowth ?? DEFAULT_CLUSTER_GROWTH;
             const clusterCount = pickClusterCount(
