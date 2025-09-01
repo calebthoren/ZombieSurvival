@@ -659,7 +659,7 @@ function createResourceSystem(scene) {
                 return baseVariants[0].id;
             };
 
-            const firstId = pickBaseVariant();
+            const firstId = baseId;
             const firstDef = RESOURCE_DB[firstId];
             if (!firstDef) return 0;
 
