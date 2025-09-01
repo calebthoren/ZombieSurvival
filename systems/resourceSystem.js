@@ -669,20 +669,8 @@ function createResourceSystem(scene) {
             // derive width/height from base variant for spacing
             const baseSrc = baseTex.getSourceImage();
             const baseScale = baseDef.world?.scale ?? 1;
-            const width = baseSrc.width * baseScale;
-            const height = baseSrc.height * baseScale;
-
-            const firstId = baseId;
-            const firstDef = RESOURCE_DB[firstId];
-            if (!firstDef) return 0;
-
-            const firstTex = scene.textures.get(
-                firstDef.world?.textureKey || firstId,
-            );
-            const src = firstTex.getSourceImage();
-            const scale = firstDef.world?.scale ?? 1;
-            const width = src.width * scale;
-            const height = src.height * scale;
+            const baseWidth = baseSrc.width * baseScale;
+            const baseHeight = baseSrc.height * baseScale;
 
             let x,
                 y,
@@ -695,7 +683,7 @@ function createResourceSystem(scene) {
                 const seed = WORLD_GEN.biomeSeeds[biome] || 0;
                 density = densityFn(x, y, seed);
                 tries--;
-            } while (tries > 0 && (density < 0.5 || tooClose(x, y, width, height)));
+            } while (tries > 0 && (density < 0.5 || tooClose(x, y, baseWidth, baseHeight)));
             if (tries <= 0) return 0;
 
             createResourceAt(baseId, baseDef, x, y);
@@ -708,7 +696,7 @@ function createResourceSystem(scene) {
                 growthChance,
             );
             const radius =
-                groupCfg.clusterRadius ?? Math.max(width, height) * 1.1;
+                groupCfg.clusterRadius ?? Math.max(baseWidth, baseHeight) * 1.1;
             for (
                 let i = 1;
                 i < clusterCount && scene.resources.countActive(true) < maxActive;
