@@ -658,6 +658,17 @@ function createResourceSystem(scene) {
                 }
                 return baseVariants[0].id;
             };
+            const firstId = baseId;
+            const firstDef = RESOURCE_DB[firstId];
+            if (!firstDef) return 0;
+
+            const firstTex = scene.textures.get(
+                firstDef.world?.textureKey || firstId,
+            );
+            const src = firstTex.getSourceImage();
+            const scale = firstDef.world?.scale ?? 1;
+            const width = src.width * scale;
+            const height = src.height * scale;
 
             const firstId = baseId;
             const firstDef = RESOURCE_DB[firstId];
@@ -717,10 +728,7 @@ function createResourceSystem(scene) {
                     d2 = 0;
                 do {
                     const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
-                    const dist = Phaser.Math.FloatBetween(
-                        Math.max(width, height),
-                        radius,
-                    );
+                    const dist = radius * Math.sqrt(Math.random());
                     x2 = x + Math.cos(ang) * dist;
                     y2 = y + Math.sin(ang) * dist;
                     const biome2 = biomeFn((x2 / chunkSize) | 0, (y2 / chunkSize) | 0);

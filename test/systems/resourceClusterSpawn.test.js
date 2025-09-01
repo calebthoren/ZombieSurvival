@@ -73,6 +73,7 @@ test('cluster members share base prefix without overlap', async (t) => {
         ],
         clusterMin: 3,
         clusterMax: 3,
+        clusterRadius: 80,
         minSpacing: 0,
     };
 
@@ -97,5 +98,14 @@ test('cluster members share base prefix without overlap', async (t) => {
         assert.ok(s.id.startsWith(base));
     }
     assert.ok(spawned.some((s) => s.id !== spawned[0].id));
+
+    const center = spawned[0];
+    const dists = spawned.slice(1).map((s) =>
+        Math.hypot(s.x - center.x, s.y - center.y),
+    );
+    for (const d of dists) {
+        assert.ok(d <= cfg.clusterRadius);
+    }
+    assert.ok(dists.some((d) => Math.abs(d - dists[0]) > 1));
 
 });
