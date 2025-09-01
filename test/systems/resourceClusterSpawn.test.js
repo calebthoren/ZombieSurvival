@@ -1,20 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Stub Phaser math utilities
+// Stub Phaser math utilities with deterministic sequence
+const seq = [80, 160, 0, 21, Math.PI / 2, 21];
+let si = 0;
 globalThis.Phaser = {
     Math: {
-        Between: (min, max) => Math.floor(min + (max - min) * Math.random()),
-        FloatBetween: (min, max) => min + (max - min) * Math.random(),
+        Between: () => seq[si++],
+        FloatBetween: () => seq[si++],
     },
 };
 
-// Deterministic RNG sequence
-const randSeq = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
-let ri = 0;
-
-test('cluster members share base prefix without overlap', async (t) => {
-    t.mock.method(Math, 'random', () => randSeq[ri++ % randSeq.length]);
+test('clusters spawn same base type without overlap', async () => {
 
     const { default: createResourceSystem } = await import('../../systems/resourceSystem.js');
 
