@@ -12,6 +12,8 @@ import './world_gen/resources/trees.js';
 import './world_gen/resources/bushes.js';
 
 const DEFAULT_CLUSTER_GROWTH = 0.3;
+const RESOURCE_SEED = 0x1234abcd;
+const VARIANT_SEED = 0x5678ef01;
 
 // Biased cluster size picker favors single spawns
 export function pickClusterCount(min, max, rng = Math.random, growthChance = DEFAULT_CLUSTER_GROWTH) {
@@ -141,7 +143,10 @@ function createResourceSystem(scene) {
             let total = 0;
             for (let i = 0; i < centers.length && total < totalTarget; i++) {
                 const c = centers[i];
-                const key = Phaser.Utils.Array.GetRandom(keys);
+                const biome = getBiome(chunk.cx, chunk.cy);
+                const seed = (WORLD_GEN.biomeSeeds[biome] || 0) ^ RESOURCE_SEED;
+                const rKey = getDensity(chunk.cx, chunk.cy, seed);
+                const key = keys[(rKey * keys.length) | 0];
                 const gen = registry.get(key);
                 const cfg = gen && gen();
                 if (!cfg) continue;
@@ -149,10 +154,14 @@ function createResourceSystem(scene) {
                 const clusterRadius = cfg.clusterRadius ?? cfg.minSpacing ?? 50;
                 const clusterMin = cfg.clusterMin ?? 1;
                 const clusterMax = cfg.clusterMax ?? 1;
-                let clusterCount =
-                    Math.random() < clusterChance
-                        ? Phaser.Math.Between(clusterMin, clusterMax)
-                        : 1;
+                const rChance = getDensity(chunk.cx, chunk.cy, seed + 1);
+                let clusterCount = 1;
+                if (rChance < clusterChance) {
+                    const rSize = getDensity(chunk.cx, chunk.cy, seed + 2);
+                    clusterCount =
+                        clusterMin +
+                        ((rSize * (clusterMax - clusterMin + 1)) | 0);
+                }
                 const remaining = totalTarget - total;
                 clusterCount = Math.min(clusterCount, remaining);
                 const cfgOverride = {
@@ -296,8 +305,10 @@ function createResourceSystem(scene) {
             return false;
         };
 
-        const pickVariantId = () => {
-            let r = Math.random() * totalWeight;
+        const pickVariantId = (x, y) => {
+            const biome = biomeFn((x / chunkSize) | 0, (y / chunkSize) | 0);
+            const seed = (WORLD_GEN.biomeSeeds[biome] || 0) ^ VARIANT_SEED;
+            let r = getDensity(x, y, seed) * totalWeight;
             for (let v of variants) {
                 r -= v.weight || 0;
                 if (r <= 0) return v.id;
@@ -643,22 +654,23 @@ function createResourceSystem(scene) {
         };
 
         const spawnCluster = () => {
-            const baseId = pickVariantId();
+            const baseId = pickVariantId(minX, minY);
             const baseKey = baseId.replace(/[A-Za-z0-9]$/, '');
             const baseVariants = variants.filter((v) => v.id.startsWith(baseKey));
             const baseTotalWeight = baseVariants.reduce(
                 (s, v) => s + (v.weight || 0),
                 0,
             );
-            const pickBaseVariant = () => {
-                let r = Math.random() * baseTotalWeight;
+            const pickBaseVariant = (x, y) => {
+                const biome = biomeFn((x / chunkSize) | 0, (y / chunkSize) | 0);
+                const seed = (WORLD_GEN.biomeSeeds[biome] || 0) ^ VARIANT_SEED;
+                let r = getDensity(x, y, seed) * baseTotalWeight;
                 for (const v of baseVariants) {
                     r -= v.weight || 0;
                     if (r <= 0) return v.id;
                 }
                 return baseVariants[0].id;
             };
-
             const firstId = baseId;
             const firstDef = RESOURCE_DB[firstId];
             if (!firstDef) return 0;
@@ -674,10 +686,24 @@ function createResourceSystem(scene) {
             let x,
                 y,
                 tries = 30,
-                density = 0;
+                density = 0,
+                firstId,
+                firstDef,
+                width = 0,
+                height = 0;
             do {
                 x = Phaser.Math.Between(minX, maxX);
                 y = Phaser.Math.Between(minY, maxY);
+                firstId = pickBaseVariant(x, y);
+                firstDef = RESOURCE_DB[firstId];
+                if (!firstDef) return 0;
+                const firstTex = scene.textures.get(
+                    firstDef.world?.textureKey || firstId,
+                );
+                const src = firstTex.getSourceImage();
+                const scale = firstDef.world?.scale ?? 1;
+                width = src.width * scale;
+                height = src.height * scale;
                 const biome = biomeFn((x / chunkSize) | 0, (y / chunkSize) | 0);
                 const seed = WORLD_GEN.biomeSeeds[biome] || 0;
                 density = densityFn(x, y, seed);
@@ -701,31 +727,33 @@ function createResourceSystem(scene) {
                 i < clusterCount && scene.resources.countActive(true) < maxActive;
                 i++
             ) {
-                const id = pickBaseVariant();
-                const def = RESOURCE_DB[id];
-                if (!def) continue;
-
-                const tex = scene.textures.get(def.world?.textureKey || id);
-                const src2 = tex.getSourceImage();
-                const scale2 = def.world?.scale ?? 1;
-                const w = src2.width * scale2;
-                const h = src2.height * scale2;
-
                 let x2,
                     y2,
                     t2 = 10,
-                    d2 = 0;
+                    d2 = 0,
+                    id,
+                    def,
+                    w = 0,
+                    h = 0;
                 do {
                     const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
                     const dist = radius * Math.sqrt(Math.random());
                     x2 = x + Math.cos(ang) * dist;
                     y2 = y + Math.sin(ang) * dist;
+                    id = pickBaseVariant(x2, y2);
+                    def = RESOURCE_DB[id];
+                    if (!def) break;
+                    const tex = scene.textures.get(def.world?.textureKey || id);
+                    const src2 = tex.getSourceImage();
+                    const scale2 = def.world?.scale ?? 1;
+                    w = src2.width * scale2;
+                    h = src2.height * scale2;
                     const biome2 = biomeFn((x2 / chunkSize) | 0, (y2 / chunkSize) | 0);
                     const seed2 = WORLD_GEN.biomeSeeds[biome2] || 0;
                     d2 = densityFn(x2, y2, seed2);
                     t2--;
                 } while (t2 > 0 && (d2 < 0.5 || tooClose(x2, y2, w, h)));
-                if (t2 <= 0) continue;
+                if (t2 <= 0 || !def) continue;
                 createResourceAt(id, def, x2, y2);
                 spawned++;
             }
