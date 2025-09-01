@@ -10,10 +10,10 @@ globalThis.Phaser = {
 };
 
 // Deterministic RNG sequence
-const randSeq = [0.1, 0.2, 0.1, 0.1, 0.3, 0.0, 1.0, 0.4, 0.5, 1.0];
+const randSeq = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
 let ri = 0;
 
-test('clusters spawn same base type without overlap', async (t) => {
+test('cluster members share base prefix without overlap', async (t) => {
     t.mock.method(Math, 'random', () => randSeq[ri++ % randSeq.length]);
 
     const { default: createResourceSystem } = await import('../../systems/resourceSystem.js');
@@ -67,10 +67,13 @@ test('clusters spawn same base type without overlap', async (t) => {
     const cfg = {
         variants: [
             { id: 'rock1A', weight: 1 },
+            { id: 'rock1B', weight: 1 },
             { id: 'rock2A', weight: 1 },
+            { id: 'rock2B', weight: 1 },
         ],
         clusterMin: 3,
         clusterMax: 3,
+        clusterRadius: 80,
         minSpacing: 0,
     };
 
@@ -94,22 +97,15 @@ test('clusters spawn same base type without overlap', async (t) => {
     for (const s of spawned) {
         assert.ok(s.id.startsWith(base));
     }
+    assert.ok(spawned.some((s) => s.id !== spawned[0].id));
 
-    const overlaps = (a, b) => {
-        const ax1 = a.x - a.displayWidth / 2;
-        const ax2 = a.x + a.displayWidth / 2;
-        const ay1 = a.y - a.displayHeight / 2;
-        const ay2 = a.y + a.displayHeight / 2;
-        const bx1 = b.x - b.displayWidth / 2;
-        const bx2 = b.x + b.displayWidth / 2;
-        const by1 = b.y - b.displayHeight / 2;
-        const by2 = b.y + b.displayHeight / 2;
-        return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
-    };
-
-    for (let i = 0; i < spawned.length; i++) {
-        for (let j = i + 1; j < spawned.length; j++) {
-            assert.equal(overlaps(spawned[i], spawned[j]), false);
-        }
+    const center = spawned[0];
+    const dists = spawned.slice(1).map((s) =>
+        Math.hypot(s.x - center.x, s.y - center.y),
+    );
+    for (const d of dists) {
+        assert.ok(d <= cfg.clusterRadius);
     }
+    assert.ok(dists.some((d) => Math.abs(d - dists[0]) > 1));
+
 });

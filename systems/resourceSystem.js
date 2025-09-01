@@ -659,7 +659,7 @@ function createResourceSystem(scene) {
                 return baseVariants[0].id;
             };
 
-            const firstId = pickBaseVariant();
+            const firstId = baseId;
             const firstDef = RESOURCE_DB[firstId];
             if (!firstDef) return 0;
 
@@ -717,10 +717,7 @@ function createResourceSystem(scene) {
                     d2 = 0;
                 do {
                     const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
-                    const dist = Phaser.Math.FloatBetween(
-                        Math.max(width, height),
-                        radius,
-                    );
+                    const dist = radius * Math.sqrt(Math.random());
                     x2 = x + Math.cos(ang) * dist;
                     y2 = y + Math.sin(ang) * dist;
                     const biome2 = biomeFn((x2 / chunkSize) | 0, (y2 / chunkSize) | 0);
