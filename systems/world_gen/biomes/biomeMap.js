@@ -30,4 +30,9 @@ export function __setNoise2D(fn) {
     noise2D = fn;
 }
 
+// Expose raw noise for edge blending and tests.
+export function sampleBiomeNoise(x, y) {
+    return noise2D(x, y);
+}
+
 export default { getBiome, setBiomeSeed };
