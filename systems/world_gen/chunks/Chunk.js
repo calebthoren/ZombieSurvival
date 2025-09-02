@@ -6,22 +6,6 @@ import { getBiome } from '../biomes/biomeMap.js';
 
 const TEX_POOL = [];
 
-function avgColor(tl, tr, bl, br) {
-    const r = (((tl >> 16) & 0xff)
-        + ((tr >> 16) & 0xff)
-        + ((bl >> 16) & 0xff)
-        + ((br >> 16) & 0xff)) >> 2;
-    const g = (((tl >> 8) & 0xff)
-        + ((tr >> 8) & 0xff)
-        + ((bl >> 8) & 0xff)
-        + ((br >> 8) & 0xff)) >> 2;
-    const b = ((tl & 0xff)
-        + (tr & 0xff)
-        + (bl & 0xff)
-        + (br & 0xff)) >> 2;
-    return (r << 16) | (g << 8) | b;
-}
-
 function lerpColor(a, b, t) {
     const ar = (a >> 16) & 0xff;
     const ag = (a >> 8) & 0xff;
@@ -35,6 +19,8 @@ function lerpColor(a, b, t) {
     return (r << 16) | (g << 8) | bcol;
 }
 
+// Pre-render a chunk-sized texture with biome colors that fade to
+// neighbouring chunk colors only within the configured edge radius.
 function drawBiomeTexture(scene, rt, cx, cy) {
     const size = WORLD_GEN.chunk.size;
     const radius = WORLD_GEN.chunk.blendRadius ?? 50;
@@ -46,18 +32,21 @@ function drawBiomeTexture(scene, rt, cx, cy) {
     const g = scene.add.graphics();
     for (let ix = 0; ix < samples; ix++) {
         for (let iy = 0; iy < samples; iy++) {
-            const x = cx + ix / samples;
-            const y = cy + iy / samples;
-            const tl = WORLD_GEN.biomeColors[getBiome(x, y)];
-            const tr = WORLD_GEN.biomeColors[getBiome(x + 1 / samples, y)];
-            const bl = WORLD_GEN.biomeColors[getBiome(x, y + 1 / samples)];
-            const br = WORLD_GEN.biomeColors[getBiome(x + 1 / samples, y + 1 / samples)];
-            const neighbor = avgColor(tl, tr, bl, br);
-            const dx = (ix + 0.5) / samples - 0.5;
-            const dy = (iy + 0.5) / samples - 0.5;
-            const dist = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
-            const t = Math.min(1, Math.pow(dist, falloff));
-            const color = lerpColor(baseColor, neighbor, t);
+            const px = (ix + 0.5) * step;
+            const py = (iy + 0.5) * step;
+            const edgeDist = Math.min(px, py, size - px, size - py);
+            let color = baseColor;
+            if (edgeDist < radius) {
+                let nx = cx;
+                let ny = cy;
+                if (px < radius) nx = cx - 1;
+                else if (px > size - radius) nx = cx + 1;
+                if (py < radius) ny = cy - 1;
+                else if (py > size - radius) ny = cy + 1;
+                const neighborColor = WORLD_GEN.biomeColors[getBiome(nx + 0.5, ny + 0.5)];
+                const t = Math.pow(1 - edgeDist / radius, falloff);
+                color = lerpColor(baseColor, neighborColor, t);
+            }
             g.fillStyle(color, 1);
             g.fillRect(ix * step, iy * step, step + 1, step + 1);
         }
