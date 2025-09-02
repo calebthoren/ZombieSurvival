@@ -306,6 +306,8 @@ function createResourceSystem(scene) {
         };
 
         const createResourceAt = (id, def, x, y) => {
+            x = Math.round(x);
+            y = Math.round(y);
             const originX = def.world?.origin?.x ?? 0.5;
             const originY = def.world?.origin?.y ?? 0.5;
             const scale = def.world?.scale ?? 1;
@@ -677,8 +679,8 @@ function createResourceSystem(scene) {
                 tries = 30,
                 density = 0;
             do {
-                x = Phaser.Math.Between(minX, maxX);
-                y = Phaser.Math.Between(minY, maxY);
+                x = Math.round(Phaser.Math.Between(minX, maxX));
+                y = Math.round(Phaser.Math.Between(minY, maxY));
                 const biome = biomeFn((x / chunkSize) | 0, (y / chunkSize) | 0);
                 const seed = WORLD_GEN.biomeSeeds[biome] || 0;
                 density = densityFn(x, y, seed);
@@ -719,8 +721,8 @@ function createResourceSystem(scene) {
                 do {
                     const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
                     const dist = radius * Math.sqrt(Math.random());
-                    x2 = x + Math.cos(ang) * dist;
-                    y2 = y + Math.sin(ang) * dist;
+                    x2 = Math.round(x + Math.cos(ang) * dist);
+                    y2 = Math.round(y + Math.sin(ang) * dist);
                     const biome2 = biomeFn((x2 / chunkSize) | 0, (y2 / chunkSize) | 0);
                     const seed2 = WORLD_GEN.biomeSeeds[biome2] || 0;
                     d2 = densityFn(x2, y2, seed2);
@@ -747,9 +749,11 @@ function createResourceSystem(scene) {
     function spawnWorldItem(id, pos) {
         const def = RESOURCE_DB[id];
         if (!def) return;
-        const depthOff = Math.floor(pos.y) % 899;
+        const x = Math.round(pos.x);
+        const y = Math.round(pos.y);
+        const depthOff = y % 899;
         const obj = scene.add
-            .image(pos.x, pos.y, def.world?.textureKey || id)
+            .image(x, y, def.world?.textureKey || id)
             .setDepth((def.depth ?? 5) + depthOff)
             .setScale(def.world?.scale ?? 1);
         scene.physics.add.existing(obj);
