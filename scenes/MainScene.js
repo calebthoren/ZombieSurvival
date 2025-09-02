@@ -158,7 +158,7 @@ export default class MainScene extends Phaser.Scene {
             .setCollideWorldBounds(false);
 
         this.cameras.main.startFollow(this.player);
-        this.cameras.main.setRoundPixels(false);
+        this.cameras.main.setRoundPixels(true);
 
         this.player._speedMult = 1;
         this.player._inBush = false;
