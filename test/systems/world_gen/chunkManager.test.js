@@ -15,11 +15,22 @@ test('ChunkManager loads and unloads chunks around player movement', () => {
                 getChildren: () => [],
                 clear() {},
                 destroy() {},
+                remove() {},
             }),
-            rectangle: () => ({
+            renderTexture: () => ({
                 setOrigin() { return this; },
                 setDepth() { return this; },
-                destroy() {},
+                setVisible() { return this; },
+                setActive() { return this; },
+                setPosition() { return this; },
+                clear() { return this; },
+                draw() {},
+            }),
+            graphics: () => ({
+                fillStyle() { return this; },
+                fillRect() { return this; },
+                clear() { return this; },
+                destroy() { return this; },
             }),
         },
     };
@@ -54,11 +65,22 @@ test('ChunkManager wraps coordinates across world bounds', () => {
                 getChildren: () => [],
                 clear() {},
                 destroy() {},
+                remove() {},
             }),
-            rectangle: () => ({
+            renderTexture: () => ({
                 setOrigin() { return this; },
                 setDepth() { return this; },
-                destroy() {},
+                setVisible() { return this; },
+                setActive() { return this; },
+                setPosition() { return this; },
+                clear() { return this; },
+                draw() {},
+            }),
+            graphics: () => ({
+                fillStyle() { return this; },
+                fillRect() { return this; },
+                clear() { return this; },
+                destroy() { return this; },
             }),
         },
     };
