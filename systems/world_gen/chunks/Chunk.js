@@ -6,18 +6,26 @@ import { getBiome } from '../biomes/biomeMap.js';
 
 const TEX_POOL = [];
 
-function drawBiomeTexture(rt, cx, cy) {
+function drawBiomeTexture(scene, rt, cx, cy) {
     const size = WORLD_GEN.chunk.size;
     const radius = WORLD_GEN.chunk.blendRadius ?? 50;
     const samples = Math.max(2, Math.floor(size / radius));
     const step = size / samples;
+    const g = scene.add.graphics();
     for (let ix = 0; ix < samples; ix++) {
         for (let iy = 0; iy < samples; iy++) {
-            const biome = getBiome(cx + ix / samples, cy + iy / samples);
-            const color = WORLD_GEN.biomeColors[biome];
-            rt.fill(color, 1, ix * step, iy * step, step + 1, step + 1);
+            const x = cx + ix / samples;
+            const y = cy + iy / samples;
+            const tl = WORLD_GEN.biomeColors[getBiome(x, y)];
+            const tr = WORLD_GEN.biomeColors[getBiome(x + 1 / samples, y)];
+            const bl = WORLD_GEN.biomeColors[getBiome(x, y + 1 / samples)];
+            const br = WORLD_GEN.biomeColors[getBiome(x + 1 / samples, y + 1 / samples)];
+            g.fillGradientStyle(tl, tr, bl, br, 1, 1, 1, 1);
+            g.fillRect(ix * step, iy * step, step + 1, step + 1);
         }
     }
+    rt.draw(g);
+    g.destroy();
 }
 
 export default class Chunk {
@@ -48,7 +56,7 @@ export default class Chunk {
                     size,
                 ).setOrigin(0, 0).setDepth(-1);
             }
-            drawBiomeTexture(tex, this.cx, this.cy);
+            drawBiomeTexture(scene, tex, this.cx, this.cy);
             this.group.add(tex);
             this.rt = tex;
         }

@@ -6,7 +6,8 @@ import { WORLD_GEN } from '../../../systems/world_gen/worldGenConfig.js';
 import { getBiome } from '../../../systems/world_gen/biomes/biomeMap.js';
 
 function mockScene(rtCb) {
-    return {
+    const graphicsCalls = [];
+    const scene = {
         add: {
             group: () => ({
                 active: true,
@@ -16,9 +17,25 @@ function mockScene(rtCb) {
                 remove() {},
             }),
             renderTexture: rtCb,
+            graphics: () => {
+                const g = {
+                    gradients: [],
+                    fillGradientStyle(tl, tr, bl, br) {
+                        this.gradients.push([tl, tr, bl, br]);
+                        return this;
+                    },
+                    fillRect() { return this; },
+                    clear() { return this; },
+                    destroy() { return this; },
+                };
+                graphicsCalls.push(g);
+                return g;
+            },
         },
         resourcePool: { release() {} },
+        _graphicsCalls: graphicsCalls,
     };
+    return scene;
 }
 
 test('Chunk load draws biome render texture', () => {
@@ -32,17 +49,16 @@ test('Chunk load draws biome render texture', () => {
 
     for (const { cx, cy } of cases) {
         const biome = getBiome(cx, cy);
-        const calls = [];
         const scene = mockScene((x, y, w, h) => {
             return {
-                fills: [],
+                draws: 0,
                 setOrigin() { return this; },
                 setDepth() { return this; },
                 setVisible() { return this; },
                 setActive() { return this; },
                 setPosition(nx, ny) { x = nx; y = ny; return this; },
-                clear() { this.fills = []; return this; },
-                fill(color, alpha, rx, ry, rw, rh) { this.fills.push(color); },
+                clear() { return this; },
+                draw() { this.draws++; return this; },
                 get x() { return x; },
                 get y() { return y; },
                 get width() { return w; },
@@ -56,7 +72,9 @@ test('Chunk load draws biome render texture', () => {
         assert.equal(tex.y, cy * size);
         assert.equal(tex.width, size);
         assert.equal(tex.height, size);
-        assert.equal(tex.fills[0], WORLD_GEN.biomeColors[biome]);
+        assert.ok(tex.draws > 0);
+        const gradients = scene._graphicsCalls[0].gradients.flat();
+        assert(gradients.includes(WORLD_GEN.biomeColors[biome]));
         chunk.unload(scene);
         assert.equal(chunk.rt, null);
     }
@@ -74,7 +92,7 @@ test('RenderTextures only created once and pooled on unload', () => {
             setActive() { return this; },
             setPosition() { return this; },
             clear() { return this; },
-            fill() {},
+            draw() {},
         };
     });
     const chunk = new Chunk(0, 0);

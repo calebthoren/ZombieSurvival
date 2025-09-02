@@ -24,7 +24,13 @@ test('ChunkManager loads and unloads chunks around player movement', () => {
                 setActive() { return this; },
                 setPosition() { return this; },
                 clear() { return this; },
-                fill() {},
+                draw() {},
+            }),
+            graphics: () => ({
+                fillGradientStyle() { return this; },
+                fillRect() { return this; },
+                clear() { return this; },
+                destroy() { return this; },
             }),
         },
     };
@@ -68,7 +74,13 @@ test('ChunkManager wraps coordinates across world bounds', () => {
                 setActive() { return this; },
                 setPosition() { return this; },
                 clear() { return this; },
-                fill() {},
+                draw() {},
+            }),
+            graphics: () => ({
+                fillGradientStyle() { return this; },
+                fillRect() { return this; },
+                clear() { return this; },
+                destroy() { return this; },
             }),
         },
     };
