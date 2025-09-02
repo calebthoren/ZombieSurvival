@@ -11,6 +11,24 @@ test('getBiome returns expected IDs', () => {
     assert.strictEqual(getBiome(1, 1), BIOME_IDS.DESERT);
 });
 
+test('getBiome distribution matches thresholds', () => {
+    const counts = {
+        [BIOME_IDS.PLAINS]: 0,
+        [BIOME_IDS.FOREST]: 0,
+        [BIOME_IDS.DESERT]: 0,
+    };
+    const size = 100;
+    for (let x = 0; x < size; x++) {
+        for (let y = 0; y < size; y++) {
+            counts[getBiome(x, y)]++;
+        }
+    }
+    const total = size * size;
+    assert.ok(Math.abs(counts[BIOME_IDS.PLAINS] / total - 0.4) < 0.05);
+    assert.ok(Math.abs(counts[BIOME_IDS.FOREST] / total - 0.3) < 0.05);
+    assert.ok(Math.abs(counts[BIOME_IDS.DESERT] / total - 0.3) < 0.05);
+});
+
 function worldCoords(cx, cy) {
     const size = WORLD_GEN.chunk.size;
     return { x: cx * size + 10, y: cy * size + 10 };
