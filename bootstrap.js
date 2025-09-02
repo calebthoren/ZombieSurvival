@@ -34,7 +34,7 @@ if (IS_NODE) {
         render: {
             pixelArt: true,      // use nearest-neighbor sampling (no smoothing)
             antialias: false,    // disable texture smoothing on Canvas
-            roundPixels: false,  // allow smooth sub-pixel camera movement
+            roundPixels: true,   // force integer pixel positions for crisp movement
             powerPreference: 'high-performance',
         },
 
