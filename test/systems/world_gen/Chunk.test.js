@@ -19,9 +19,9 @@ function mockScene(rtCb) {
             renderTexture: rtCb,
             graphics: () => {
                 const g = {
-                    gradients: [],
-                    fillGradientStyle(tl, tr, bl, br) {
-                        this.gradients.push([tl, tr, bl, br]);
+                    fills: [],
+                    fillStyle(color) {
+                        this.fills.push(color);
                         return this;
                     },
                     fillRect() { return this; },
@@ -73,8 +73,8 @@ test('Chunk load draws biome render texture', () => {
         assert.equal(tex.width, size);
         assert.equal(tex.height, size);
         assert.ok(tex.draws > 0);
-        const gradients = scene._graphicsCalls[0].gradients.flat();
-        assert(gradients.includes(WORLD_GEN.biomeColors[biome]));
+        const fills = scene._graphicsCalls[0].fills;
+        assert(fills.includes(WORLD_GEN.biomeColors[biome]));
         chunk.unload(scene);
         assert.equal(chunk.rt, null);
     }

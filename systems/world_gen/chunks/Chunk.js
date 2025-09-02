@@ -6,6 +6,23 @@ import { getBiome } from '../biomes/biomeMap.js';
 
 const TEX_POOL = [];
 
+
+function avgColor(tl, tr, bl, br) {
+    const r = (((tl >> 16) & 0xff)
+        + ((tr >> 16) & 0xff)
+        + ((bl >> 16) & 0xff)
+        + ((br >> 16) & 0xff)) >> 2;
+    const g = (((tl >> 8) & 0xff)
+        + ((tr >> 8) & 0xff)
+        + ((bl >> 8) & 0xff)
+        + ((br >> 8) & 0xff)) >> 2;
+    const b = ((tl & 0xff)
+        + (tr & 0xff)
+        + (bl & 0xff)
+        + (br & 0xff)) >> 2;
+    return (r << 16) | (g << 8) | b;
+}
+
 function drawBiomeTexture(scene, rt, cx, cy) {
     const size = WORLD_GEN.chunk.size;
     const radius = WORLD_GEN.chunk.blendRadius ?? 50;
@@ -20,7 +37,8 @@ function drawBiomeTexture(scene, rt, cx, cy) {
             const tr = WORLD_GEN.biomeColors[getBiome(x + 1 / samples, y)];
             const bl = WORLD_GEN.biomeColors[getBiome(x, y + 1 / samples)];
             const br = WORLD_GEN.biomeColors[getBiome(x + 1 / samples, y + 1 / samples)];
-            g.fillGradientStyle(tl, tr, bl, br, 1, 1, 1, 1);
+            const color = avgColor(tl, tr, bl, br);
+            g.fillStyle(color, 1);
             g.fillRect(ix * step, iy * step, step + 1, step + 1);
         }
     }
