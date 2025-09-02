@@ -8,7 +8,20 @@ import { WORLD_GEN } from '../../../systems/world_gen/worldGenConfig.js';
 test('ChunkManager loads and unloads chunks around player movement', () => {
     const scene = {
         events: new EventEmitter(),
-        add: { group: () => ({ active: true, destroy() {} }) },
+        add: {
+            group: () => ({
+                active: true,
+                add() {},
+                getChildren: () => [],
+                clear() {},
+                destroy() {},
+            }),
+            rectangle: () => ({
+                setOrigin() { return this; },
+                setDepth() { return this; },
+                destroy() {},
+            }),
+        },
     };
     const cm = new ChunkManager(scene, 1);
     cm.maxLoadsPerTick = 9;
@@ -34,7 +47,20 @@ test('ChunkManager loads and unloads chunks around player movement', () => {
 test('ChunkManager wraps coordinates across world bounds', () => {
     const scene = {
         events: new EventEmitter(),
-        add: { group: () => ({ active: true, destroy() {} }) },
+        add: {
+            group: () => ({
+                active: true,
+                add() {},
+                getChildren: () => [],
+                clear() {},
+                destroy() {},
+            }),
+            rectangle: () => ({
+                setOrigin() { return this; },
+                setDepth() { return this; },
+                destroy() {},
+            }),
+        },
     };
     const cm = new ChunkManager(scene, 1);
     cm.maxLoadsPerTick = 9;
