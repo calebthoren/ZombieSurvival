@@ -319,6 +319,9 @@ function createResourceSystem(scene) {
 
             const depthOff = Math.floor(y) % 899;
             const trunkDepthBase = def.trunkDepth ?? def.depth ?? 5;
+            const playerDepth = scene.player?.depth ?? 900;
+            let trunkDepth = trunkDepthBase + depthOff;
+            if (trunkDepth >= playerDepth) trunkDepth -= 899;
 
             let trunk;
             const bodyCfg = def.world?.body;
@@ -328,7 +331,7 @@ function createResourceSystem(scene) {
                     .image(x, y, texKey)
                     .setOrigin(originX, originY)
                     .setScale(scale)
-                    .setDepth(trunkDepthBase + depthOff)
+                    .setDepth(trunkDepth)
                     .setImmovable(true)
                     .setPosition(x, y);
                 if (scene.resourcesDyn && scene.resourcesDyn.add) scene.resourcesDyn.add(trunk);
@@ -337,7 +340,7 @@ function createResourceSystem(scene) {
                     .image(x, y, texKey)
                     .setOrigin(originX, originY)
                     .setScale(scale)
-                    .setDepth(trunkDepthBase + depthOff);
+                    .setDepth(trunkDepth);
                 scene.resourcesDecor && scene.resourcesDecor.add(trunk);
             }
 
