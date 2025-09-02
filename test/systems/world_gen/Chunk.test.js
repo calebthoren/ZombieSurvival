@@ -2,7 +2,8 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
 import Chunk from '../../../systems/world_gen/chunks/Chunk.js';
-import { BIOME_IDS, WORLD_GEN } from '../../../systems/world_gen/worldGenConfig.js';
+import { WORLD_GEN } from '../../../systems/world_gen/worldGenConfig.js';
+import { getBiome } from '../../../systems/world_gen/biomes/biomeMap.js';
 
 function mockScene(rectCb) {
     return {
@@ -22,12 +23,13 @@ function mockScene(rectCb) {
 test('Chunk load draws biome-colored rectangle', () => {
     const size = WORLD_GEN.chunk.size;
     const cases = [
-        { cx: 0, cy: 0, biome: BIOME_IDS.PLAINS },
-        { cx: 8, cy: 8, biome: BIOME_IDS.FOREST },
-        { cx: 1, cy: 1, biome: BIOME_IDS.DESERT },
+        { cx: 0, cy: 0 },
+        { cx: 8, cy: 8 },
+        { cx: 1, cy: 1 },
     ];
 
-    for (const { cx, cy, biome } of cases) {
+    for (const { cx, cy } of cases) {
+        const biome = getBiome(cx, cy);
         const rects = [];
         const scene = mockScene((x, y, w, h, color) => {
             rects.push({ x, y, w, h, color });
