@@ -3,6 +3,8 @@
 
 import { BIOME_IDS } from '../worldGenConfig.js';
 
+// cumulative probabilities for Plains -> Forest -> Desert
+// [0.4, 0.7] yields 40% Plains, 30% Forest, 30% Desert
 const THRESHOLDS = [0.4, 0.7];
 
 function noise(cx, cy) {
