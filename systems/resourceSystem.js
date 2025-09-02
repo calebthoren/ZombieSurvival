@@ -137,11 +137,30 @@ function createResourceSystem(scene) {
             const totalTarget = Phaser.Math.Between(35, 45);
             const centers = poissonSampler.generate(bounds, 40);
             Phaser.Utils.Array.Shuffle(centers);
-            const keys = Array.from(registry.keys());
             let total = 0;
             for (let i = 0; i < centers.length && total < totalTarget; i++) {
                 const c = centers[i];
-                const key = Phaser.Utils.Array.GetRandom(keys);
+                const biome = getBiome((c.x / size) | 0, (c.y / size) | 0);
+                const weights = WORLD_GEN.spawns.resourceWeights?.[biome];
+                let key;
+                if (weights && weights.length) {
+                    let wTotal = 0;
+                    for (let j = 0; j < weights.length; j++) {
+                        wTotal += weights[j].weight || 0;
+                    }
+                    let r = Math.random() * wTotal;
+                    for (let j = 0; j < weights.length; j++) {
+                        r -= weights[j].weight || 0;
+                        if (r <= 0) {
+                            key = weights[j].key;
+                            break;
+                        }
+                    }
+                }
+                if (!key) {
+                    const keys = Array.from(registry.keys());
+                    key = Phaser.Utils.Array.GetRandom(keys);
+                }
                 const gen = registry.get(key);
                 const cfg = gen && gen();
                 if (!cfg) continue;
@@ -160,7 +179,7 @@ function createResourceSystem(scene) {
                     clusterMin: clusterCount,
                     clusterMax: clusterCount,
                     clusterRadius,
-                    minSpacing: clusterCount > 1 ? 0 : cfg.minSpacing,
+                    minSpacing: cfg.minSpacing,
                 };
                 const spawned =
                     _spawnResourceGroup(key, cfgOverride, {
@@ -256,7 +275,6 @@ function createResourceSystem(scene) {
         const respawnMax = groupCfg.respawnDelayMs?.max ?? 7000;
         const clusterMin = groupCfg.clusterMin ?? 3;
         const clusterMax = groupCfg.clusterMax ?? 6;
-        const totalWeight = variants.reduce((s, v) => s + (v.weight || 0), 0);
 
         const w = WORLD_GEN.world.width;
         const h = WORLD_GEN.world.height;
@@ -296,16 +314,31 @@ function createResourceSystem(scene) {
             return false;
         };
 
-        const pickVariantId = () => {
-            let r = Math.random() * totalWeight;
-            for (let v of variants) {
+        const pickVariantId = (biome, baseKey) => {
+            let total = 0;
+            for (let i = 0; i < variants.length; i++) {
+                const v = variants[i];
+                if (baseKey && !v.id.startsWith(baseKey)) continue;
+                const bs = v.biomes;
+                if (bs && bs.indexOf && bs.indexOf(biome) === -1) continue;
+                total += v.weight || 0;
+            }
+            if (total <= 0) return null;
+            let r = Math.random() * total;
+            for (let i = 0; i < variants.length; i++) {
+                const v = variants[i];
+                if (baseKey && !v.id.startsWith(baseKey)) continue;
+                const bs = v.biomes;
+                if (bs && bs.indexOf && bs.indexOf(biome) === -1) continue;
                 r -= v.weight || 0;
                 if (r <= 0) return v.id;
             }
-            return variants[0].id;
+            return null;
         };
 
         const createResourceAt = (id, def, x, y) => {
+            x = Math.round(x);
+            y = Math.round(y);
             const originX = def.world?.origin?.x ?? 0.5;
             const originY = def.world?.origin?.y ?? 0.5;
             const scale = def.world?.scale ?? 1;
@@ -317,6 +350,9 @@ function createResourceSystem(scene) {
 
             const depthOff = Math.floor(y) % 899;
             const trunkDepthBase = def.trunkDepth ?? def.depth ?? 5;
+            const playerDepth = scene.player?.depth ?? 900;
+            let trunkDepth = trunkDepthBase + depthOff;
+            if (trunkDepth >= playerDepth) trunkDepth -= 899;
 
             let trunk;
             const bodyCfg = def.world?.body;
@@ -326,7 +362,7 @@ function createResourceSystem(scene) {
                     .image(x, y, texKey)
                     .setOrigin(originX, originY)
                     .setScale(scale)
-                    .setDepth(trunkDepthBase + depthOff)
+                    .setDepth(trunkDepth)
                     .setImmovable(true)
                     .setPosition(x, y);
                 if (scene.resourcesDyn && scene.resourcesDyn.add) scene.resourcesDyn.add(trunk);
@@ -335,7 +371,7 @@ function createResourceSystem(scene) {
                     .image(x, y, texKey)
                     .setOrigin(originX, originY)
                     .setScale(scale)
-                    .setDepth(trunkDepthBase + depthOff);
+                    .setDepth(trunkDepth);
                 scene.resourcesDecor && scene.resourcesDecor.add(trunk);
             }
 
@@ -352,6 +388,7 @@ function createResourceSystem(scene) {
                     .setDepth((scene.player?.depth ?? 900) + 2 + depthOff)
                     .setCrop(0, 0, frameW, topH);
                 scene.resourcesDecor && scene.resourcesDecor.add(top);
+                top.setData('noHitboxDebug', true);
                 trunk.setCrop(0, topH, frameW, frameH - topH);
                 trunk.setData('topSprite', top);
                 trunk.once('destroy', () => top.destroy());
@@ -512,6 +549,7 @@ function createResourceSystem(scene) {
                     .setDepth((def.leavesDepth ?? def.depth ?? 5) + depthOff)
                     .setCrop(cropX, cropY, lw, lh);
                 scene.resourcesDecor && scene.resourcesDecor.add(leaves);
+                leaves.setData('noHitboxDebug', true);
 
                 const dispW = trunk.displayWidth;
                 const dispH = trunk.displayHeight;
@@ -643,49 +681,38 @@ function createResourceSystem(scene) {
         };
 
         const spawnCluster = () => {
-            const baseId = pickVariantId();
-            const baseKey = baseId.replace(/[A-Za-z0-9]$/, '');
-            const baseVariants = variants.filter((v) => v.id.startsWith(baseKey));
-            const baseTotalWeight = baseVariants.reduce(
-                (s, v) => s + (v.weight || 0),
-                0,
-            );
-            const pickBaseVariant = () => {
-                let r = Math.random() * baseTotalWeight;
-                for (const v of baseVariants) {
-                    r -= v.weight || 0;
-                    if (r <= 0) return v.id;
-                }
-                return baseVariants[0].id;
-            };
-
-            const firstId = pickBaseVariant();
-            const firstDef = RESOURCE_DB[firstId];
-            if (!firstDef) return 0;
-
-            const firstTex = scene.textures.get(
-                firstDef.world?.textureKey || firstId,
-            );
-            const src = firstTex.getSourceImage();
-            const scale = firstDef.world?.scale ?? 1;
-            const width = src.width * scale;
-            const height = src.height * scale;
-
             let x,
                 y,
+                biome,
+                baseId,
+                baseDef,
+                baseWidth = 0,
+                baseHeight = 0,
                 tries = 30,
                 density = 0;
             do {
-                x = Phaser.Math.Between(minX, maxX);
-                y = Phaser.Math.Between(minY, maxY);
-                const biome = biomeFn((x / chunkSize) | 0, (y / chunkSize) | 0);
-                const seed = WORLD_GEN.biomeSeeds[biome] || 0;
-                density = densityFn(x, y, seed);
+                x = Math.round(Phaser.Math.Between(minX, maxX));
+                y = Math.round(Phaser.Math.Between(minY, maxY));
+                biome = biomeFn((x / chunkSize) | 0, (y / chunkSize) | 0);
+                baseId = pickVariantId(biome);
+                baseDef = baseId ? RESOURCE_DB[baseId] : null;
+                if (baseDef) {
+                    const baseTex = scene.textures.get(baseDef.world?.textureKey || baseId);
+                    const baseSrc = baseTex.getSourceImage();
+                    const baseScale = baseDef.world?.scale ?? 1;
+                    baseWidth = baseSrc.width * baseScale;
+                    baseHeight = baseSrc.height * baseScale;
+                    const seed = WORLD_GEN.biomeSeeds[biome] || 0;
+                    density = densityFn(x, y, seed);
+                }
                 tries--;
-            } while (tries > 0 && (density < 0.5 || tooClose(x, y, width, height)));
-            if (tries <= 0) return 0;
+            } while (
+                tries > 0 &&
+                (!baseDef || density < 0.5 || tooClose(x, y, baseWidth, baseHeight))
+            );
+            if (tries <= 0 || !baseDef) return 0;
 
-            createResourceAt(firstId, firstDef, x, y);
+            createResourceAt(baseId, baseDef, x, y);
             let spawned = 1;
             const growthChance = groupCfg.clusterGrowth ?? DEFAULT_CLUSTER_GROWTH;
             const clusterCount = pickClusterCount(
@@ -695,41 +722,46 @@ function createResourceSystem(scene) {
                 growthChance,
             );
             const radius =
-                groupCfg.clusterRadius ?? Math.max(width, height) * 1.1;
+                groupCfg.clusterRadius ?? Math.max(baseWidth, baseHeight) * 1.1;
+            const baseKey = baseId.replace(/[A-Za-z0-9]$/, '');
             for (
                 let i = 1;
                 i < clusterCount && scene.resources.countActive(true) < maxActive;
                 i++
             ) {
-                const id = pickBaseVariant();
-                const def = RESOURCE_DB[id];
-                if (!def) continue;
-
-                const tex = scene.textures.get(def.world?.textureKey || id);
-                const src2 = tex.getSourceImage();
-                const scale2 = def.world?.scale ?? 1;
+                const id2 = pickVariantId(biome, baseKey);
+                const def2 = id2 ? RESOURCE_DB[id2] : null;
+                if (!def2) continue;
+                let cfg2 = null;
+                for (let k = 0; k < variants.length; k++) {
+                    if (variants[k].id === id2) { cfg2 = variants[k]; break; }
+                }
+                const tex2 = scene.textures.get(def2.world?.textureKey || id2);
+                const src2 = tex2.getSourceImage();
+                const scale2 = def2.world?.scale ?? 1;
                 const w = src2.width * scale2;
                 const h = src2.height * scale2;
-
                 let x2,
                     y2,
                     t2 = 10,
                     d2 = 0;
                 do {
                     const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
-                    const dist = Phaser.Math.FloatBetween(
-                        Math.max(width, height),
-                        radius,
-                    );
-                    x2 = x + Math.cos(ang) * dist;
-                    y2 = y + Math.sin(ang) * dist;
+                    const dist = radius * Math.sqrt(Math.random());
+                    x2 = Math.round(x + Math.cos(ang) * dist);
+                    y2 = Math.round(y + Math.sin(ang) * dist);
                     const biome2 = biomeFn((x2 / chunkSize) | 0, (y2 / chunkSize) | 0);
+                    const bs = cfg2?.biomes;
+                    if (bs && bs.indexOf && bs.indexOf(biome2) === -1) {
+                        t2--;
+                        continue;
+                    }
                     const seed2 = WORLD_GEN.biomeSeeds[biome2] || 0;
                     d2 = densityFn(x2, y2, seed2);
                     t2--;
                 } while (t2 > 0 && (d2 < 0.5 || tooClose(x2, y2, w, h)));
                 if (t2 <= 0) continue;
-                createResourceAt(id, def, x2, y2);
+                createResourceAt(id2, def2, x2, y2);
                 spawned++;
             }
 
@@ -749,9 +781,11 @@ function createResourceSystem(scene) {
     function spawnWorldItem(id, pos) {
         const def = RESOURCE_DB[id];
         if (!def) return;
-        const depthOff = Math.floor(pos.y) % 899;
+        const x = Math.round(pos.x);
+        const y = Math.round(pos.y);
+        const depthOff = y % 899;
         const obj = scene.add
-            .image(pos.x, pos.y, def.world?.textureKey || id)
+            .image(x, y, def.world?.textureKey || id)
             .setDepth((def.depth ?? 5) + depthOff)
             .setScale(def.world?.scale ?? 1);
         scene.physics.add.existing(obj);

@@ -29,6 +29,7 @@ export default class UIScene extends Phaser.Scene {
     }
 
     create() {
+        this.cameras.main.setRoundPixels(true);
         // -------------------------
         // Inventory model (logic)
         // -------------------------

@@ -8,7 +8,31 @@ import { WORLD_GEN } from '../../../systems/world_gen/worldGenConfig.js';
 test('ChunkManager loads and unloads chunks around player movement', () => {
     const scene = {
         events: new EventEmitter(),
-        add: { group: () => ({ active: true, destroy() {} }) },
+        add: {
+            group: () => ({
+                active: true,
+                add() {},
+                getChildren: () => [],
+                clear() {},
+                destroy() {},
+                remove() {},
+            }),
+            renderTexture: () => ({
+                setOrigin() { return this; },
+                setDepth() { return this; },
+                setVisible() { return this; },
+                setActive() { return this; },
+                setPosition() { return this; },
+                clear() { return this; },
+                draw() {},
+            }),
+            graphics: () => ({
+                fillStyle() { return this; },
+                fillRect() { return this; },
+                clear() { return this; },
+                destroy() { return this; },
+            }),
+        },
     };
     const cm = new ChunkManager(scene, 1);
     cm.maxLoadsPerTick = 9;
@@ -34,7 +58,31 @@ test('ChunkManager loads and unloads chunks around player movement', () => {
 test('ChunkManager wraps coordinates across world bounds', () => {
     const scene = {
         events: new EventEmitter(),
-        add: { group: () => ({ active: true, destroy() {} }) },
+        add: {
+            group: () => ({
+                active: true,
+                add() {},
+                getChildren: () => [],
+                clear() {},
+                destroy() {},
+                remove() {},
+            }),
+            renderTexture: () => ({
+                setOrigin() { return this; },
+                setDepth() { return this; },
+                setVisible() { return this; },
+                setActive() { return this; },
+                setPosition() { return this; },
+                clear() { return this; },
+                draw() {},
+            }),
+            graphics: () => ({
+                fillStyle() { return this; },
+                fillRect() { return this; },
+                clear() { return this; },
+                destroy() { return this; },
+            }),
+        },
     };
     const cm = new ChunkManager(scene, 1);
     cm.maxLoadsPerTick = 9;
