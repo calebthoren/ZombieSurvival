@@ -179,7 +179,7 @@ function createResourceSystem(scene) {
                     clusterMin: clusterCount,
                     clusterMax: clusterCount,
                     clusterRadius,
-                    minSpacing: clusterCount > 1 ? 0 : cfg.minSpacing,
+                    minSpacing: cfg.minSpacing,
                 };
                 const spawned =
                     _spawnResourceGroup(key, cfgOverride, {
