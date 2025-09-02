@@ -6,6 +6,7 @@ import { getBiome } from '../biomes/biomeMap.js';
 
 const TEX_POOL = [];
 
+
 function avgColor(tl, tr, bl, br) {
     const r = (((tl >> 16) & 0xff)
         + ((tr >> 16) & 0xff)
