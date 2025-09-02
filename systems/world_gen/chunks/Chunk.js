@@ -6,7 +6,6 @@ import { getBiome } from '../biomes/biomeMap.js';
 
 const TEX_POOL = [];
 
-
 function avgColor(tl, tr, bl, br) {
     const r = (((tl >> 16) & 0xff)
         + ((tr >> 16) & 0xff)
@@ -26,7 +25,8 @@ function avgColor(tl, tr, bl, br) {
 function drawBiomeTexture(scene, rt, cx, cy) {
     const size = WORLD_GEN.chunk.size;
     const radius = WORLD_GEN.chunk.blendRadius ?? 50;
-    const samples = Math.max(2, Math.floor(size / radius));
+    const density = WORLD_GEN.chunk.blendDensity ?? 1;
+    const samples = Math.max(2, Math.floor(size / radius) * density);
     const step = size / samples;
     const g = scene.add.graphics();
     for (let ix = 0; ix < samples; ix++) {
