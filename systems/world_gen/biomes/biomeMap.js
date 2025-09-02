@@ -1,7 +1,7 @@
 // systems/world_gen/biomes/biomeMap.js
 // Biome assignment based on simple noise thresholds.
-
-import SimplexNoise from 'simplex-noise';
+// Import from node_modules via relative path so browser can resolve it without bundler.
+import SimplexNoise from '../../../node_modules/simplex-noise/dist/esm/simplex-noise.js';
 
 import { BIOME_IDS, BIOME_SCALE } from '../worldGenConfig.js';
 
