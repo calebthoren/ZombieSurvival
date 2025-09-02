@@ -81,6 +81,9 @@ test('Chunk load draws biome render texture', () => {
         );
         assert.equal(fills.length, expectedSamples * expectedSamples);
         assert(fills.includes(WORLD_GEN.biomeColors[biome]));
+        const cIdx = Math.floor(expectedSamples / 2) * expectedSamples
+            + Math.floor(expectedSamples / 2);
+        assert.equal(fills[cIdx], WORLD_GEN.biomeColors[biome]);
         chunk.unload(scene);
         assert.equal(chunk.rt, null);
     }

@@ -22,12 +22,27 @@ function avgColor(tl, tr, bl, br) {
     return (r << 16) | (g << 8) | b;
 }
 
+function lerpColor(a, b, t) {
+    const ar = (a >> 16) & 0xff;
+    const ag = (a >> 8) & 0xff;
+    const ab = a & 0xff;
+    const br = (b >> 16) & 0xff;
+    const bg = (b >> 8) & 0xff;
+    const bb = b & 0xff;
+    const r = ar + ((br - ar) * t) | 0;
+    const g = ag + ((bg - ag) * t) | 0;
+    const bcol = ab + ((bb - ab) * t) | 0;
+    return (r << 16) | (g << 8) | bcol;
+}
+
 function drawBiomeTexture(scene, rt, cx, cy) {
     const size = WORLD_GEN.chunk.size;
     const radius = WORLD_GEN.chunk.blendRadius ?? 50;
     const density = WORLD_GEN.chunk.blendDensity ?? 1;
     const samples = Math.max(2, Math.floor(size / radius) * density);
     const step = size / samples;
+    const falloff = WORLD_GEN.chunk.blendFalloff ?? 1;
+    const baseColor = WORLD_GEN.biomeColors[getBiome(cx + 0.5, cy + 0.5)];
     const g = scene.add.graphics();
     for (let ix = 0; ix < samples; ix++) {
         for (let iy = 0; iy < samples; iy++) {
@@ -37,7 +52,12 @@ function drawBiomeTexture(scene, rt, cx, cy) {
             const tr = WORLD_GEN.biomeColors[getBiome(x + 1 / samples, y)];
             const bl = WORLD_GEN.biomeColors[getBiome(x, y + 1 / samples)];
             const br = WORLD_GEN.biomeColors[getBiome(x + 1 / samples, y + 1 / samples)];
-            const color = avgColor(tl, tr, bl, br);
+            const neighbor = avgColor(tl, tr, bl, br);
+            const dx = (ix + 0.5) / samples - 0.5;
+            const dy = (iy + 0.5) / samples - 0.5;
+            const dist = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
+            const t = Math.min(1, Math.pow(dist, falloff));
+            const color = lerpColor(baseColor, neighbor, t);
             g.fillStyle(color, 1);
             g.fillRect(ix * step, iy * step, step + 1, step + 1);
         }
