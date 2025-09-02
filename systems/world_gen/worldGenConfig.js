@@ -15,6 +15,8 @@ export const BIOME_IDS = {
 export const BIOME_SCALE = 0.08;
 
 export const WORLD_GEN = {
+  // Seed for deterministic world generation; overridable via global WORLD_GEN_SEED
+  seed: globalThis.WORLD_GEN_SEED ?? Date.now(),
   // -----------------------------
   // World bounds / scale (future)
   // -----------------------------

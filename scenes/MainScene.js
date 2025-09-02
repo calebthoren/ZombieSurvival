@@ -11,6 +11,7 @@ import ChunkManager from '../systems/world_gen/chunks/ChunkManager.js';
 import { clearChunkStore } from '../systems/world_gen/chunks/chunkStore.js';
 import createZombiePool from '../systems/pools/zombiePool.js';
 import createResourcePool from '../systems/pools/resourcePool.js';
+import { setBiomeSeed } from '../systems/world_gen/biomes/biomeMap.js';
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -127,6 +128,7 @@ export default class MainScene extends Phaser.Scene {
 
         // Reset any previous chunk metadata and UI state
         clearChunkStore();
+        setBiomeSeed(WORLD_GEN.seed);
         // Ensure fresh UI on respawn
         this.scene.stop('UIScene');
         // Launch UI and keep a reference
