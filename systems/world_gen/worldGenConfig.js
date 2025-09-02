@@ -32,6 +32,13 @@ export const WORLD_GEN = {
     [BIOME_IDS.DESERT]: 13579,
   },
 
+  // Debug fill colors for biome backgrounds
+  biomeColors: {
+    [BIOME_IDS.PLAINS]: 0x228B22,
+    [BIOME_IDS.FOREST]: 0x8B4513,
+    [BIOME_IDS.DESERT]: 0xFFD700,
+  },
+
   // -----------------------------
   // Day/Night cycle (arcade-style)
   // -----------------------------

@@ -2,6 +2,7 @@
 // Basic world chunk container handling entity group and metadata.
 
 import { WORLD_GEN } from '../worldGenConfig.js';
+import { getBiome } from '../biomes/biomeMap.js';
 
 export default class Chunk {
     constructor(cx, cy, meta = {}) {
@@ -9,6 +10,7 @@ export default class Chunk {
         this.cy = cy;
         this.group = null;
         this.meta = meta;
+        this.rect = null;
     }
 
     load(scene) {
@@ -16,6 +18,18 @@ export default class Chunk {
             this.group = scene.add.group();
         }
         this.group.active = true;
+        if (!this.rect) {
+            const size = WORLD_GEN.chunk.size;
+            const color = WORLD_GEN.biomeColors[getBiome(this.cx, this.cy)];
+            this.rect = scene.add.rectangle(
+                this.cx * size,
+                this.cy * size,
+                size,
+                size,
+                color,
+            ).setOrigin(0, 0).setDepth(-1);
+            this.group.add(this.rect);
+        }
         if (Array.isArray(this.meta.zombies) && this.meta.zombies.length > 0) {
             if (scene?.combat?.spawnZombie) {
                 for (const z of this.meta.zombies) {
@@ -29,6 +43,10 @@ export default class Chunk {
     }
 
     unload(scene) {
+        if (this.rect) {
+            this.rect.destroy();
+            this.rect = null;
+        }
         if (this.group) {
             const children = this.group.getChildren ? this.group.getChildren() : [];
             for (let i = 0; i < children.length; i++) {
