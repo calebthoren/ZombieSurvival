@@ -388,6 +388,7 @@ function createResourceSystem(scene) {
                     .setDepth((scene.player?.depth ?? 900) + 2 + depthOff)
                     .setCrop(0, 0, frameW, topH);
                 scene.resourcesDecor && scene.resourcesDecor.add(top);
+                top.setData('noHitboxDebug', true);
                 trunk.setCrop(0, topH, frameW, frameH - topH);
                 trunk.setData('topSprite', top);
                 trunk.once('destroy', () => top.destroy());
@@ -548,6 +549,7 @@ function createResourceSystem(scene) {
                     .setDepth((def.leavesDepth ?? def.depth ?? 5) + depthOff)
                     .setCrop(cropX, cropY, lw, lh);
                 scene.resourcesDecor && scene.resourcesDecor.add(leaves);
+                leaves.setData('noHitboxDebug', true);
 
                 const dispW = trunk.displayWidth;
                 const dispH = trunk.displayHeight;
