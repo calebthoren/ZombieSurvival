@@ -4,13 +4,29 @@
 import { WORLD_GEN } from '../worldGenConfig.js';
 import { getBiome } from '../biomes/biomeMap.js';
 
+const TEX_POOL = [];
+
+function drawBiomeTexture(rt, cx, cy) {
+    const size = WORLD_GEN.chunk.size;
+    const radius = WORLD_GEN.chunk.blendRadius ?? 50;
+    const samples = Math.max(2, Math.floor(size / radius));
+    const step = size / samples;
+    for (let ix = 0; ix < samples; ix++) {
+        for (let iy = 0; iy < samples; iy++) {
+            const biome = getBiome(cx + ix / samples, cy + iy / samples);
+            const color = WORLD_GEN.biomeColors[biome];
+            rt.fill(color, 1, ix * step, iy * step, step + 1, step + 1);
+        }
+    }
+}
+
 export default class Chunk {
     constructor(cx, cy, meta = {}) {
         this.cx = cx;
         this.cy = cy;
         this.group = null;
         this.meta = meta;
-        this.rect = null;
+        this.rt = null;
     }
 
     load(scene) {
@@ -18,17 +34,23 @@ export default class Chunk {
             this.group = scene.add.group();
         }
         this.group.active = true;
-        if (!this.rect) {
+        if (!this.rt) {
             const size = WORLD_GEN.chunk.size;
-            const color = WORLD_GEN.biomeColors[getBiome(this.cx, this.cy)];
-            this.rect = scene.add.rectangle(
-                this.cx * size,
-                this.cy * size,
-                size,
-                size,
-                color,
-            ).setOrigin(0, 0).setDepth(-1);
-            this.group.add(this.rect);
+            let tex = TEX_POOL.pop();
+            if (tex) {
+                tex.setPosition(this.cx * size, this.cy * size);
+                tex.setVisible(true).setActive(true).clear();
+            } else {
+                tex = scene.add.renderTexture(
+                    this.cx * size,
+                    this.cy * size,
+                    size,
+                    size,
+                ).setOrigin(0, 0).setDepth(-1);
+            }
+            drawBiomeTexture(tex, this.cx, this.cy);
+            this.group.add(tex);
+            this.rt = tex;
         }
         if (Array.isArray(this.meta.zombies) && this.meta.zombies.length > 0) {
             if (scene?.combat?.spawnZombie) {
@@ -43,9 +65,13 @@ export default class Chunk {
     }
 
     unload(scene) {
-        if (this.rect) {
-            this.rect.destroy();
-            this.rect = null;
+        if (this.rt) {
+            this.group?.remove(this.rt, false);
+            this.rt.clear();
+            this.rt.setVisible(false);
+            this.rt.setActive(false);
+            TEX_POOL.push(this.rt);
+            this.rt = null;
         }
         if (this.group) {
             const children = this.group.getChildren ? this.group.getChildren() : [];
@@ -88,5 +114,9 @@ export default class Chunk {
             meta: { ...this.meta },
         };
     }
+}
+
+export function __clearTexturePool() {
+    TEX_POOL.length = 0;
 }
 
