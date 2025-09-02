@@ -9,6 +9,11 @@ export const BIOME_IDS = {
     DESERT: 2,
 };
 
+// Controls the size of biome patches in world generation.
+// Smaller values produce larger patches; larger values yield smaller patches.
+// Typical range: 0.01 (very large areas) to 1.0 (tiny, noisy patches).
+export const BIOME_SCALE = 0.08;
+
 export const WORLD_GEN = {
   // -----------------------------
   // World bounds / scale (future)
