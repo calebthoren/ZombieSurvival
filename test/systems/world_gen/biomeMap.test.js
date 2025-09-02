@@ -11,7 +11,8 @@ function worldCoords(cx, cy) {
 }
 
 test('getBiome maps noise thresholds', async () => {
-    const { getBiome, __setNoise2D } = await import('../../../systems/world_gen/biomes/biomeMap.js?threshold');
+    const { getBiome, __setNoise2D, setBiomeSeed } = await import('../../../systems/world_gen/biomes/biomeMap.js?threshold');
+    setBiomeSeed(1);
     const values = [-0.9, 0.0, 0.9];
     let call = 0;
     __setNoise2D(() => values[call++]);
@@ -21,7 +22,8 @@ test('getBiome maps noise thresholds', async () => {
 });
 
 test('neighboring chunks share biome when noise diff is below threshold step', async () => {
-    const { getBiome, __setNoise2D } = await import('../../../systems/world_gen/biomes/biomeMap.js?neighbor');
+    const { getBiome, __setNoise2D, setBiomeSeed } = await import('../../../systems/world_gen/biomes/biomeMap.js?neighbor');
+    setBiomeSeed(2);
     const values = [0.2, 0.22];
     let call = 0;
     __setNoise2D(() => values[call++]);
@@ -33,13 +35,35 @@ test('neighboring chunks share biome when noise diff is below threshold step', a
 
 test('seeded noise yields deterministic biomes', async () => {
     const path = '../../../systems/world_gen/biomes/biomeMap.js?det';
-    const { getBiome } = await import(path);
-    const { getBiome: getBiome2 } = await import(path + '&again');
+    const { getBiome, setBiomeSeed } = await import(path);
+    setBiomeSeed(123);
+    const { getBiome: getBiome2, setBiomeSeed: setBiomeSeed2 } = await import(path + '&again');
+    setBiomeSeed2(123);
     assert.strictEqual(getBiome(10, 20), getBiome2(10, 20));
 });
 
+test('different seeds produce different biome layouts', async () => {
+    const { getBiome, setBiomeSeed } = await import('../../../systems/world_gen/biomes/biomeMap.js?diff');
+    setBiomeSeed(1);
+    const layoutA = [];
+    for (let x = 0; x < 5; x++) {
+        for (let y = 0; y < 5; y++) {
+            layoutA.push(getBiome(x, y));
+        }
+    }
+    setBiomeSeed(2);
+    const layoutB = [];
+    for (let x = 0; x < 5; x++) {
+        for (let y = 0; y < 5; y++) {
+            layoutB.push(getBiome(x, y));
+        }
+    }
+    assert.notDeepStrictEqual(layoutA, layoutB);
+});
+
 test('changing a biome seed only affects that biome\'s densities', async () => {
-    const { getBiome } = await import('../../../systems/world_gen/biomes/biomeMap.js?density');
+    const { getBiome, setBiomeSeed } = await import('../../../systems/world_gen/biomes/biomeMap.js?density');
+    setBiomeSeed(456);
 
     function densityAt(cx, cy) {
         const { x, y } = worldCoords(cx, cy);
