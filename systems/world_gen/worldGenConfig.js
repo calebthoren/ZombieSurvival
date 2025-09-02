@@ -80,20 +80,30 @@ export const WORLD_GEN = {
           clusterGrowth: 0.2,
           respawnDelayMs: { min: 5000, max: 7000 },
           variants: [
-            { id: RESOURCE_IDS.ROCK1A, weight: 40 }, // collectible, non-blocking
-            { id: RESOURCE_IDS.ROCK1B, weight: 20 }, // blocking
-            { id: RESOURCE_IDS.ROCK1C, weight: 10 }, // blocking
-            { id: RESOURCE_IDS.ROCK1D, weight: 6 },  // blocking
-            { id: RESOURCE_IDS.ROCK1E, weight: 3 },  // blocking
-            { id: RESOURCE_IDS.ROCK2A, weight: 40 }, // collectible, non-blocking
-            { id: RESOURCE_IDS.ROCK2C, weight: 10 }, // blocking
-            { id: RESOURCE_IDS.ROCK2D, weight: 6 },  // blocking
-            { id: RESOURCE_IDS.ROCK2E, weight: 3 },  // blocking
-            { id: RESOURCE_IDS.ROCK5A, weight: 40 }, // collectible, non-blocking
-            { id: RESOURCE_IDS.ROCK5B, weight: 20 }, // blocking
-            { id: RESOURCE_IDS.ROCK5C, weight: 10 }, // blocking
-            { id: RESOURCE_IDS.ROCK5D, weight: 6 },  // blocking
-            { id: RESOURCE_IDS.ROCK5E, weight: 3 },  // blocking
+            { id: RESOURCE_IDS.ROCK1A, weight: 40 },
+            { id: RESOURCE_IDS.ROCK1B, weight: 20 },
+            { id: RESOURCE_IDS.ROCK1C, weight: 10 },
+            { id: RESOURCE_IDS.ROCK1D, weight: 6 },
+            { id: RESOURCE_IDS.ROCK1E, weight: 3 },
+            { id: RESOURCE_IDS.ROCK2A, weight: 40 },
+            { id: RESOURCE_IDS.ROCK2C, weight: 10 },
+            { id: RESOURCE_IDS.ROCK2D, weight: 6 },
+            { id: RESOURCE_IDS.ROCK2E, weight: 3 },
+            { id: RESOURCE_IDS.ROCK3A, weight: 40, biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.ROCK3B, weight: 20, biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.ROCK3C, weight: 10, biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.ROCK3D, weight: 6,  biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.ROCK3E, weight: 3,  biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.ROCK4A, weight: 40, biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.ROCK4B, weight: 20, biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.ROCK4C, weight: 10, biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.ROCK4D, weight: 6,  biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.ROCK4E, weight: 3,  biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.ROCK5A, weight: 40 },
+            { id: RESOURCE_IDS.ROCK5B, weight: 20 },
+            { id: RESOURCE_IDS.ROCK5C, weight: 10 },
+            { id: RESOURCE_IDS.ROCK5D, weight: 6 },
+            { id: RESOURCE_IDS.ROCK5E, weight: 3 },
           ],
         },
         // Weighted tree variants
@@ -103,15 +113,25 @@ export const WORLD_GEN = {
           clusterMin: 1,
           clusterMax: 6,
           variants: [
-            { id: RESOURCE_IDS.TREE1A, weight: 20 },
-            { id: RESOURCE_IDS.TREE1B, weight: 10 },
-            { id: RESOURCE_IDS.TREE1C, weight: 3 },
-            { id: RESOURCE_IDS.TREE2A, weight: 10 },
-            { id: RESOURCE_IDS.TREE2B, weight: 5 },
-            { id: RESOURCE_IDS.TREE2C, weight: 3 },
-            { id: RESOURCE_IDS.TREE10A, weight: 17 },
-            { id: RESOURCE_IDS.TREE10B, weight: 7 },
-            { id: RESOURCE_IDS.TREE10C, weight: 1 },
+            { id: RESOURCE_IDS.TREE1A, weight: 20, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.TREE1B, weight: 10, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.TREE1C, weight: 3,  biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.TREE2A, weight: 10, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.TREE2B, weight: 5,  biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.TREE2C, weight: 3,  biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.TREE3A, weight: 20, biomes: [BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.TREE3B, weight: 10, biomes: [BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.TREE3C, weight: 3,  biomes: [BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.LOG1, weight: 8,  biomes: [BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.LOG2, weight: 8,  biomes: [BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.STUMP1, weight: 5, biomes: [BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.STUMP2, weight: 5, biomes: [BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.STUMP3, weight: 5, biomes: [BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.STUMP4, weight: 5, biomes: [BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.STUMP5, weight: 5, biomes: [BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.TREE10A, weight: 17, biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.TREE10B, weight: 7,  biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.TREE10C, weight: 1,  biomes: [BIOME_IDS.DESERT] },
           ],
         },
         // Weighted bush variants
@@ -121,24 +141,54 @@ export const WORLD_GEN = {
           clusterMin: 1,
           clusterMax: 6,
           variants: [
-            { id: RESOURCE_IDS.BUSH1A, weight: 20 },
-            { id: RESOURCE_IDS.BUSH1B, weight: 10 },
-            { id: RESOURCE_IDS.BUSH1C, weight: 3 },
-            { id: RESOURCE_IDS.BUSH3A, weight: 20 },
-            { id: RESOURCE_IDS.BUSH3B, weight: 10 },
-            { id: RESOURCE_IDS.BUSH3C, weight: 3 },
-            { id: RESOURCE_IDS.BERRY_BUSHA1, weight: 10 },
-            { id: RESOURCE_IDS.BERRY_BUSHA2, weight: 3 },
-            { id: RESOURCE_IDS.BERRY_BUSHA3, weight: 1.5 },
-            { id: RESOURCE_IDS.BERRY_BUSHB1, weight: 10 },
-            { id: RESOURCE_IDS.BERRY_BUSHB2, weight: 3 },
-            { id: RESOURCE_IDS.BERRY_BUSHB3, weight: 1.5 },
-            { id: RESOURCE_IDS.COTTON_BUSH1, weight: 20 },
-            { id: RESOURCE_IDS.COTTON_BUSH2, weight: 10 },
-            { id: RESOURCE_IDS.COTTON_BUSH3, weight: 3 },
+            { id: RESOURCE_IDS.BUSH1A, weight: 30, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH1B, weight: 15, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH1C, weight: 5,  biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH2A, weight: 30, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH2B, weight: 15, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH2C, weight: 5,  biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH3A, weight: 20, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH3B, weight: 10, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH3C, weight: 3,  biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH4A, weight: 30, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH4B, weight: 15, biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.BUSH4C, weight: 5,  biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
+            { id: RESOURCE_IDS.DEAD_BUSH1, weight: 40, biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.DEAD_BUSH2, weight: 20, biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.DEAD_BUSH3, weight: 10, biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.DEAD_BUSH4, weight: 5,  biomes: [BIOME_IDS.DESERT] },
+            { id: RESOURCE_IDS.BERRY_BUSHA1, weight: 10, biomes: [BIOME_IDS.PLAINS] },
+            { id: RESOURCE_IDS.BERRY_BUSHA2, weight: 3,  biomes: [BIOME_IDS.PLAINS] },
+            { id: RESOURCE_IDS.BERRY_BUSHA3, weight: 1,  biomes: [BIOME_IDS.PLAINS] },
+            { id: RESOURCE_IDS.BERRY_BUSHB1, weight: 10, biomes: [BIOME_IDS.PLAINS] },
+            { id: RESOURCE_IDS.BERRY_BUSHB2, weight: 3,  biomes: [BIOME_IDS.PLAINS] },
+            { id: RESOURCE_IDS.BERRY_BUSHB3, weight: 1,  biomes: [BIOME_IDS.PLAINS] },
+            { id: RESOURCE_IDS.COTTON_BUSH1, weight: 20, biomes: [BIOME_IDS.PLAINS] },
+            { id: RESOURCE_IDS.COTTON_BUSH2, weight: 10, biomes: [BIOME_IDS.PLAINS] },
+            { id: RESOURCE_IDS.COTTON_BUSH3, weight: 3,  biomes: [BIOME_IDS.PLAINS] },
           ],
         },
       },
+
+    // Resource type weights per biome
+    // Biome-specific resource type distribution
+    resourceWeights: {
+      [BIOME_IDS.PLAINS]: [
+        { key: 'bushes', weight: 70 },
+        { key: 'rocks', weight: 15 },
+        { key: 'trees', weight: 15 },
+      ],
+      [BIOME_IDS.DESERT]: [
+        { key: 'rocks', weight: 70 },
+        { key: 'bushes', weight: 20 },
+        { key: 'trees', weight: 10 },
+      ],
+      [BIOME_IDS.FOREST]: [
+        { key: 'trees', weight: 70 },
+        { key: 'rocks', weight: 15 },
+        { key: 'bushes', weight: 15 },
+      ],
+    },
 
     // Enemies
     zombie: {

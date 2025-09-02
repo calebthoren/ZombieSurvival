@@ -571,6 +571,7 @@ const DevTools = {
             for (let i = 0; i < list.length; i++) {
                 const obj = list[i];
                 if (!obj || !obj.active || !obj.visible) continue;
+                if (obj.getData && obj.getData('noHitboxDebug')) continue;
                 const body = obj.body;
                 if (body) {
                     if (body.isCircle) {
