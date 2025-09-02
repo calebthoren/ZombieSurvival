@@ -1,6 +1,7 @@
 // scenes/MainScene.js
 import { WORLD_GEN } from '../systems/world_gen/worldGenConfig.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
+import { RESOURCE_DB } from '../data/resourceDatabase.js';
 import ZOMBIES from '../data/zombieDatabase.js';
 import DevTools from '../systems/DevTools.js';
 import createCombatSystem from '../systems/combatSystem.js';
@@ -67,49 +68,21 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('slingshot_rock', 'assets/weapons/slingshot_rock.png');
         this.load.image('crude_bat', 'assets/weapons/crude_bat.png');
         // resources
-        this.load.image('rock1A', 'assets/resources/rocks/rock1A.png');
-        this.load.image('rock1B', 'assets/resources/rocks/rock1B.png');
-        this.load.image('rock1C', 'assets/resources/rocks/rock1C.png');
-        this.load.image('rock1D', 'assets/resources/rocks/rock1D.png');
-        this.load.image('rock1E', 'assets/resources/rocks/rock1E.png');
-        this.load.image('rock2A', 'assets/resources/rocks/rock2A.png');
-        this.load.image('rock2B', 'assets/resources/rocks/rock2B.png');
-        this.load.image('rock2C', 'assets/resources/rocks/rock2C.png');
-        this.load.image('rock2D', 'assets/resources/rocks/rock2D.png');
-        this.load.image('rock2E', 'assets/resources/rocks/rock2E.png');
-        this.load.image('rock5A', 'assets/resources/rocks/rock5A.png');
-        this.load.image('rock5B', 'assets/resources/rocks/rock5B.png');
-        this.load.image('rock5C', 'assets/resources/rocks/rock5C.png');
-        this.load.image('rock5D', 'assets/resources/rocks/rock5D.png');
-        this.load.image('rock5E', 'assets/resources/rocks/rock5E.png');
-        // trees
-        this.load.image('tree1A', 'assets/resources/trees/tree1A.png');
-        this.load.image('tree1B', 'assets/resources/trees/tree1B.png');
-        this.load.image('tree1C', 'assets/resources/trees/tree1C.png');
-        this.load.image('tree2A', 'assets/resources/trees/tree2A.png');
-        this.load.image('tree2B', 'assets/resources/trees/tree2B.png');
-        this.load.image('tree2C', 'assets/resources/trees/tree2C.png');
-        this.load.image('tree10A', 'assets/resources/trees/tree10A.png');
-        this.load.image('tree10B', 'assets/resources/trees/tree10B.png');
-        this.load.image('tree10C', 'assets/resources/trees/tree10C.png');
-        // bushes
-        this.load.image('bush1A', 'assets/resources/bushes/bush1A.png');
-        this.load.image('bush1B', 'assets/resources/bushes/bush1B.png');
-        this.load.image('bush1C', 'assets/resources/bushes/bush1C.png');
-        this.load.image('bush3A', 'assets/resources/bushes/bush3A.png');
-        this.load.image('bush3B', 'assets/resources/bushes/bush3B.png');
-        this.load.image('bush3C', 'assets/resources/bushes/bush3C.png');
-        // berry bushes
-        this.load.image('berry_bushA1', 'assets/resources/bushes/berry_bushA1.png');
-        this.load.image('berry_bushA2', 'assets/resources/bushes/berry_bushA2.png');
-        this.load.image('berry_bushA3', 'assets/resources/bushes/berry_bushA3.png');
-        this.load.image('berry_bushB1', 'assets/resources/bushes/berry_bushB1.png');
-        this.load.image('berry_bushB2', 'assets/resources/bushes/berry_bushB2.png');
-        this.load.image('berry_bushB3', 'assets/resources/bushes/berry_bushB3.png');
-        // cotton bushes
-        this.load.image('cotton_bush1', 'assets/resources/bushes/cotton_bush1.png');
-        this.load.image('cotton_bush2', 'assets/resources/bushes/cotton_bush2.png');
-        this.load.image('cotton_bush3', 'assets/resources/bushes/cotton_bush3.png');
+        const RES_PATHS = {
+            rock: 'assets/resources/rocks/',
+            tree: 'assets/resources/trees/',
+            bush: 'assets/resources/bushes/',
+        };
+        const seen = new Set();
+        Object.values(RESOURCE_DB).forEach((res) => {
+            const tex = res.world?.textureKey;
+            if (!tex || seen.has(tex)) return;
+            const typeTag = res.tags.find((t) => RES_PATHS[t]);
+            if (typeTag) {
+                this.load.image(tex, `${RES_PATHS[typeTag]}${tex}.png`);
+                seen.add(tex);
+            }
+        });
     }
 
     create() {
