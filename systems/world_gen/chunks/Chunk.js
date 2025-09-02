@@ -2,7 +2,64 @@
 // Basic world chunk container handling entity group and metadata.
 
 import { WORLD_GEN } from '../worldGenConfig.js';
-import { getBiome } from '../biomes/biomeMap.js';
+import { getBiome, sampleBiomeNoise } from '../biomes/biomeMap.js';
+
+const TEX_POOL = [];
+
+function lerpColor(a, b, t) {
+    const ar = (a >> 16) & 0xff;
+    const ag = (a >> 8) & 0xff;
+    const ab = a & 0xff;
+    const br = (b >> 16) & 0xff;
+    const bg = (b >> 8) & 0xff;
+    const bb = b & 0xff;
+    const r = ar + ((br - ar) * t) | 0;
+    const g = ag + ((bg - ag) * t) | 0;
+    const bcol = ab + ((bb - ab) * t) | 0;
+    return (r << 16) | (g << 8) | bcol;
+}
+
+// Pre-render a chunk-sized texture with biome colors that fade to
+// neighbouring chunk colors only within the configured edge radius.
+function drawBiomeTexture(scene, rt, cx, cy) {
+    const size = WORLD_GEN.chunk.size;
+    const radius = WORLD_GEN.chunk.blendRadius ?? 50;
+    const density = WORLD_GEN.chunk.blendDensity ?? 1;
+    const samples = Math.max(2, Math.floor(size / radius) * density);
+    const step = size / samples;
+    const falloff = WORLD_GEN.chunk.blendFalloff ?? 1;
+    const jitterAmt = (WORLD_GEN.chunk.blendJitter ?? 0.5) * radius;
+    const noiseScale = WORLD_GEN.chunk.blendNoiseScale ?? 0.1;
+    const baseColor = WORLD_GEN.biomeColors[getBiome(cx + 0.5, cy + 0.5)];
+    const g = scene.add.graphics();
+    for (let ix = 0; ix < samples; ix++) {
+        for (let iy = 0; iy < samples; iy++) {
+            const px = (ix + 0.5) * step;
+            const py = (iy + 0.5) * step;
+            const worldX = cx * size + px;
+            const worldY = cy * size + py;
+            const edgeDist = Math.min(px, py, size - px, size - py);
+            const jitter = sampleBiomeNoise(worldX * noiseScale, worldY * noiseScale) * jitterAmt;
+            const dist = edgeDist + jitter;
+            let color = baseColor;
+            if (dist < radius) {
+                let nx = cx;
+                let ny = cy;
+                if (px < radius) nx = cx - 1;
+                else if (px > size - radius) nx = cx + 1;
+                if (py < radius) ny = cy - 1;
+                else if (py > size - radius) ny = cy + 1;
+                const neighborColor = WORLD_GEN.biomeColors[getBiome(nx + 0.5, ny + 0.5)];
+                const t = Math.pow(1 - dist / radius, falloff) * 0.5;
+                color = lerpColor(baseColor, neighborColor, t);
+            }
+            g.fillStyle(color, 1);
+            g.fillRect(ix * step, iy * step, step + 1, step + 1);
+        }
+    }
+    rt.draw(g);
+    g.destroy();
+}
 
 const TEX_POOL = [];
 

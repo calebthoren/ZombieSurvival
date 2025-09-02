@@ -110,6 +110,8 @@ test('edge samples blend to neighbouring biome colors', () => {
         const gy = y / BIOME_SCALE;
         return (gx >= 0 && gx < 1 && gy >= 0 && gy < 1) ? -1 : 1;
     });
+    const origJitter = WORLD_GEN.chunk.blendJitter;
+    WORLD_GEN.chunk.blendJitter = 0;
     const size = WORLD_GEN.chunk.size;
     const radius = WORLD_GEN.chunk.blendRadius;
     const samples = Math.max(
@@ -137,10 +139,15 @@ test('edge samples blend to neighbouring biome colors', () => {
     const plains = WORLD_GEN.biomeColors[BIOME_IDS.PLAINS];
     const desert = WORLD_GEN.biomeColors[BIOME_IDS.DESERT];
     const t = 1 - (step / 2) / radius;
-    const expected = lerpColor(plains, desert, Math.pow(t, WORLD_GEN.chunk.blendFalloff));
+    const expected = lerpColor(
+        plains,
+        desert,
+        Math.pow(t, WORLD_GEN.chunk.blendFalloff) * 0.5,
+    );
     assert.equal(fills[0], expected);
     chunk.unload(scene);
     __setNoise2D(origNoise);
+    WORLD_GEN.chunk.blendJitter = origJitter;
 });
 
 test('RenderTextures only created once and pooled on unload', () => {
