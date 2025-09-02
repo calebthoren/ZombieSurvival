@@ -30,6 +30,12 @@ export const WORLD_GEN = {
   // -----------------------------
   chunk: {
     size: 500,
+    // Biome color blending (chunk backgrounds)
+    blendRadius: 50, // width of edge blending in pixels (also sets sample spacing)
+    blendFalloff: 1.0, // easing for edge fade (1 = linear)
+    blendDensity: 4, // multiplier for sample grid (higher = smaller pixels)
+    blendJitter: 0.5, // amount of noisy edge distortion (0 = straight)
+    blendNoiseScale: 0.1, // scale of noise used for edge distortion
   },
 
   // Biome-specific RNG seeds
