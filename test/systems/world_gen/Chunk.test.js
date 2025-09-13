@@ -153,6 +153,43 @@ test('edge samples blend to neighbouring biome colors', () => {
     WORLD_GEN.chunk.blendJitter = origJitter;
 });
 
+test('interior samples ignore opposite-edge jitter', () => {
+    __clearTexturePool();
+    const origNoise = (x, y) => 0;
+    __setNoise2D((x, y) => (x >= 0 && x < 1 && y >= 0 && y < 1) ? -1 : 1);
+    const origJitter = WORLD_GEN.chunk.blendJitter;
+    WORLD_GEN.chunk.blendJitter = 0.5;
+    const size = WORLD_GEN.chunk.size;
+    const radius = WORLD_GEN.chunk.blendRadius;
+    const samples = Math.max(
+        2,
+        Math.floor(size / radius) * WORLD_GEN.chunk.blendDensity,
+    );
+    const scene = mockScene((x, y, w, h) => ({
+        draws: 0,
+        setOrigin() { return this; },
+        setDepth() { return this; },
+        setVisible() { return this; },
+        setActive() { return this; },
+        setPosition(nx, ny) { x = nx; y = ny; return this; },
+        clear() { return this; },
+        draw() { this.draws++; return this; },
+        get x() { return x; },
+        get y() { return y; },
+        get width() { return w; },
+        get height() { return h; },
+    }));
+    const chunk = new Chunk(0, 0);
+    chunk.load(scene);
+    const fills = scene._graphicsCalls[0].fills;
+    const plains = WORLD_GEN.biomeColors[BIOME_IDS.PLAINS];
+    const cIdx = Math.floor(samples / 2) * samples + Math.floor(samples / 2);
+    assert.equal(fills[cIdx], plains);
+    chunk.unload(scene);
+    __setNoise2D(origNoise);
+    WORLD_GEN.chunk.blendJitter = origJitter;
+});
+
 test('RenderTextures only created once and pooled on unload', () => {
     __clearTexturePool();
     let createCount = 0;

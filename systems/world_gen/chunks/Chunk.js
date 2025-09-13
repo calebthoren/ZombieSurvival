@@ -43,9 +43,11 @@ function drawBiomeTexture(scene, rt, cx, cy) {
             const py = (iy + 0.5) * step;
             const worldX = cx * size + px;
             const worldY = cy * size + py;
+            const baseDistX = Math.min(px, size - px);
+            const baseDistY = Math.min(py, size - py);
             const jitter = sampleBiomeNoise(worldX * noiseScale, worldY * noiseScale) * jitterAmt;
-            const distX = Math.min(px, size - px) + jitter;
-            const distY = Math.min(py, size - py) + jitter;
+            const distX = baseDistX < radius ? Math.max(0, baseDistX + jitter) : baseDistX;
+            const distY = baseDistY < radius ? Math.max(0, baseDistY + jitter) : baseDistY;
 
             // Accumulate weighted RGB contributions from neighbouring biomes.
             let r = (baseColor >> 16) & 0xff;
