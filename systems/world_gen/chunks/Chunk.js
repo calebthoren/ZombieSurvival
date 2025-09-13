@@ -35,7 +35,7 @@ function drawBiomeTexture(scene, rt, cx, cy) {
     const falloff = WORLD_GEN.chunk.blendFalloff ?? 1;
     const jitterAmt = (WORLD_GEN.chunk.blendJitter ?? 0.5) * radius;
     const noiseScale = WORLD_GEN.chunk.blendNoiseScale ?? 0.1;
-    const baseColor = WORLD_GEN.biomeColors[getBiome(cx + 0.5, cy + 0.5)];
+    const baseColor = WORLD_GEN.biomeColors[getBiome(cx, cy)];
     const g = scene.add.graphics();
     for (let ix = 0; ix < samples; ix++) {
         for (let iy = 0; iy < samples; iy++) {
@@ -59,7 +59,7 @@ function drawBiomeTexture(scene, rt, cx, cy) {
             let tY = 0;
             if (distX < radius) {
                 const nx = px < radius ? cx - 1 : cx + 1;
-                const nCol = WORLD_GEN.biomeColors[getBiome(nx + 0.5, cy + 0.5)];
+                const nCol = WORLD_GEN.biomeColors[getBiome(nx, cy)];
                 tX = Math.pow(1 - distX / radius, falloff) * 0.5;
                 r += ((nCol >> 16) & 0xff) * tX;
                 gcol += ((nCol >> 8) & 0xff) * tX;
@@ -68,7 +68,7 @@ function drawBiomeTexture(scene, rt, cx, cy) {
             }
             if (distY < radius) {
                 const ny = py < radius ? cy - 1 : cy + 1;
-                const nCol = WORLD_GEN.biomeColors[getBiome(cx + 0.5, ny + 0.5)];
+                const nCol = WORLD_GEN.biomeColors[getBiome(cx, ny)];
                 tY = Math.pow(1 - distY / radius, falloff) * 0.5;
                 r += ((nCol >> 16) & 0xff) * tY;
                 gcol += ((nCol >> 8) & 0xff) * tY;
@@ -78,7 +78,7 @@ function drawBiomeTexture(scene, rt, cx, cy) {
             if (tX > 0 && tY > 0) {
                 const nx = px < radius ? cx - 1 : cx + 1;
                 const ny = py < radius ? cy - 1 : cy + 1;
-                const nCol = WORLD_GEN.biomeColors[getBiome(nx + 0.5, ny + 0.5)];
+                const nCol = WORLD_GEN.biomeColors[getBiome(nx, ny)];
                 const tD = Math.min(tX, tY);
                 r += ((nCol >> 16) & 0xff) * tD;
                 gcol += ((nCol >> 8) & 0xff) * tD;
