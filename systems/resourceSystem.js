@@ -546,11 +546,11 @@ function createResourceSystem(scene) {
                     .image(x, y, texKey)
                     .setOrigin(originX, originY)
                     .setScale(scale)
-                    .setDepth((def.leavesDepth ?? def.depth ?? 5) + depthOff)
+                    // Ensure canopies render above the player so the player appears under leaves
+                    .setDepth((Math.max(def.leavesDepth ?? (def.depth ?? 5), playerDepth + 1)) + depthOff)
                     .setCrop(cropX, cropY, lw, lh);
                 scene.resourcesDecor && scene.resourcesDecor.add(leaves);
                 leaves.setData('noHitboxDebug', true);
-
                 const dispW = trunk.displayWidth;
                 const dispH = trunk.displayHeight;
                 const scaleX = trunk.scaleX || 1;
@@ -610,11 +610,24 @@ function createResourceSystem(scene) {
                 if (!scene._treeLeavesUpdate) {
                     const playerRect = new Phaser.Geom.Rectangle();
                     scene._treeLeavesUpdate = () => {
-                        const pb = scene.player.body;
-                        playerRect.x = pb.x;
-                        playerRect.y = pb.y;
-                        playerRect.width = pb.width;
-                        playerRect.height = pb.height;
+                        // Prefer sprite visual bounds so canopy fades even if physics body is smaller/offset
+                        const p = scene.player;
+                        if (!p) return;
+                        if (typeof p.getBounds === 'function') {
+                            const b = p.getBounds();
+                            playerRect.x = b.x;
+                            playerRect.y = b.y;
+                            playerRect.width = b.width;
+                            playerRect.height = b.height;
+                        } else if (p.body) {
+                            const pb = p.body;
+                            playerRect.x = pb.x;
+                            playerRect.y = pb.y;
+                            playerRect.width = pb.width;
+                            playerRect.height = pb.height;
+                        } else {
+                            return;
+                        }
                         for (const d of scene._treeLeaves) {
                             const overlap =
                                 Phaser.Geom.Intersects.RectangleToRectangle(

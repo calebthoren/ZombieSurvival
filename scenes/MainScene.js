@@ -138,6 +138,22 @@ export default class MainScene extends Phaser.Scene {
         this.player._speedMult = 1;
         this.player._inBush = false;
 
+        // Adjust player collider: halve height by removing the top half
+        try {
+            const body = this.player?.body;
+            if (body && typeof body.setSize === 'function' && typeof body.setOffset === 'function') {
+                const currentW = body.width ?? this.player.displayWidth;
+                const currentH = body.height ?? this.player.displayHeight;
+                const newH = Math.max(1, Math.floor(currentH / 2));
+                const deltaY = currentH - newH; // amount removed from the top
+                body.setSize(currentW, newH);
+                const ox = (body.offset && typeof body.offset.x === 'number') ? body.offset.x : 0;
+                const oy = (body.offset && typeof body.offset.y === 'number') ? body.offset.y : 0;
+                // Raise the hitbox upward by half its own height
+                body.setOffset(ox, oy + deltaY - Math.floor(newH / 2));
+            }
+        } catch {}
+
         // Groups
         this.zombies = this.physics.add.group();
         this.bullets = this.physics.add.group({
