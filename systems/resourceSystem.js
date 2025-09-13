@@ -501,7 +501,7 @@ function createResourceSystem(scene) {
                 }
 
             const leavesCfg = def.world?.leaves;
-            if (leavesCfg) {
+            if (leavesCfg && !(def.tags?.includes('stump'))) {
                 const frameW = trunk.width;
                 const frameH = trunk.height;
 
