@@ -593,7 +593,7 @@ export const RESOURCE_DB = {
     blocking: true,
     trunkDepth: 890,
     leavesDepth: 910,
-    tags: ['resource', 'tree'],
+    tags: ['resource', 'tree', 'stump'],
     meta: { rarity: 'common' },
   },
   [RESOURCE_IDS.TREE1B]: {
@@ -629,7 +629,7 @@ export const RESOURCE_DB = {
     blocking: true,
     trunkDepth: 890,
     leavesDepth: 910,
-    tags: ['resource', 'tree'],
+    tags: ['resource', 'tree', 'stump'],
     meta: { rarity: 'common' },
   },
   [RESOURCE_IDS.TREE1C]: {
@@ -665,7 +665,7 @@ export const RESOURCE_DB = {
     blocking: true,
     trunkDepth: 890,
     leavesDepth: 910,
-    tags: ['resource', 'tree'],
+    tags: ['resource', 'tree', 'stump'],
     meta: { rarity: 'common' },
   },
   [RESOURCE_IDS.TREE2A]: {
@@ -1067,7 +1067,7 @@ export const RESOURCE_DB = {
     collectible: false,
     blocking: true,
     depth: 1,
-    tags: ['resource', 'tree'],
+    tags: ['resource', 'tree', 'stump'],
     meta: { rarity: 'common' },
   },
   [RESOURCE_IDS.STUMP2]: {
@@ -1086,7 +1086,7 @@ export const RESOURCE_DB = {
     collectible: false,
     blocking: true,
     depth: 1,
-    tags: ['resource', 'tree'],
+    tags: ['resource', 'tree', 'stump'],
     meta: { rarity: 'common' },
   },
   [RESOURCE_IDS.STUMP3]: {
@@ -1105,7 +1105,7 @@ export const RESOURCE_DB = {
     collectible: false,
     blocking: true,
     depth: 1,
-    tags: ['resource', 'tree'],
+    tags: ['resource', 'tree', 'stump'],
     meta: { rarity: 'common' },
   },
   [RESOURCE_IDS.STUMP4]: {
@@ -1119,12 +1119,12 @@ export const RESOURCE_DB = {
       textureKey: 'stump4',
       scale: 1.0,
       origin: { x: 0.5, y: 1 },
-      body: { kind: 'circle', radius: 12, offsetX: 0, offsetY: -6, useScale: true, anchor: 'bottomCenter' },
+      body: { kind: 'circle', radius: 28, offsetX: 2, offsetY: -28, useScale: true, anchor: 'bottomCenter' },
     },
     collectible: false,
     blocking: true,
     depth: 1,
-    tags: ['resource', 'tree'],
+    tags: ['resource', 'tree', 'stump'],
     meta: { rarity: 'common' },
   },
   [RESOURCE_IDS.STUMP5]: {
@@ -1143,7 +1143,7 @@ export const RESOURCE_DB = {
     collectible: false,
     blocking: true,
     depth: 1,
-    tags: ['resource', 'tree'],
+    tags: ['resource', 'tree', 'stump'],
     meta: { rarity: 'common' },
   },
 
