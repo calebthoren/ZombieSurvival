@@ -211,6 +211,7 @@ export const WORLD_GEN = {
         waveIntervalMs: 30_000, // time between waves
         baseCount: 3,           // zombies in wave 1
         perWave: 2,             // +N per subsequent wave
+        perDay: 2,              // +2 zombies added per day
         maxCount: 25,           // clamp
         burstIntervalMs: 200,   // gap between individuals within a wave
       },
