@@ -95,9 +95,11 @@ export default function createDayNightSystem(scene) {
                 scene.waveNumber++;
                 if (scene.phase !== 'night' || scene.isGameOver) return;
 
+                const dayBonus = scene.dayIndex * nightCfg.perDay;
                 const targetCount = Math.min(
                     nightCfg.baseCount +
-                        (scene.waveNumber - 1) * nightCfg.perWave,
+                        (scene.waveNumber - 1) * nightCfg.perWave +
+                        dayBonus,
                     nightCfg.maxCount,
                 );
 

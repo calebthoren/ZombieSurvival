@@ -138,13 +138,53 @@ test('edge samples blend to neighbouring biome colors', () => {
     const fills = scene._graphicsCalls[0].fills;
     const plains = WORLD_GEN.biomeColors[BIOME_IDS.PLAINS];
     const desert = WORLD_GEN.biomeColors[BIOME_IDS.DESERT];
-    const t = 1 - (step / 2) / radius;
-    const expected = lerpColor(
-        plains,
-        desert,
-        Math.pow(t, WORLD_GEN.chunk.blendFalloff) * 0.5,
-    );
+    const t = Math.pow(1 - (step / 2) / radius, WORLD_GEN.chunk.blendFalloff) * 0.5;
+    const wBase = 1;
+    const wDesert = t * 3; // left, top and diagonal neighbours
+    const r = ((plains >> 16) & 0xff) * wBase + ((desert >> 16) & 0xff) * wDesert;
+    const g = ((plains >> 8) & 0xff) * wBase + ((desert >> 8) & 0xff) * wDesert;
+    const b = (plains & 0xff) * wBase + (desert & 0xff) * wDesert;
+    const expected = ((r / (wBase + wDesert)) << 16)
+        | ((g / (wBase + wDesert)) << 8)
+        | (b / (wBase + wDesert));
     assert.equal(fills[0], expected);
+    chunk.unload(scene);
+    __setNoise2D(origNoise);
+    WORLD_GEN.chunk.blendJitter = origJitter;
+});
+
+test('interior samples ignore opposite-edge jitter', () => {
+    __clearTexturePool();
+    const origNoise = (x, y) => 0;
+    __setNoise2D((x, y) => (x >= 0 && x < 1 && y >= 0 && y < 1) ? -1 : 1);
+    const origJitter = WORLD_GEN.chunk.blendJitter;
+    WORLD_GEN.chunk.blendJitter = 0.5;
+    const size = WORLD_GEN.chunk.size;
+    const radius = WORLD_GEN.chunk.blendRadius;
+    const samples = Math.max(
+        2,
+        Math.floor(size / radius) * WORLD_GEN.chunk.blendDensity,
+    );
+    const scene = mockScene((x, y, w, h) => ({
+        draws: 0,
+        setOrigin() { return this; },
+        setDepth() { return this; },
+        setVisible() { return this; },
+        setActive() { return this; },
+        setPosition(nx, ny) { x = nx; y = ny; return this; },
+        clear() { return this; },
+        draw() { this.draws++; return this; },
+        get x() { return x; },
+        get y() { return y; },
+        get width() { return w; },
+        get height() { return h; },
+    }));
+    const chunk = new Chunk(0, 0);
+    chunk.load(scene);
+    const fills = scene._graphicsCalls[0].fills;
+    const plains = WORLD_GEN.biomeColors[BIOME_IDS.PLAINS];
+    const cIdx = Math.floor(samples / 2) * samples + Math.floor(samples / 2);
+    assert.equal(fills[cIdx], plains);
     chunk.unload(scene);
     __setNoise2D(origNoise);
     WORLD_GEN.chunk.blendJitter = origJitter;
