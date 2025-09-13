@@ -404,7 +404,7 @@ function createResourceSystem(scene) {
                     // Circular slow zone centered on the bush sprite
                     const dispW = trunk.displayWidth;
                     const dispH = trunk.displayHeight;
-                    const r = Math.min(dispW, dispH) * 0.45;
+                    const r = Math.min(dispW, dispH) * 0.36;
                     const ox = dispW * 0.5 - r;
                     const oy = dispH * 0.5 - r;
                     if (typeof b.setCircle === 'function') b.setCircle(r, ox, oy);
@@ -621,7 +621,7 @@ function createResourceSystem(scene) {
                                     playerRect,
                                     d.rect,
                                 );
-                            d.leaves.setAlpha(overlap ? 0.5 : 1);
+                            d.leaves.setAlpha(overlap ? 0.25 : 1);
                         }
                     };
                     // Throttle updates with a timer instead of every frame
