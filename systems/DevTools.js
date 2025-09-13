@@ -597,6 +597,20 @@ const DevTools = {
                 }
             }
         }
+
+        // Draw green sensor columns used for canopy transparency (if present)
+        try {
+            const sensors = scene._treeLeaves;
+            if (Array.isArray(sensors) && sensors.length > 0) {
+                g.lineStyle(2, 0x00ff00, 1);
+                for (let i = 0; i < sensors.length; i++) {
+                    const d = sensors[i];
+                    const r = d && d.rect;
+                    if (!r) continue;
+                    g.strokeRect(r.x, r.y, r.width, r.height);
+                }
+            }
+        } catch {}
     },
 
     // Spawn N enemies just outside the current camera view along a random edge,

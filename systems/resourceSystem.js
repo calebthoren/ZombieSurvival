@@ -296,10 +296,16 @@ function createResourceSystem(scene) {
             let children = [];
             if (proxGroup && proxGroup.getChildren) {
                 children = proxGroup.getChildren();
+                // Also consider decorative overlays (e.g., tree canopies, stump tops)
+                // because trunks may be cropped and decor sprites extend the visual footprint.
+                if (scene.resourcesDecor && scene.resourcesDecor.getChildren) {
+                    children = children.concat(scene.resourcesDecor.getChildren());
+                }
             } else {
                 const a = (scene.resources && scene.resources.getChildren) ? scene.resources.getChildren() : [];
                 const b = (scene.resourcesDyn && scene.resourcesDyn.getChildren) ? scene.resourcesDyn.getChildren() : [];
-                children = a.concat(b);
+                const c = (scene.resourcesDecor && scene.resourcesDecor.getChildren) ? scene.resourcesDecor.getChildren() : [];
+                children = a.concat(b, c);
             }
             for (let i = 0; i < children.length; i++) {
                 const c = children[i];
@@ -501,7 +507,7 @@ function createResourceSystem(scene) {
                 }
 
             const leavesCfg = def.world?.leaves;
-            if (leavesCfg && !(def.tags?.includes('stump'))) {
+            if (leavesCfg) {
                 const frameW = trunk.width;
                 const frameH = trunk.height;
 
@@ -546,8 +552,12 @@ function createResourceSystem(scene) {
                     .image(x, y, texKey)
                     .setOrigin(originX, originY)
                     .setScale(scale)
-                    // Ensure canopies render above the player so the player appears under leaves
-                    .setDepth((Math.max(def.leavesDepth ?? (def.depth ?? 5), playerDepth + 1)) + depthOff)
+                    // Depth: render canopy overlays above player so player walks under
+                    .setDepth((() => {
+                        // Force canopy above player with slight offset for stable ordering
+                        const orderJitter = depthOff % 10; // keep within a small band
+                        return (playerDepth + 2 + orderJitter);
+                    })())
                     .setCrop(cropX, cropY, lw, lh);
                 scene.resourcesDecor && scene.resourcesDecor.add(leaves);
                 leaves.setData('noHitboxDebug', true);
@@ -557,50 +567,65 @@ function createResourceSystem(scene) {
                 const scaleY = trunk.scaleY || 1;
                 const useScale = !!leavesCfg.useScale;
 
-                const lwWorld = useScale ? lw * scaleX : lw;
-                const lhWorld = useScale ? lh * scaleY : lh;
+                // Build sensor column used to fade leaves when player is "under" the canopy.
+                // If a per-resource `world.transparent` config exists, use it for easy adjustments.
+                // Otherwise, fall back to a wide, tall default column aligned to the physics body top.
+                const BODY = trunk && trunk.body;
+                let rect;
+                const tCfg = def.world?.transparent;
+                if (BODY && Number.isFinite(BODY.top) && Number.isFinite(BODY.x) && Number.isFinite(BODY.width)) {
+                    const bodyTop = Number.isFinite(BODY.top) ? BODY.top : BODY.y;
+                    const bodyX = BODY.x;
+                    const bodyW = BODY.width;
+                    const bodyCenterX = bodyX + bodyW * 0.5;
 
-                const anchorSpaceW = useScale ? dispW : frameW;
-                const anchorSpaceH = useScale ? dispH : frameH;
+                    if (tCfg && Number.isFinite(tCfg.width) && Number.isFinite(tCfg.height)) {
+                        const useScale = !!tCfg.useScale;
+                        const sx = trunk.scaleX || 1;
+                        const sy = trunk.scaleY || 1;
+                        const w = useScale ? tCfg.width * sx : tCfg.width;
+                        const h = useScale ? tCfg.height * sy : tCfg.height;
+                        const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
+                        const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
 
-                switch (anchor) {
-                    case 'center':
-                        baseX = (anchorSpaceW - lwWorld) * 0.5;
-                        baseY = (anchorSpaceH - lhWorld) * 0.5;
-                        break;
-                    case 'topCenter':
-                        baseX = (anchorSpaceW - lwWorld) * 0.5;
-                        baseY = 0;
-                        break;
-                    case 'bottomCenter':
-                        baseX = (anchorSpaceW - lwWorld) * 0.5;
-                        baseY = anchorSpaceH - lhWorld;
-                        break;
-                    case 'bottomLeft':
-                        baseX = 0;
-                        baseY = anchorSpaceH - lhWorld;
-                        break;
-                    case 'topLeft':
-                    default:
-                        baseX = 0;
-                        baseY = 0;
-                        break;
+                        // Anchor at body top (bottom edge of sensor) and body center X by default
+                        const bottomY = bodyTop + offY;
+                        const centerX = bodyCenterX + offX;
+                        const left = centerX - w * 0.5;
+                        const top = bottomY - h;
+                        rect = new Phaser.Geom.Rectangle(left, top, Math.max(0, w), Math.max(0, h));
+                    } else {
+                        // No database override: skip creating a sensor (DB-driven only)
+                        rect = null;
+                    }
+                } else {
+                    // No physics body or invalid metrics: skip creating a sensor unless DB provided
+                    if (tCfg && Number.isFinite(tCfg.width) && Number.isFinite(tCfg.height)) {
+                        const useScale = !!tCfg.useScale;
+                        const sx = trunk.scaleX || 1;
+                        const sy = trunk.scaleY || 1;
+                        const w = useScale ? tCfg.width * sx : tCfg.width;
+                        const h = useScale ? tCfg.height * sy : tCfg.height;
+                        const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
+                        const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
+                        const centerX = (trunk.x ?? x) + offX;
+                        const bottomY = (trunk.y ?? y) + offY;
+                        const left = centerX - w * 0.5;
+                        const top = bottomY - h;
+                        rect = new Phaser.Geom.Rectangle(left, top, Math.max(0, w), Math.max(0, h));
+                    } else {
+                        rect = null;
+                    }
                 }
 
-                const addXWorld = useScale ? addX * scaleX : addX;
-                const addYWorld = useScale ? addY * scaleY : addY;
-                const topLeftX = trunk.x - dispW * trunk.originX;
-                const topLeftY = trunk.y - dispH * trunk.originY;
-                const rect = new Phaser.Geom.Rectangle(
-                    topLeftX + baseX + addXWorld,
-                    topLeftY + baseY + addYWorld,
-                    lwWorld,
-                    lhWorld,
-                );
-
                 scene._treeLeaves = scene._treeLeaves || [];
+                // Identify stump overlays so we can skip fade behavior
+                // Use id/texture name only; ignore tags to avoid mislabeling trees
+                const isStumpRes = /^stump/i.test(id) || /stump/i.test(texKey);
                 const data = { leaves, rect };
-                scene._treeLeaves.push(data);
+                if (!isStumpRes && rect) {
+                    scene._treeLeaves.push(data);
+                }
                 trunk.once('destroy', () => {
                     leaves.destroy();
                     const idx = scene._treeLeaves.indexOf(data);
@@ -610,24 +635,25 @@ function createResourceSystem(scene) {
                 if (!scene._treeLeavesUpdate) {
                     const playerRect = new Phaser.Geom.Rectangle();
                     scene._treeLeavesUpdate = () => {
-                        // Prefer sprite visual bounds so canopy fades even if physics body is smaller/offset
+                        // Use physics hitbox as the source of truth so only canopy over the hitbox fades
                         const p = scene.player;
                         if (!p) return;
-                        if (typeof p.getBounds === 'function') {
-                            const b = p.getBounds();
-                            playerRect.x = b.x;
-                            playerRect.y = b.y;
-                            playerRect.width = b.width;
-                            playerRect.height = b.height;
-                        } else if (p.body) {
+                        if (p.body) {
                             const pb = p.body;
                             playerRect.x = pb.x;
                             playerRect.y = pb.y;
                             playerRect.width = pb.width;
                             playerRect.height = pb.height;
+                        } else if (typeof p.getBounds === 'function') {
+                            const b = p.getBounds();
+                            playerRect.x = b.x;
+                            playerRect.y = b.y;
+                            playerRect.width = b.width;
+                            playerRect.height = b.height;
                         } else {
                             return;
                         }
+                        // Use exact collider bounds for precise fade start at trunk top
                         for (const d of scene._treeLeaves) {
                             const overlap =
                                 Phaser.Geom.Intersects.RectangleToRectangle(
