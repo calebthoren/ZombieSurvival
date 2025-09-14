@@ -511,28 +511,31 @@ function createResourceSystem(scene) {
                 const frameW = trunk.width;
                 const frameH = trunk.height;
 
-                const lw = leavesCfg.width;
-                const lh = leavesCfg.height;
+                const lwCfg = leavesCfg.width;
+                let lhCfg = leavesCfg.height;
+                // Anchor computations need a provisional width/height
+                const lwAnchor = Math.max(1, Math.min(frameW, lwCfg || 0));
+                const lhAnchor = Math.max(0, Math.min(frameH, lhCfg || 0));
 
                 const anchor = leavesCfg.anchor || 'topLeft';
                 let baseX = 0,
                     baseY = 0;
                 switch (anchor) {
                     case 'center':
-                        baseX = (frameW - lw) * 0.5;
-                        baseY = (frameH - lh) * 0.5;
+                        baseX = (frameW - lwAnchor) * 0.5;
+                        baseY = (frameH - lhAnchor) * 0.5;
                         break;
                     case 'topCenter':
-                        baseX = (frameW - lw) * 0.5;
+                        baseX = (frameW - lwAnchor) * 0.5;
                         baseY = 0;
                         break;
                     case 'bottomCenter':
-                        baseX = (frameW - lw) * 0.5;
-                        baseY = frameH - lh;
+                        baseX = (frameW - lwAnchor) * 0.5;
+                        baseY = frameH - lhAnchor;
                         break;
                     case 'bottomLeft':
                         baseX = 0;
-                        baseY = frameH - lh;
+                        baseY = frameH - lhAnchor;
                         break;
                     case 'topLeft':
                     default:
@@ -546,7 +549,26 @@ function createResourceSystem(scene) {
                 const cropX = baseX + addX;
                 const cropY = baseY + addY;
 
-                trunk.setCrop(0, cropY + lh, frameW, frameH - (cropY + lh));
+                // Dynamically compute canopy height so the fade starts exactly at the trunk hitbox top.
+                // Falls back to DB-configured height when a physics body isn't available.
+                const trunkBody = trunk && trunk.body;
+                let canopyHeight = lhCfg;
+                if (trunkBody && Number.isFinite(trunkBody.top)) {
+                    // World-space Y of the top edge of the sprite frame (accounts for origin and scale)
+                    const topWorldY = y - (trunk.displayHeight * (originY || 0)); // originY=1 => bottom-aligned
+                    const scaleY = trunk.scaleY || 1;
+                    // Distance from top of sprite to the trunk hitbox top, converted to source frame pixels
+                    const distFrame = (trunkBody.top - topWorldY) / scaleY;
+                    // Subtract cropY because our cropped leaves start at cropY within the frame
+                    canopyHeight = Math.round(
+                        Phaser.Math.Clamp(distFrame - cropY, 0, Math.max(0, frameH - cropY))
+                    );
+                }
+                // Ensure sane bounds
+                const lw = Math.max(1, Math.min(frameW, lwCfg));
+                const lh = Math.max(0, Math.min(frameH - cropY, canopyHeight));
+
+                trunk.setCrop(0, cropY + lh, frameW, Math.max(0, frameH - (cropY + lh)));
 
                 const leaves = scene.add
                     .image(x, y, texKey)
@@ -568,18 +590,65 @@ function createResourceSystem(scene) {
                 const useScale = !!leavesCfg.useScale;
 
                 // Build sensor column used to fade leaves when player is "under" the canopy.
-                // If a per-resource `world.transparent` config exists, use it for easy adjustments.
-                // Otherwise, fall back to a wide, tall default column aligned to the physics body top.
+                // Build the canopy overlap rectangle used to fade leaves.
+                // Request: make this rect span from the TOP of the trunk hitbox up to the TOP of the leaves,
+                // with the width equal to the widest part of the leaves (configured leaves width).
                 const BODY = trunk && trunk.body;
+                const lCfg = def.world?.leaves;
                 let rect;
-                const tCfg = def.world?.transparent;
-                if (BODY && Number.isFinite(BODY.top) && Number.isFinite(BODY.x) && Number.isFinite(BODY.width)) {
-                    const bodyTop = Number.isFinite(BODY.top) ? BODY.top : BODY.y;
-                    const bodyX = BODY.x;
-                    const bodyW = BODY.width;
-                    const bodyCenterX = bodyX + bodyW * 0.5;
+                if (lCfg && BODY && Number.isFinite(BODY.top)) {
+                    const sx = trunk.scaleX || 1;
+                    const sy = trunk.scaleY || 1;
+                    const useScale = !!lCfg.useScale;
 
-                    if (tCfg && Number.isFinite(tCfg.width) && Number.isFinite(tCfg.height)) {
+                    // Width equals leaves overlay width (widest leaves) in world space
+                    const rectW = (lCfg.width || 0) * (useScale ? sx : 1);
+
+                    // Compute world X for rect left: center above trunk, allow offsetX from config
+                    const dispLeft = trunk.x - (trunk.displayOriginX || trunk.displayWidth * 0.5);
+                    const rectLeft = dispLeft + (trunk.displayWidth - rectW) * 0.5
+                        + ((lCfg.offsetX || 0) * (useScale ? sx : 1));
+
+                    // Vertical bounds: from trunk body TOP to leaves TOP in world space
+                    const trunkTop = Number.isFinite(BODY.top) ? BODY.top : BODY.y;
+
+                    // Determine display-space top of leaves crop based on anchor and baseY
+                    const frameTop = trunk.y - (trunk.displayOriginY || trunk.displayHeight * 0.5);
+                    let baseY = 0;
+                    switch (lCfg.anchor || 'topLeft') {
+                        case 'center':
+                            baseY = (trunk.height - lCfg.height) * 0.5;
+                            break;
+                        case 'topCenter':
+                        case 'topLeft':
+                            baseY = 0;
+                            break;
+                        case 'bottomCenter':
+                        case 'bottomLeft':
+                            baseY = trunk.height - lCfg.height;
+                            break;
+                        default:
+                            baseY = 0;
+                            break;
+                    }
+                    const leavesTop = frameTop
+                        + (useScale ? baseY * sy : baseY)
+                        + ((lCfg.offsetY || 0) * (useScale ? sy : 1));
+
+                    const top = Math.min(trunkTop, leavesTop);
+                    const bottom = Math.max(trunkTop, leavesTop);
+                    const rectH = Math.max(0, bottom - top);
+
+                    rect = new Phaser.Geom.Rectangle(rectLeft, top, Math.max(0, rectW), rectH);
+                } else {
+                    // Fallback to database-provided transparent box if available
+                    const tCfg = def.world?.transparent;
+                    const hasT = tCfg && Number.isFinite(tCfg.width) && Number.isFinite(tCfg.height);
+                    if (hasT && BODY && Number.isFinite(BODY.top) && Number.isFinite(BODY.x) && Number.isFinite(BODY.width)) {
+                        const bodyTop = Number.isFinite(BODY.top) ? BODY.top : BODY.y;
+                        const bodyX = BODY.x;
+                        const bodyW = BODY.width;
+                        const bodyCenterX = bodyX + bodyW * 0.5;
                         const useScale = !!tCfg.useScale;
                         const sx = trunk.scaleX || 1;
                         const sy = trunk.scaleY || 1;
@@ -587,20 +656,12 @@ function createResourceSystem(scene) {
                         const h = useScale ? tCfg.height * sy : tCfg.height;
                         const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
                         const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
-
-                        // Anchor at body top (bottom edge of sensor) and body center X by default
                         const bottomY = bodyTop + offY;
                         const centerX = bodyCenterX + offX;
                         const left = centerX - w * 0.5;
                         const top = bottomY - h;
                         rect = new Phaser.Geom.Rectangle(left, top, Math.max(0, w), Math.max(0, h));
-                    } else {
-                        // No database override: skip creating a sensor (DB-driven only)
-                        rect = null;
-                    }
-                } else {
-                    // No physics body or invalid metrics: skip creating a sensor unless DB provided
-                    if (tCfg && Number.isFinite(tCfg.width) && Number.isFinite(tCfg.height)) {
+                    } else if (hasT) {
                         const useScale = !!tCfg.useScale;
                         const sx = trunk.scaleX || 1;
                         const sy = trunk.scaleY || 1;

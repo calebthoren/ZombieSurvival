@@ -116,14 +116,14 @@ export default class Chunk {
             let tex = texPool().pop();
             if (tex) {
                 tex.setPosition(this.cx * size, this.cy * size);
-                tex.setVisible(true).setActive(true).clear();
+                tex.setVisible(true).setActive(true).setDepth(-10000).clear();
             } else {
                 tex = scene.add.renderTexture(
                     this.cx * size,
                     this.cy * size,
                     size,
                     size,
-                ).setOrigin(0, 0).setDepth(-1);
+                ).setOrigin(0, 0).setDepth(-10000);
             }
             drawBiomeTexture(scene, tex, this.cx, this.cy);
             this.group.add(tex);
