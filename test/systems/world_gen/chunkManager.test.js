@@ -3,9 +3,11 @@ import { test } from 'node:test';
 import { EventEmitter } from 'node:events';
 
 import ChunkManager from '../../../systems/world_gen/chunks/ChunkManager.js';
+import { clear } from '../../../systems/world_gen/chunks/chunkStore.js';
 import { WORLD_GEN } from '../../../systems/world_gen/worldGenConfig.js';
 
 test('ChunkManager loads and unloads chunks around player movement', () => {
+    clear();
     const scene = {
         events: new EventEmitter(),
         add: {
@@ -56,6 +58,7 @@ test('ChunkManager loads and unloads chunks around player movement', () => {
 });
 
 test('ChunkManager wraps coordinates across world bounds', () => {
+    clear();
     const scene = {
         events: new EventEmitter(),
         add: {

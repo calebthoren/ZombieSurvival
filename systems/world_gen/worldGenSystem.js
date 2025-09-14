@@ -1,6 +1,6 @@
 // systems/world_gen/worldGenSystem.js
 // Basic chunk-based world streaming.
-import { saveChunk, loadChunk } from './chunks/chunkStore.js';
+import { save, load } from './chunks/chunkStore.js';
 
 export default function createWorldGenSystem(scene) {
     const CHUNK_SIZE = 256;
@@ -27,7 +27,7 @@ export default function createWorldGenSystem(scene) {
     function ensureChunk(id) {
         if (activeChunks.has(id)) return;
         const chunk = createChunk(id);
-        const saved = loadChunk(id);
+        const saved = load(id);
         if (saved) {
             chunk.deserialize(saved);
         } else {
@@ -41,7 +41,7 @@ export default function createWorldGenSystem(scene) {
     function unloadChunk(id) {
         const chunk = activeChunks.get(id);
         if (!chunk) return;
-        saveChunk(id, chunk.serialize());
+        save(id, chunk.serialize());
         activeChunks.delete(id);
     }
 
