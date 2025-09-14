@@ -7,9 +7,7 @@ import { getResourceRegistry } from './world_gen/resources/registry.js';
 import { getBiome } from './world_gen/biomes/biomeMap.js';
 import { getDensity } from './world_gen/noise.js';
 import * as poissonSampler from './world_gen/resources/poissonSampler.js';
-import './world_gen/resources/rocks.js';
-import './world_gen/resources/trees.js';
-import './world_gen/resources/bushes.js';
+import './world_gen/resources/index.js';
 
 const DEFAULT_CLUSTER_GROWTH = 0.3;
 
