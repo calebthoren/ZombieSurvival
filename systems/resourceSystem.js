@@ -547,20 +547,24 @@ function createResourceSystem(scene) {
                 const cropX = baseX + addX;
                 const cropY = baseY + addY;
 
-                // Dynamically compute canopy height so the fade starts exactly at the trunk hitbox top.
-                // Falls back to DB-configured height when a physics body isn't available.
+                // Use database-configured canopy height but verify trunk collider alignment.
                 const trunkBody = trunk && trunk.body;
                 let canopyHeight = lhCfg;
                 if (trunkBody && Number.isFinite(trunkBody.top)) {
                     // World-space Y of the top edge of the sprite frame (accounts for origin and scale)
                     const topWorldY = y - (trunk.displayHeight * (originY || 0)); // originY=1 => bottom-aligned
                     const scaleY = trunk.scaleY || 1;
+                    // Use a ceiled trunk top so the crop line does not sit above the collider
+                    const trunkTop = Math.ceil(trunkBody.top);
                     // Distance from top of sprite to the trunk hitbox top, converted to source frame pixels
-                    const distFrame = (trunkBody.top - topWorldY) / scaleY;
+                    const distFrame = (trunkTop - topWorldY) / scaleY;
                     // Subtract cropY because our cropped leaves start at cropY within the frame
-                    canopyHeight = Math.round(
+                    const calcHeight = Math.ceil(
                         Phaser.Math.Clamp(distFrame - cropY, 0, Math.max(0, frameH - cropY))
                     );
+                    if (calcHeight !== canopyHeight) {
+                        console.warn(`leaves.height mismatch for ${id}: DB=${canopyHeight} vs calc=${calcHeight}`);
+                    }
                 }
                 // Ensure sane bounds
                 const lw = Math.max(1, Math.min(frameW, lwCfg));
@@ -608,7 +612,7 @@ function createResourceSystem(scene) {
                         + ((lCfg.offsetX || 0) * (useScale ? sx : 1));
 
                     // Vertical bounds: from trunk body TOP to leaves TOP in world space
-                    const trunkTop = Number.isFinite(BODY.top) ? BODY.top : BODY.y;
+                    const trunkTop = Math.ceil(Number.isFinite(BODY.top) ? BODY.top : BODY.y);
 
                     // Determine display-space top of leaves crop based on anchor and baseY
                     const frameTop = trunk.y - (trunk.displayOriginY || trunk.displayHeight * 0.5);
@@ -643,7 +647,7 @@ function createResourceSystem(scene) {
                     const tCfg = def.world?.transparent;
                     const hasT = tCfg && Number.isFinite(tCfg.width) && Number.isFinite(tCfg.height);
                     if (hasT && BODY && Number.isFinite(BODY.top) && Number.isFinite(BODY.x) && Number.isFinite(BODY.width)) {
-                        const bodyTop = Number.isFinite(BODY.top) ? BODY.top : BODY.y;
+                        const bodyTop = Math.ceil(Number.isFinite(BODY.top) ? BODY.top : BODY.y);
                         const bodyX = BODY.x;
                         const bodyW = BODY.width;
                         const bodyCenterX = bodyX + bodyW * 0.5;
