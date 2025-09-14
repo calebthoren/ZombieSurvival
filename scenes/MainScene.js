@@ -9,7 +9,7 @@ import createDayNightSystem from '../systems/world_gen/dayNightSystem.js';
 import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
 import ChunkManager from '../systems/world_gen/chunks/ChunkManager.js';
-import { clearChunkStore } from '../systems/world_gen/chunks/chunkStore.js';
+import { clear } from '../systems/world_gen/chunks/chunkStore.js';
 import createZombiePool from '../systems/pools/zombiePool.js';
 import createResourcePool from '../systems/pools/resourcePool.js';
 import { setBiomeSeed } from '../systems/world_gen/biomes/biomeMap.js';
@@ -100,7 +100,7 @@ export default class MainScene extends Phaser.Scene {
         this._isSprinting = false;
 
         // Reset any previous chunk metadata and UI state
-        clearChunkStore();
+        clear();
         setBiomeSeed(WORLD_GEN.seed);
         // Ensure fresh UI on respawn
         this.scene.stop('UIScene');

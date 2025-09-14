@@ -3,7 +3,7 @@
 
 import Chunk from './Chunk.js';
 import { WORLD_GEN } from '../worldGenConfig.js';
-import { saveChunk, loadChunk } from './chunkStore.js';
+import { save, load } from './chunkStore.js';
 
 export default class ChunkManager {
     constructor(scene, radius = 1) {
@@ -58,7 +58,7 @@ export default class ChunkManager {
         const loads = Math.min(this.maxLoadsPerTick, toLoad.length);
         for (let i = 0; i < loads; i++) {
             const item = toLoad[i];
-            const saved = loadChunk(item.key);
+            const saved = load(item.key);
             const chunk = new Chunk(item.nx, item.ny, saved?.meta);
             chunk.load(this.scene);
             this.loadedChunks.set(item.key, chunk);
@@ -90,7 +90,7 @@ export default class ChunkManager {
         const unloads = Math.min(this.maxUnloadsPerTick, toUnload.length);
         for (let i = 0; i < unloads; i++) {
             const { key, chunk } = toUnload[i];
-            saveChunk(key, chunk.serialize());
+            save(key, chunk.serialize());
             chunk.unload(this.scene);
             this.loadedChunks.delete(key);
             this.scene.events.emit('chunk:unload', chunk);
