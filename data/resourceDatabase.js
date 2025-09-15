@@ -805,7 +805,7 @@ export const RESOURCE_DB = {
       },
       leaves: {
         width: 66,
-        height: 48,
+        height: 29,
         offsetX: 0,
         offsetY: 0,
         useScale: true,
@@ -842,7 +842,7 @@ export const RESOURCE_DB = {
       },
       leaves: {
         width: 89,
-        height: 81,
+        height: 67,
         offsetX: 0,
         offsetY: 0,
         useScale: true,
@@ -879,7 +879,7 @@ export const RESOURCE_DB = {
       },
       leaves: {
         width: 102,
-        height: 90,
+        height: 101,
         offsetX: 0,
         offsetY: 0,
         useScale: true,
