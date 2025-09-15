@@ -585,16 +585,11 @@ function createResourceSystem(scene) {
                     .setCrop(cropX, cropY, lw, lh);
                 scene.resourcesDecor && scene.resourcesDecor.add(leaves);
                 leaves.setData('noHitboxDebug', true);
-                const dispW = trunk.displayWidth;
-                const dispH = trunk.displayHeight;
-                const scaleX = trunk.scaleX || 1;
-                const scaleY = trunk.scaleY || 1;
-                const useScale = !!leavesCfg.useScale;
 
                 // Build sensor column used to fade leaves when player is "under" the canopy.
                 // Build the canopy overlap rectangle used to fade leaves.
-                // Request: make this rect span from the TOP of the trunk hitbox up to the TOP of the leaves,
-                // with the width equal to the widest part of the leaves (configured leaves width).
+                // Request: span from the trunk hitbox TOP upward using database canopy height
+                // so the fade sensor matches configured leaves height.
                 const BODY = trunk && trunk.body;
                 const lCfg = def.world?.leaves;
                 let rect;
@@ -611,37 +606,13 @@ function createResourceSystem(scene) {
                     const rectLeft = dispLeft + (trunk.displayWidth - rectW) * 0.5
                         + ((lCfg.offsetX || 0) * (useScale ? sx : 1));
 
-                    // Vertical bounds: from trunk body TOP to leaves TOP in world space
+                    // Vertical bounds: trunk collider top to configured canopy height
                     const trunkTop = Math.ceil(Number.isFinite(BODY.top) ? BODY.top : BODY.y);
+                    const rectH = Math.max(0, (lCfg.height || 0) * (useScale ? sy : 1));
+                    const offY = (lCfg.offsetY || 0) * (useScale ? sy : 1);
+                    const rectTop = trunkTop - rectH + offY;
 
-                    // Determine display-space top of leaves crop based on anchor and baseY
-                    const frameTop = trunk.y - (trunk.displayOriginY || trunk.displayHeight * 0.5);
-                    let baseY = 0;
-                    switch (lCfg.anchor || 'topLeft') {
-                        case 'center':
-                            baseY = (trunk.height - lCfg.height) * 0.5;
-                            break;
-                        case 'topCenter':
-                        case 'topLeft':
-                            baseY = 0;
-                            break;
-                        case 'bottomCenter':
-                        case 'bottomLeft':
-                            baseY = trunk.height - lCfg.height;
-                            break;
-                        default:
-                            baseY = 0;
-                            break;
-                    }
-                    const leavesTop = frameTop
-                        + (useScale ? baseY * sy : baseY)
-                        + ((lCfg.offsetY || 0) * (useScale ? sy : 1));
-
-                    const top = Math.min(trunkTop, leavesTop);
-                    const bottom = Math.max(trunkTop, leavesTop);
-                    const rectH = Math.max(0, bottom - top);
-
-                    rect = new Phaser.Geom.Rectangle(rectLeft, top, Math.max(0, rectW), rectH);
+                    rect = new Phaser.Geom.Rectangle(rectLeft, rectTop, Math.max(0, rectW), rectH);
                 } else {
                     // Fallback to database-provided transparent box if available
                     const tCfg = def.world?.transparent;
