@@ -241,8 +241,12 @@ export default function createDayNightSystem(scene) {
         const elapsed = getPhaseElapsed();
         const duration = getPhaseDuration();
         const progress = Phaser.Math.Clamp(elapsed / duration, 0, 1);
-        const phaseLabel = scene.phase === 'day' ? 'Daytime' : 'Night';
-        scene.uiScene.updateTimeDisplay(scene.dayIndex, phaseLabel, progress);
+        const segmentLabel = getSegmentLabel();
+        scene.uiScene.updateTimeDisplay(scene.dayIndex, segmentLabel, progress);
+        const fill = scene.uiScene.timeBarFill;
+        if (fill?.setFillStyle) {
+            fill.setFillStyle(scene.phase === 'night' ? 0x66aaff : 0xffff66);
+        }
     }
 
     // ----- Tick -----
