@@ -130,6 +130,7 @@ export default function createInputSystem(scene) {
     // ----- Pause & Auto-Pause -----
     function onEsc() {
         if (scene.isGameOver) return;
+        if (scene.uiScene?.handleEscape?.()) return;
         if (!scene.scene.isActive('PauseScene')) {
             scene.scene.launch('PauseScene');
             scene.scene.pause();
