@@ -14,10 +14,10 @@ export const DAY_SEGMENTS =
 export const NIGHT_SEGMENTS =
     Array.isArray(SEGMENT_CONFIG.night?.labels) && SEGMENT_CONFIG.night.labels.length > 0
         ? SEGMENT_CONFIG.night.labels
-        : ['Night', 'Night', 'Night'];
+        : ['Dusk', 'Midnight', 'Dawn'];
 
 const DEFAULT_DAY_SEGMENT_LABEL = DAY_SEGMENTS[0] || 'Daytime';
-const DEFAULT_NIGHT_SEGMENT_LABEL = NIGHT_SEGMENTS[0] || 'Night';
+const DEFAULT_NIGHT_SEGMENT_LABEL = NIGHT_SEGMENTS[0] || 'Dusk';
 const MAX_DAY_SEGMENT_INDEX = Math.max(0, Math.min(DAY_SEGMENTS.length - 1, SEGMENT_COUNT - 1));
 const MAX_NIGHT_SEGMENT_INDEX = Math.max(
     0,
