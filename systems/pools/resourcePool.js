@@ -40,11 +40,22 @@ export default function createResourcePool(scene) {
         if (obj.body) obj.body.enable = false;
         const top = obj.getData('topSprite');
         if (top && top.destroy) top.destroy();
+        const overlayCleanup = obj.getData('overlayCleanup');
+        if (typeof overlayCleanup === 'function') {
+            try { overlayCleanup(); } catch {}
+        } else {
+            const overlay = obj.getData('overlaySprite');
+            if (overlay && overlay.destroy) {
+                try { overlay.destroy(); } catch {}
+            }
+        }
         obj.removeFromDisplayList();
         obj.setActive(false).setVisible(false);
         obj.setData('chunk', null);
         obj.setData('chunkIdx', null);
         obj.setData('topSprite', null);
+        obj.setData('overlaySprite', null);
+        obj.setData('overlayCleanup', null);
         pool.push(obj);
     }
 
