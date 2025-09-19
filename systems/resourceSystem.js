@@ -8,7 +8,7 @@ import { getBiome } from './world_gen/biomes/biomeMap.js';
 import { getDensity } from './world_gen/noise.js';
 import * as poissonSampler from './world_gen/resources/poissonSampler.js';
 import './world_gen/resources/index.js';
-import { cleanupResourceLayers } from './pools/resourcePool.js';
+import { cleanupResourceLayers, safeDestroyResourceSprite } from './pools/resourcePool.js';
 
 const DEFAULT_CLUSTER_GROWTH = 0.3;
 
@@ -386,7 +386,7 @@ function createLayeredResource(scene, def, x, y) {
     }
 
     const cleanup = () => {
-        try { overlaySprite.destroy(); } catch {}
+        safeDestroyResourceSprite(overlaySprite, 'resource overlay');
         const arr = scene._treeLeaves;
         if (arr) {
             const idx = arr.indexOf(data);
@@ -803,6 +803,12 @@ function createResourceSystem(scene) {
                     }
                     if (onHarvest) onHarvest(trunk, id, x, y);
                     cleanupResourceLayers(trunk);
+                    if (typeof trunk.setData === 'function') {
+                        trunk.setData('overlayCleanup', null);
+                        trunk.setData('overlaySprite', null);
+                        trunk.setData('topSprite', null);
+                        trunk.setData('topSpriteDestroy', null);
+                    }
                     if (needsPhysics) {
                         if (trunk.scene && typeof trunk.destroy === 'function') {
                             trunk.destroy();
