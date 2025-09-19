@@ -83,6 +83,25 @@ function clamp(value, min, max) {
     return value;
 }
 
+function safeDestroyResourceSprite(sprite, label = 'resource overlay') {
+    if (!sprite || typeof sprite.destroy !== 'function') return;
+
+    const hasScene = !!sprite.scene;
+    const isActive = sprite.active !== false;
+
+    if (!hasScene && !isActive) {
+        return;
+    }
+
+    try {
+        sprite.destroy();
+    } catch (err) {
+        if (DevTools?.cheats?.chunkDetails) {
+            console.warn('[resourceSystem] failed to destroy sprite', label, err, sprite);
+        }
+    }
+}
+
 function getMinimumTrunkHeight(def, trunk, frameH) {
     const bodyCfg = def?.world?.body;
     if (!bodyCfg || !Number.isFinite(frameH) || frameH <= 0) return 0;
@@ -439,7 +458,7 @@ function createLayeredResource(scene, def, x, y) {
     }
 
     const cleanup = () => {
-        safeDestroyResourceSprite(overlaySprite, 'resource overlay');
+        safeDestroyResourceSprite(overlaySprite, resourceId || texKey || 'resource overlay');
         const arr = scene._treeLeaves;
         if (arr) {
             const idx = arr.indexOf(data);
