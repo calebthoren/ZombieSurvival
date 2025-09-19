@@ -9,6 +9,7 @@ import { getDensity } from './world_gen/noise.js';
 import * as poissonSampler from './world_gen/resources/poissonSampler.js';
 import './world_gen/resources/index.js';
 import { cleanupResourceLayers } from './pools/resourcePool.js';
+import DevTools from './DevTools.js';
 
 const DEFAULT_CLUSTER_GROWTH = 0.3;
 
@@ -28,6 +29,25 @@ function clamp(value, min, max) {
     if (Number.isFinite(min) && value < min) return min;
     if (Number.isFinite(max) && value > max) return max;
     return value;
+}
+
+function safeDestroyResourceSprite(sprite, label = 'resource overlay') {
+    if (!sprite || typeof sprite.destroy !== 'function') return;
+
+    const hasScene = !!sprite.scene;
+    const isActive = sprite.active !== false;
+
+    if (!hasScene && !isActive) {
+        return;
+    }
+
+    try {
+        sprite.destroy();
+    } catch (err) {
+        if (DevTools?.cheats?.chunkDetails) {
+            console.warn('[resourceSystem] failed to destroy sprite', label, err, sprite);
+        }
+    }
 }
 
 function getMinimumTrunkHeight(def, trunk, frameH) {
@@ -386,7 +406,7 @@ function createLayeredResource(scene, def, x, y) {
     }
 
     const cleanup = () => {
-        try { overlaySprite.destroy(); } catch {}
+        safeDestroyResourceSprite(overlaySprite, resourceId || texKey || 'resource overlay');
         const arr = scene._treeLeaves;
         if (arr) {
             const idx = arr.indexOf(data);
@@ -450,6 +470,11 @@ export function pickClusterCount(min, max, rng = Math.random, growthChance = DEF
 function createResourceSystem(scene) {
     // Background job timers for time-sliced chunk population
     const _chunkJobs = new Map(); // key: "cx,cy" -> Phaser.TimerEvent
+
+    function _isTimerDone(timer) {
+        if (!timer) return true;
+        return !!(timer.removed || timer.pendingDelete || timer.hasDispatched);
+    }
     // Ensure resource collision/overlap systems are set up once
     function ensureColliders() {
         if (!scene.player || !scene.physics) return;
@@ -537,14 +562,82 @@ function createResourceSystem(scene) {
 
     function _cancelChunkJob(chunk) {
         const key = _keyForChunk(chunk);
-        const t = _chunkJobs.get(key);
-        if (t) {
-            try { t.remove(false); } catch {}
-            _chunkJobs.delete(key);
+        const timer = _chunkJobs.get(key);
+        if (!timer) return;
+
+        _chunkJobs.delete(key);
+
+        const removed = timer?.removed === true;
+        const dispatched = timer?.hasDispatched === true;
+        const pendingDelete = timer?.pendingDelete === true;
+
+        if (removed || dispatched) {
+            if (DevTools?.cheats?.chunkDetails) {
+                const state = {
+                    key,
+                    removed,
+                    hasDispatched: dispatched,
+                    pendingDelete,
+                };
+                console.warn('[resourceSystem] cancelChunkJob after completion', state);
+                console.assert(
+                    !dispatched && !removed,
+                    `[resourceSystem] cancelChunkJob called after completion for ${key}`,
+                    state,
+                );
+            }
+            return;
+        }
+
+        if (pendingDelete) return;
+
+        if (typeof timer.remove === 'function') {
+            timer.remove(false);
         }
     }
 
     function spawnChunkResources(chunk) {
+        if (!chunk) return null;
+
+        const key = _keyForChunk(chunk);
+        const existing = _chunkJobs.get(key);
+        const existingDone = existing ? _isTimerDone(existing) : false;
+
+        if (existing && !existingDone) {
+            return existing;
+        }
+        if (existingDone) {
+            _chunkJobs.delete(key);
+        }
+
+        if (!scene?.time?.addEvent || typeof scene.time.addEvent !== 'function') {
+            _chunkJobs.delete(key);
+            return _populateChunkResources(chunk);
+        }
+
+        const job = scene.time.addEvent({
+            delay: 0,
+            callback: () => {
+                try {
+                    _populateChunkResources(chunk);
+                } finally {
+                    if (_chunkJobs.get(key) === job) {
+                        _chunkJobs.delete(key);
+                    }
+                }
+            },
+        });
+
+        if (!job || typeof job.remove !== 'function') {
+            _chunkJobs.delete(key);
+            return _populateChunkResources(chunk);
+        }
+
+        _chunkJobs.set(key, job);
+        return job;
+    }
+
+    function _populateChunkResources(chunk) {
         // Make sure physics interactions exist before creating any resources
         ensureColliders();
         const registry = getResourceRegistry();
