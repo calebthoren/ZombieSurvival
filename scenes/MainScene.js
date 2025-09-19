@@ -52,6 +52,10 @@ export default class MainScene extends Phaser.Scene {
         this._autoPickupEvent = null;
         this._autoPickupActive = false;
         this._autoPickupPointer = { rightButtonDown: () => true };
+
+        // Chunk streaming timer state
+        this._chunkCheckEvent = null;
+        this._chunkCheckDelay = 300;
     }
 
     preload() {
@@ -192,17 +196,14 @@ export default class MainScene extends Phaser.Scene {
         this.chunkManager.unloadGraceMs = 900; // delay unload slightly to avoid thrash
         this.checkChunks();
         this._chunkCheckEvent = this.time.addEvent({
-            delay: 300,
+            delay: this._chunkCheckDelay,
             loop: true,
             callback: this.checkChunks,
             callbackScope: this,
         });
-        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-            this._chunkCheckEvent?.remove(false);
-        });
-        this.events.once(Phaser.Scenes.Events.DESTROY, () => {
-            this._chunkCheckEvent?.remove(false);
-        });
+        const teardownChunkTimer = () => this._teardownChunkCheckEvent();
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, teardownChunkTimer);
+        this.events.once(Phaser.Scenes.Events.DESTROY, teardownChunkTimer);
 
         // Controls
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -565,32 +566,39 @@ export default class MainScene extends Phaser.Scene {
     // Periodic chunk loading/unloading
     checkChunks() {
         const p = this.player;
-        if (!p) return;
+        const cm = this.chunkManager;
+        if (!p || !cm || typeof cm.update !== 'function') return;
         // Adaptive streaming based on FPS and movement speed
         const fps = Math.round(this.game?.loop?.actualFps || 0);
-        const body = this.player.body;
+        const body = p.body;
         const speed = body ? Math.hypot(body.velocity.x, body.velocity.y) : 0;
         const targetLoads = fps < 50 ? 1 : 2;
         const targetUnloads = fps < 50 ? 1 : 2;
-        if (
-            this.chunkManager.maxLoadsPerTick !== targetLoads ||
-            this.chunkManager.maxUnloadsPerTick !== targetUnloads
-        ) {
-            this.chunkManager.maxLoadsPerTick = targetLoads;
-            this.chunkManager.maxUnloadsPerTick = targetUnloads;
+        if (cm.maxLoadsPerTick !== targetLoads || cm.maxUnloadsPerTick !== targetUnloads) {
+            cm.maxLoadsPerTick = targetLoads;
+            cm.maxUnloadsPerTick = targetUnloads;
         }
         const baseDelay = 300;
         const targetDelay = speed > 140 ? 380 : baseDelay;
-        if (this._chunkCheckEvent && this._chunkCheckEvent.delay !== targetDelay) {
-            try { this._chunkCheckEvent.remove(false); } catch {}
-            this._chunkCheckEvent = this.time.addEvent({
-                delay: targetDelay,
-                loop: true,
-                callback: this.checkChunks,
-                callbackScope: this,
-            });
+        this._chunkCheckDelay = targetDelay;
+        const chunkEvent = this._chunkCheckEvent;
+        if (chunkEvent && chunkEvent.delay !== targetDelay) {
+            chunkEvent.delay = targetDelay;
+            if (chunkEvent.hasDispatched && chunkEvent.elapsed > targetDelay) {
+                chunkEvent.elapsed = targetDelay;
+            }
         }
-        this.chunkManager.update(p.x, p.y);
+        cm.update(p.x, p.y);
+    }
+
+    _teardownChunkCheckEvent() {
+        const chunkEvent = this._chunkCheckEvent;
+        if (!chunkEvent) return;
+        if (!chunkEvent.hasDispatched && chunkEvent.elapsed < chunkEvent.delay) {
+            chunkEvent.elapsed = chunkEvent.delay;
+        }
+        chunkEvent.remove(false);
+        this._chunkCheckEvent = null;
     }
 
     // Remove expired dropped items to keep performance steady
