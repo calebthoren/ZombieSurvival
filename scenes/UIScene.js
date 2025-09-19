@@ -20,6 +20,9 @@ export default class UIScene extends Phaser.Scene {
 
         this._pauseStart = 0;
 
+        // Reusable pointer projection scratch to avoid per-frame allocations
+        this._pointerWorld = new Phaser.Math.Vector2();
+
     }
 
     init(data) {
@@ -928,7 +931,9 @@ export default class UIScene extends Phaser.Scene {
 
         // Icon
         if (!this.dragIcon) {
-            this.dragIcon = this.add.image(0, 0, this.dragCarry.id).setDepth(1000);
+            this.dragIcon = this.add.image(0, 0, this.dragCarry.id)
+                .setDepth(1000)
+                .setScrollFactor(0);
         } else if (this.dragIcon.texture?.key !== this.dragCarry.id) {
             this.dragIcon.setTexture(this.dragCarry.id);
         }
@@ -950,7 +955,7 @@ export default class UIScene extends Phaser.Scene {
                 fontSize: '12px',
                 fill: '#ffffff',
                 fontFamily: 'monospace'
-            }).setDepth(1001);
+            }).setDepth(1001).setScrollFactor(0);
         } else if (this.dragText.text !== labelText) {
             this.dragText.setText(labelText);
         }
@@ -994,8 +999,22 @@ export default class UIScene extends Phaser.Scene {
     update() {
         if (this.dragIcon && this.input.activePointer) {
             const p = this.input.activePointer;
-            this.dragIcon.setPosition(p.worldX, p.worldY);
-            if (this.dragText) this.dragText.setPosition(p.worldX + 12, p.worldY + 12);
+            const cam = this.cameras?.main;
+            const point = this._pointerWorld;
+            if (cam) {
+                if (typeof p.positionToCamera === 'function') {
+                    p.positionToCamera(cam, point);
+                } else if (cam.getWorldPoint) {
+                    cam.getWorldPoint(p.x, p.y, point);
+                } else {
+                    point.set(p.x, p.y);
+                }
+            } else {
+                point.set(p.x, p.y);
+            }
+
+            this.dragIcon.setPosition(point.x, point.y);
+            if (this.dragText) this.dragText.setPosition(point.x + 12, point.y + 12);
         }
         // NEW: animate cooldown overlays
         this.#updateCooldownOverlays();
