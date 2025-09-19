@@ -11,6 +11,16 @@ import './world_gen/resources/index.js';
 
 const DEFAULT_CLUSTER_GROWTH = 0.3;
 
+let CLAMP = (value, min, max) => Math.min(max, Math.max(min, value));
+if (
+    typeof Phaser !== 'undefined'
+    && Phaser
+    && Phaser.Math
+    && typeof Phaser.Math.Clamp === 'function'
+) {
+    CLAMP = Phaser.Math.Clamp;
+}
+
 // Biased cluster size picker favors single spawns
 export function pickClusterCount(min, max, rng = Math.random, growthChance = DEFAULT_CLUSTER_GROWTH) {
     let count = min;
@@ -547,9 +557,15 @@ function createResourceSystem(scene) {
                 const cropX = baseX + addX;
                 const cropY = baseY + addY;
 
+                const maxCanopyFrame = Math.max(0, frameH - cropY);
+                const minTrunkPx = (def.tags && def.tags.includes('stump')) ? 0 : 2;
+                const canopyLimit = Math.max(0, maxCanopyFrame - minTrunkPx);
+                const canopyDb = Number.isFinite(lhCfg) ? lhCfg : maxCanopyFrame;
+                let canopyHeight = CLAMP(canopyDb, 0, maxCanopyFrame);
+                if (canopyHeight > canopyLimit) canopyHeight = canopyLimit;
+
                 // Use database-configured canopy height but verify trunk collider alignment.
                 const trunkBody = trunk && trunk.body;
-                let canopyHeight = lhCfg;
                 if (trunkBody && Number.isFinite(trunkBody.top)) {
                     // World-space Y of the top edge of the sprite frame (accounts for origin and scale)
                     const topWorldY = y - (trunk.displayHeight * (originY || 0)); // originY=1 => bottom-aligned
@@ -560,15 +576,19 @@ function createResourceSystem(scene) {
                     const distFrame = (trunkTop - topWorldY) / scaleY;
                     // Subtract cropY because our cropped leaves start at cropY within the frame
                     const calcHeight = Math.ceil(
-                        Phaser.Math.Clamp(distFrame - cropY, 0, Math.max(0, frameH - cropY))
+                        CLAMP(distFrame - cropY, 0, maxCanopyFrame)
                     );
-                    if (calcHeight !== canopyHeight) {
-                        console.warn(`leaves.height mismatch for ${id}: DB=${canopyHeight} vs calc=${calcHeight}`);
+                    if (calcHeight < canopyHeight) canopyHeight = calcHeight;
+                    if (Number.isFinite(lhCfg) && Math.abs(calcHeight - lhCfg) > 1) {
+                        console.warn(
+                            `leaves.height mismatch for ${id}: DB=${lhCfg} vs calc=${calcHeight}`,
+                        );
                     }
                 }
+
                 // Ensure sane bounds
                 const lw = Math.max(1, Math.min(frameW, lwCfg));
-                const lh = Math.max(0, Math.min(frameH - cropY, canopyHeight));
+                const lh = Math.max(0, Math.min(maxCanopyFrame, canopyHeight));
 
                 trunk.setCrop(0, cropY + lh, frameW, Math.max(0, frameH - (cropY + lh)));
 
@@ -588,8 +608,8 @@ function createResourceSystem(scene) {
 
                 // Build sensor column used to fade leaves when player is "under" the canopy.
                 // Build the canopy overlap rectangle used to fade leaves.
-                // Request: span from the trunk hitbox TOP upward using database canopy height
-                // so the fade sensor matches configured leaves height.
+                // Request: span from the trunk hitbox TOP upward using normalized canopy height
+                // so the fade sensor matches the rendered canopy region.
                 const BODY = trunk && trunk.body;
                 const lCfg = def.world?.leaves;
                 let rect;
@@ -608,7 +628,7 @@ function createResourceSystem(scene) {
 
                     // Vertical bounds: trunk collider top to configured canopy height
                     const trunkTop = Math.ceil(Number.isFinite(BODY.top) ? BODY.top : BODY.y);
-                    const rectH = Math.max(0, (lCfg.height || 0) * (useScale ? sy : 1));
+                    const rectH = Math.max(0, canopyHeight * (useScale ? sy : 1));
                     const offY = (lCfg.offsetY || 0) * (useScale ? sy : 1);
                     const rectTop = trunkTop - rectH + offY;
 
