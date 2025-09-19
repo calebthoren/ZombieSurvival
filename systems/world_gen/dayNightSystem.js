@@ -56,6 +56,23 @@ export default function createDayNightSystem(scene) {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, clearSpawnTimer);
     scene.events.once(Phaser.Scenes.Events.DESTROY, clearSpawnTimer);
 
+    function scaleSpawnDelay(ms) {
+        const base = Math.max(0, ms | 0);
+        if (base === 0) return 0;
+        const cheatScaleRaw = DevTools?.cheats?.timeScale;
+        const cheatScale =
+            typeof cheatScaleRaw === 'number' && cheatScaleRaw > 0
+                ? cheatScaleRaw
+                : 1;
+        const timerScaleRaw = scene?.time?.timeScale;
+        const timerScale =
+            typeof timerScaleRaw === 'number' && timerScaleRaw > 0
+                ? timerScaleRaw
+                : 1;
+        const scaled = Math.floor((base / cheatScale) * timerScale);
+        return scaled > 0 ? scaled : 0;
+    }
+
     function resetSegmentForPhase(phase) {
         const isNight = phase === 'night';
         const segments = isNight ? NIGHT_SEGMENTS : DAY_SEGMENTS;
@@ -139,7 +156,9 @@ export default function createDayNightSystem(scene) {
     // ----- Spawning -----
     function scheduleDaySpawn() {
         const dayCfg = WORLD_GEN.spawns.zombie.day;
-        const delay = Phaser.Math.Between(dayCfg.minDelayMs, dayCfg.maxDelayMs);
+        const delay = scaleSpawnDelay(
+            Phaser.Math.Between(dayCfg.minDelayMs, dayCfg.maxDelayMs),
+        );
         if (scene.spawnZombieTimer) {
             scene.spawnZombieTimer.remove(false);
             scene.spawnZombieTimer = null;
@@ -162,9 +181,8 @@ export default function createDayNightSystem(scene) {
 
     function scheduleNightTrickle() {
         const nightCfg = WORLD_GEN.spawns.zombie.nightTrickle;
-        const delay = Phaser.Math.Between(
-            nightCfg.minDelayMs,
-            nightCfg.maxDelayMs,
+        const delay = scaleSpawnDelay(
+            Phaser.Math.Between(nightCfg.minDelayMs, nightCfg.maxDelayMs),
         );
         if (scene.spawnZombieTimer) {
             scene.spawnZombieTimer.remove(false);
@@ -202,9 +220,11 @@ export default function createDayNightSystem(scene) {
                 segmentStart,
                 segmentEnd,
             );
-            const delay = hasValidRange
-                ? Phaser.Math.Between(minDelay, maxDelay)
-                : fallbackDelay;
+            const delay = scaleSpawnDelay(
+                hasValidRange
+                    ? Phaser.Math.Between(minDelay, maxDelay)
+                    : fallbackDelay,
+            );
 
             let timer;
             const removeTimer = () => {
@@ -229,17 +249,20 @@ export default function createDayNightSystem(scene) {
                 );
 
                 for (let i = 0; i < targetCount; i++) {
-                    scene.time.delayedCall(i * nightCfg.burstIntervalMs, () => {
-                        if (scene.phase === 'night' && !scene.isGameOver) {
-                            const types =
-                                scene.combat.getEligibleZombieTypesForPhase(
-                                    'night',
-                                );
-                            const id =
-                                scene.combat.pickZombieTypeWeighted(types);
-                            scene.combat.spawnZombie(id);
-                        }
-                    });
+                    scene.time.delayedCall(
+                        scaleSpawnDelay(i * nightCfg.burstIntervalMs),
+                        () => {
+                            if (scene.phase === 'night' && !scene.isGameOver) {
+                                const types =
+                                    scene.combat.getEligibleZombieTypesForPhase(
+                                        'night',
+                                    );
+                                const id =
+                                    scene.combat.pickZombieTypeWeighted(types);
+                                scene.combat.spawnZombie(id);
+                            }
+                        },
+                    );
                 }
             });
 

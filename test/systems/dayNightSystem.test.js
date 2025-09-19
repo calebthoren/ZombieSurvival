@@ -103,3 +103,100 @@ test('scheduleNightWave queues timers within each night segment', () => {
     events.emitShutdown();
 });
 
+test('spawn scheduling honors DevTools time scale', () => {
+    const events = createEventStub();
+    const addEventDelays = [];
+    const delayedCalls = [];
+    let spawnCount = 0;
+    const scene = {
+        phase: 'night',
+        dayIndex: 1,
+        waveNumber: 0,
+        isGameOver: false,
+        time: {
+            timeScale: 0.5,
+            addEvent(cfg) {
+                addEventDelays.push(cfg.delay);
+                return {
+                    remove() {},
+                };
+            },
+            delayedCall(delay, callback) {
+                const event = {
+                    delay,
+                    callback,
+                    remove() {},
+                };
+                delayedCalls.push(event);
+                return event;
+            },
+        },
+        combat: {
+            getEligibleZombieTypesForPhase() {
+                return [{ id: 'basic', weight: 1 }];
+            },
+            pickZombieTypeWeighted() {
+                return 'basic';
+            },
+            spawnZombie() {
+                spawnCount++;
+            },
+        },
+        events,
+    };
+
+    const system = createDayNightSystem(scene);
+
+    DevTools.cheats.timeScale = 2;
+
+    system.scheduleNightTrickle();
+    system.scheduleNightWave();
+
+    const expectedTrickleDelay = Math.floor((20_000 / 2) * 0.5);
+    assert.equal(
+        addEventDelays[addEventDelays.length - 1],
+        expectedTrickleDelay,
+    );
+
+    const segmentCount = Math.max(
+        WORLD_GEN.dayNight.segments?.perPhase ?? 3,
+        1,
+    );
+    assert.equal(delayedCalls.length, segmentCount);
+
+    const nightCfg = WORLD_GEN.spawns.zombie.nightWaves;
+    const nightDuration = WORLD_GEN.dayNight.nightMs;
+    const segmentDuration = nightDuration / segmentCount;
+
+    for (let i = 0; i < segmentCount; i++) {
+        const segmentStart = i * segmentDuration;
+        const segmentEnd = segmentStart + segmentDuration;
+        const minDelay = segmentStart + segmentDuration * 0.25;
+        const maxDelay = segmentEnd - nightCfg.burstIntervalMs;
+        const baseDelay = Math.floor((minDelay + maxDelay) / 2);
+        const expectedDelay = Math.floor((baseDelay / 2) * 0.5);
+        assert.equal(delayedCalls[i].delay, expectedDelay);
+    }
+
+    const initialCount = delayedCalls.length;
+    delayedCalls[0].callback();
+
+    const burstEvents = delayedCalls.slice(initialCount);
+    const dayBonus = scene.dayIndex * nightCfg.perDay;
+    const waveTarget = Math.min(
+        nightCfg.baseCount + (1 - 1) * nightCfg.perWave + dayBonus,
+        nightCfg.maxCount,
+    );
+    assert.equal(burstEvents.length, waveTarget);
+
+    for (let i = 0; i < burstEvents.length; i++) {
+        const baseDelay = i * nightCfg.burstIntervalMs;
+        const expectedDelay = Math.floor((baseDelay / 2) * 0.5);
+        assert.equal(burstEvents[i].delay, expectedDelay);
+    }
+    assert.equal(spawnCount, 0);
+
+    DevTools.cheats.timeScale = 1;
+    events.emitShutdown();
+});
+
