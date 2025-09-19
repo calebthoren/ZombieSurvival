@@ -38,6 +38,15 @@ const DevTools = {
     },
 
     _appliedTimeScale: 1,
+    _resourcePoolDebug: false,
+
+    setResourcePoolDebug(value = false) {
+        this._resourcePoolDebug = !!value;
+    },
+
+    shouldLogResourcePool() {
+        return !!this._resourcePoolDebug;
+    },
 
     // ─────────────────────────────────────────────────────────────
     // RENDER CONFIG
