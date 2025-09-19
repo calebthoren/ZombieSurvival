@@ -13,6 +13,58 @@ import DevTools from './DevTools.js';
 
 const DEFAULT_CLUSTER_GROWTH = 0.3;
 
+const SHOULD_WARN_TREE_TIMER =
+    (typeof process !== 'undefined' && process?.env?.NODE_ENV !== 'production') ||
+    (typeof window !== 'undefined' && window?.location?.hostname === 'localhost');
+
+function clearTreeLeavesTimer(scene, reason) {
+    if (!scene) return;
+
+    const timer = scene._treeLeavesTimer;
+    const update = scene._treeLeavesUpdate;
+    const leaves = scene._treeLeaves;
+
+    scene._treeLeavesTimer = null;
+    scene._treeLeavesUpdate = null;
+    scene._treeLeaves = null;
+
+    if (!timer) {
+        if (
+            SHOULD_WARN_TREE_TIMER &&
+            (typeof update === 'function' || (Array.isArray(leaves) && leaves.length > 0))
+        ) {
+            const ctx = reason ? ` during ${reason}` : '';
+            console.warn(
+                `[resourceSystem] Missing tree canopy timer${ctx}; cleanup skipped.`,
+            );
+        }
+        return;
+    }
+
+    const wasRemoved = timer.removed === true;
+    const isPendingDelete = timer.pendingDelete === true;
+    const hasDispatched = timer.hasDispatched === true;
+
+    if (wasRemoved || isPendingDelete) {
+        return;
+    }
+
+    if (typeof timer.remove === 'function') {
+        if (SHOULD_WARN_TREE_TIMER && hasDispatched && timer.loop !== true) {
+            const ctx = reason ? ` during ${reason}` : '';
+            console.warn(
+                `[resourceSystem] Tree canopy timer had already dispatched${ctx}; check ordering.`,
+            );
+        }
+        timer.remove(false);
+    } else if (SHOULD_WARN_TREE_TIMER) {
+        const ctx = reason ? ` during ${reason}` : '';
+        console.warn(
+            `[resourceSystem] Tree canopy timer missing remove()${ctx}; cannot clean up timer.`,
+        );
+    }
+}
+
 function hashResourceId(id) {
     if (!id) return 0;
     let hash = 0;
@@ -387,7 +439,7 @@ function createLayeredResource(scene, def, x, y) {
     }
 
     const cleanup = () => {
-        try { overlaySprite.destroy(); } catch {}
+        safeDestroyResourceSprite(overlaySprite, 'resource overlay');
         const arr = scene._treeLeaves;
         if (arr) {
             const idx = arr.indexOf(data);
@@ -431,10 +483,10 @@ function createLayeredResource(scene, def, x, y) {
             callback: scene._treeLeavesUpdate,
         });
         scene.events.once('shutdown', () => {
-            try { scene._treeLeavesTimer?.remove(false); } catch {}
-            scene._treeLeavesTimer = null;
-            scene._treeLeaves = [];
-            scene._treeLeavesUpdate = null;
+            clearTreeLeavesTimer(scene, 'shutdown');
+        });
+        scene.events.once('destroy', () => {
+            clearTreeLeavesTimer(scene, 'destroy');
         });
     }
 
@@ -877,6 +929,12 @@ function createResourceSystem(scene) {
                     }
                     if (onHarvest) onHarvest(trunk, id, x, y);
                     cleanupResourceLayers(trunk);
+                    if (typeof trunk.setData === 'function') {
+                        trunk.setData('overlayCleanup', null);
+                        trunk.setData('overlaySprite', null);
+                        trunk.setData('topSprite', null);
+                        trunk.setData('topSpriteDestroy', null);
+                    }
                     if (needsPhysics) {
                         if (trunk.scene && typeof trunk.destroy === 'function') {
                             trunk.destroy();
