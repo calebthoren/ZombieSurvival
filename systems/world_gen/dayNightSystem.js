@@ -24,6 +24,18 @@ const MAX_NIGHT_SEGMENT_INDEX = Math.max(
     Math.min(NIGHT_SEGMENTS.length - 1, SEGMENT_COUNT - 1),
 );
 
+let nightWaveTimers = [];
+
+function clearNightWaveTimers() {
+    for (let i = 0; i < nightWaveTimers.length; i++) {
+        const timer = nightWaveTimers[i];
+        if (timer?.remove) {
+            timer.remove(false);
+        }
+    }
+    nightWaveTimers = [];
+}
+
 export default function createDayNightSystem(scene) {
     let cachedSegmentPhase = 'day';
     let cachedSegmentIndex = 0;
@@ -31,6 +43,8 @@ export default function createDayNightSystem(scene) {
 
     scene.phaseSegmentIndex = cachedSegmentIndex;
     scene.phaseSegmentLabel = cachedSegmentLabel;
+
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, clearNightWaveTimers);
 
     function resetSegmentForPhase(phase) {
         const isNight = phase === 'night';
@@ -85,14 +99,11 @@ export default function createDayNightSystem(scene) {
         scene.phase = 'day';
         scene.phaseStartTime = DevTools.now(scene);
         scene._phaseElapsedMs = 0;
-        if (scene.nightWaveTimer) {
-            scene.nightWaveTimer.remove(false);
-            scene.nightWaveTimer = null;
-        }
         if (scene.spawnZombieTimer) {
             scene.spawnZombieTimer.remove(false);
             scene.spawnZombieTimer = null;
         }
+        clearNightWaveTimers();
         scene.waveNumber = 0;
         resetSegmentForPhase('day');
         scheduleDaySpawn();
@@ -107,6 +118,7 @@ export default function createDayNightSystem(scene) {
             scene.spawnZombieTimer.remove(false);
             scene.spawnZombieTimer = null;
         }
+        clearNightWaveTimers();
         scene.waveNumber = 0;
         resetSegmentForPhase('night');
         scheduleNightWave();
@@ -166,12 +178,37 @@ export default function createDayNightSystem(scene) {
 
     function scheduleNightWave() {
         const nightCfg = WORLD_GEN.spawns.zombie.nightWaves;
-        scene.nightWaveTimer = scene.time.addEvent({
-            delay: 10,
-            loop: false,
-            callback: () => {
-                scene.waveNumber++;
+        const nightDuration = WORLD_GEN.dayNight.nightMs;
+        const segmentDuration = nightDuration / SEGMENT_COUNT;
+
+        for (let segmentIndex = 0; segmentIndex < SEGMENT_COUNT; segmentIndex++) {
+            const segmentStart = segmentIndex * segmentDuration;
+            const segmentEnd = segmentStart + segmentDuration;
+            const minDelay = segmentStart + segmentDuration * 0.25;
+            const maxDelay = segmentEnd - nightCfg.burstIntervalMs;
+            const hasValidRange = minDelay <= maxDelay;
+            const fallbackDelay = Phaser.Math.Clamp(
+                Math.floor(segmentStart + segmentDuration * 0.5),
+                segmentStart,
+                segmentEnd,
+            );
+            const delay = hasValidRange
+                ? Phaser.Math.Between(minDelay, maxDelay)
+                : fallbackDelay;
+
+            let timer;
+            const removeTimer = () => {
+                const index = nightWaveTimers.indexOf(timer);
+                if (index !== -1) {
+                    nightWaveTimers.splice(index, 1);
+                }
+            };
+
+            timer = scene.time.delayedCall(delay, () => {
+                removeTimer();
                 if (scene.phase !== 'night' || scene.isGameOver) return;
+
+                scene.waveNumber++;
 
                 const dayBonus = scene.dayIndex * nightCfg.perDay;
                 const targetCount = Math.min(
@@ -194,13 +231,10 @@ export default function createDayNightSystem(scene) {
                         }
                     });
                 }
+            });
 
-                scene.time.delayedCall(nightCfg.waveIntervalMs, () => {
-                    if (scene.phase === 'night' && !scene.isGameOver)
-                        scheduleNightWave();
-                });
-            },
-        });
+            nightWaveTimers.push(timer);
+        }
     }
 
     // ----- Phase Info -----

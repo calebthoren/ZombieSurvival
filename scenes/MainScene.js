@@ -24,7 +24,6 @@ export default class MainScene extends Phaser.Scene {
         this.phaseStartTime = 0; // ms since scene start
         this.waveNumber = 0; // increments each night
         this.spawnZombieTimer = null; // day trickle timer
-        this.nightWaveTimer = null; // night waves timer
 
         // Charge state (generic to any charge-capable weapon)
         this.isCharging = false;
