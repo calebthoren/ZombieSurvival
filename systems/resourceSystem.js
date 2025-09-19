@@ -927,6 +927,15 @@ function createResourceSystem(scene) {
             if (!trunk) return;
             const needsPhysics = !!ctx.needsPhysics;
 
+            if (def?.world?.light) {
+                if (typeof scene.applyLightPipeline === 'function') {
+                    scene.applyLightPipeline(trunk);
+                }
+                if (typeof scene.attachLightToObject === 'function') {
+                    scene.attachLightToObject(trunk, def.world.light);
+                }
+            }
+
             if (def.collectible) {
                 trunk.setInteractive();
                 trunk.on('pointerdown', (pointer) => {
@@ -1087,6 +1096,13 @@ function createResourceSystem(scene) {
             .setScale(def.world?.scale ?? 1);
         scene.physics.add.existing(obj);
         obj.body.setAllowGravity(false);
+
+        if (typeof scene.applyLightPipeline === 'function' && def.world?.light) {
+            scene.applyLightPipeline(obj);
+        }
+        if (def.world?.light && typeof scene.attachLightToObject === 'function') {
+            scene.attachLightToObject(obj, def.world.light);
+        }
     }
 
     // Expose API on the scene and return it for convenience
