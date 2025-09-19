@@ -423,6 +423,24 @@ export default class UIScene extends Phaser.Scene {
         this.timeBarFill = this.add.rectangle(this.cameras.main.centerX - barW / 2, 30, 0, barH, 0xffff66)
             .setOrigin(0, 0.5).setAlpha(0.9);
 
+        const barStartX = this.cameras.main.centerX - barW / 2;
+        const markerWidth = 2;
+        const markerHeight = barH + 2;
+        const markerAlpha = 0.35;
+        const firstMarkerX = barStartX + barW / 3;
+        const secondMarkerX = barStartX + (2 * barW) / 3;
+
+        this.timeBarMarkers = [
+            this.add
+                .rectangle(firstMarkerX, 30, markerWidth, markerHeight, 0xffffff)
+                .setOrigin(0.5, 0.5)
+                .setAlpha(markerAlpha),
+            this.add
+                .rectangle(secondMarkerX, 30, markerWidth, markerHeight, 0xffffff)
+                .setOrigin(0.5, 0.5)
+                .setAlpha(markerAlpha),
+        ];
+
         // Initial paint (panel may start hidden, but we prep visuals)
         this.#refreshAllIcons();
         this.#queueBottomHotbarRefresh();
@@ -1029,13 +1047,13 @@ export default class UIScene extends Phaser.Scene {
     // -------------------------
     // Day/Night HUD update (called by MainScene)
     // -------------------------
-    updateTimeDisplay(dayIndex, phaseLabel, progress) {
+    updateTimeDisplay(dayIndex, segmentLabel, progress) {
         // skip if elements were destroyed (e.g., during scene restart)
         if (!this.dayNightLabel?.active || !this.timeBarFill?.active || !this.timeBarBg?.active) return;
-        this.dayNightLabel.setText(`Day ${dayIndex} — ${phaseLabel}`);
+        const label = segmentLabel || 'Daytime';
+        this.dayNightLabel.setText(`Day ${dayIndex} — ${label}`);
         const barW = this.timeBarBg.width;
         const clamped = Phaser.Math.Clamp(progress, 0, 1);
         this.timeBarFill.width = Math.max(0, barW * clamped);
-        this.timeBarFill.setFillStyle(phaseLabel === 'Night' ? 0x66aaff : 0xffff66);
     }
 }
