@@ -62,6 +62,15 @@ export const WORLD_GEN = {
     nightMs: 120_000,        // 2 min night
     transitionMs: 15_000,    // 15s fade before/after night
     nightOverlayAlpha: 0.55, // darkness amount at deepest night (0..1)
+    segments: {
+        perPhase: 3, // day/night are broken into thirds for pacing cues
+        day: {
+            labels: ['Morning', 'Afternoon', 'Evening'],
+        },
+        night: {
+            labels: ['Nightfall', 'Midnight', 'Late Night'],
+        },
+    },
     // (You can tweak these freely without touching scene code.)
   },
 
