@@ -11,6 +11,376 @@ import './world_gen/resources/index.js';
 
 const DEFAULT_CLUSTER_GROWTH = 0.3;
 
+function hashResourceId(id) {
+    if (!id) return 0;
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+        hash = (hash * 31 + id.charCodeAt(i)) | 0;
+    }
+    return hash >>> 0;
+}
+
+function clamp(value, min, max) {
+    if (typeof Phaser?.Math?.Clamp === 'function') {
+        return Phaser.Math.Clamp(value, min, max);
+    }
+    if (Number.isFinite(min) && value < min) return min;
+    if (Number.isFinite(max) && value > max) return max;
+    return value;
+}
+
+function spawnBaseResource(scene, def, id, x, y) {
+    const originX = def.world?.origin?.x ?? 0.5;
+    const originY = def.world?.origin?.y ?? 0.5;
+    const scale = def.world?.scale ?? 1;
+    const texKey = def.world?.textureKey || id;
+    const isBush = !!def.tags?.includes('bush');
+    const isBlocking = !!def.blocking;
+    const needsPhysics = isBlocking || isBush;
+    const bodyCfg = def.world?.body;
+
+    const depthOff = Math.floor(y) % 899;
+    const trunkDepthBase = def.trunkDepth ?? def.depth ?? 5;
+    const playerDepth = scene.player?.depth ?? 900;
+    let trunkDepth = trunkDepthBase + depthOff;
+    if (trunkDepth >= playerDepth) trunkDepth -= 899;
+
+    let trunk;
+    if (needsPhysics) {
+        trunk = scene.physics.add
+            .image(x, y, texKey)
+            .setOrigin(originX, originY)
+            .setScale(scale)
+            .setDepth(trunkDepth)
+            .setImmovable(true)
+            .setPosition(x, y);
+        if (scene.resourcesDyn && scene.resourcesDyn.add) scene.resourcesDyn.add(trunk);
+    } else {
+        trunk = scene.add
+            .image(x, y, texKey)
+            .setOrigin(originX, originY)
+            .setScale(scale)
+            .setDepth(trunkDepth);
+        scene.resourcesDecor && scene.resourcesDecor.add(trunk);
+    }
+
+    trunk.setData('blocking', isBlocking);
+
+    if (isBlocking && def.tags?.includes('rock')) {
+        const frameW = trunk.width;
+        const frameH = trunk.height;
+        const topH = frameH * 0.5;
+        const top = scene.add
+            .image(x, y, texKey)
+            .setOrigin(originX, originY)
+            .setScale(scale)
+            .setDepth((scene.player?.depth ?? 900) + 2 + depthOff)
+            .setCrop(0, 0, frameW, topH);
+        scene.resourcesDecor && scene.resourcesDecor.add(top);
+        top.setData('noHitboxDebug', true);
+        trunk.setCrop(0, topH, frameW, frameH - topH);
+        trunk.setData('topSprite', top);
+        trunk.once('destroy', () => top.destroy());
+    }
+
+    if (isBush) trunk.setData('bush', true);
+
+    if (needsPhysics && trunk.body) {
+        const b = trunk.body;
+        if (typeof b.setAllowGravity === 'function') b.setAllowGravity(false);
+
+        if (isBush) {
+            const dispW = trunk.displayWidth;
+            const dispH = trunk.displayHeight;
+            const r = Math.min(dispW, dispH) * 0.36;
+            const ox = dispW * 0.5 - r;
+            const oy = dispH * 0.5 - r;
+            if (typeof b.setCircle === 'function') b.setCircle(r, ox, oy);
+            else if (typeof b.setSize === 'function') b.setSize(2 * r, 2 * r);
+            if (typeof b.setOffset === 'function') b.setOffset(ox, oy);
+        } else if (bodyCfg) {
+            const frameW = trunk.width;
+            const frameH = trunk.height;
+            const dispW = trunk.displayWidth;
+            const dispH = trunk.displayHeight;
+
+            const scaleX = trunk.scaleX || 1;
+            const scaleY = trunk.scaleY || 1;
+            const useScale = !!bodyCfg.useScale;
+
+            let bw;
+            let bh;
+            let br;
+            if (bodyCfg.kind === 'circle') {
+                br = useScale ? bodyCfg.radius * scaleX : bodyCfg.radius;
+                bw = bh = 2 * br;
+            } else {
+                bw = useScale ? bodyCfg.width * scaleX : bodyCfg.width;
+                bh = useScale ? bodyCfg.height * scaleY : bodyCfg.height;
+            }
+
+            const anchorSpaceW = useScale ? dispW : frameW;
+            const anchorSpaceH = useScale ? dispH : frameH;
+
+            const anchor = bodyCfg.anchor || 'topLeft';
+            let baseX = 0;
+            let baseY = 0;
+            switch (anchor) {
+                case 'center':
+                    baseX = (anchorSpaceW - bw) * 0.5;
+                    baseY = (anchorSpaceH - bh) * 0.5;
+                    break;
+                case 'topCenter':
+                    baseX = (anchorSpaceW - bw) * 0.5;
+                    baseY = 0;
+                    break;
+                case 'bottomCenter':
+                    baseX = (anchorSpaceW - bw) * 0.5;
+                    baseY = anchorSpaceH - bh;
+                    break;
+                case 'bottomLeft':
+                    baseX = 0;
+                    baseY = anchorSpaceH - bh;
+                    break;
+                case 'topLeft':
+                default:
+                    baseX = 0;
+                    baseY = 0;
+                    break;
+            }
+
+            const addX = useScale ? (bodyCfg.offsetX || 0) * scaleX : bodyCfg.offsetX || 0;
+            const addY = useScale ? (bodyCfg.offsetY || 0) * scaleY : bodyCfg.offsetY || 0;
+            const ox = baseX + addX;
+            const oy = baseY + addY;
+
+            if (bodyCfg.kind === 'circle' && typeof b.setCircle === 'function') {
+                b.setCircle(br, ox, oy);
+            } else {
+                if (typeof b.setSize === 'function') b.setSize(bw, bh);
+                if (typeof b.setOffset === 'function') b.setOffset(ox, oy);
+            }
+            if (typeof b.setImmovable === 'function') b.setImmovable(true);
+        } else {
+            if (isBlocking) {
+                if (typeof b.setImmovable === 'function') b.setImmovable(true);
+            } else {
+                if (typeof b.setSize === 'function') b.setSize(trunk.displayWidth, trunk.displayHeight);
+                if (typeof b.setOffset === 'function') {
+                    const ox = (trunk.displayOriginX || trunk.displayWidth * 0.5) - trunk.displayWidth * 0.5;
+                    const oy = (trunk.displayOriginY || trunk.displayHeight * 0.5) - trunk.displayHeight * 0.5;
+                    b.setOffset(ox, oy);
+                }
+            }
+            if (typeof b.setImmovable === 'function') b.setImmovable(true);
+        }
+
+        if (b.moves === false && typeof trunk.refreshBody === 'function') {
+            try { trunk.refreshBody(); } catch {}
+        }
+    }
+
+    return { trunk, needsPhysics, isBush, isBlocking, originX, originY, scale, texKey, depthOff, playerDepth };
+}
+
+function createLayeredResource(scene, def, x, y) {
+    const resourceId = def?.id ?? def?.world?.textureKey ?? '';
+    const ctx = spawnBaseResource(scene, def, resourceId, x, y);
+    if (!ctx || !ctx.trunk) return ctx;
+
+    const overlayCfg = def.overlay;
+    if (!overlayCfg) return ctx;
+
+    const { trunk, originX, originY, scale, texKey } = ctx;
+    const frameW = trunk.width;
+    const frameH = trunk.height;
+
+    const widthCfg = Number.isFinite(overlayCfg.width) ? overlayCfg.width : frameW;
+    const heightCfg = Number.isFinite(overlayCfg.height) ? overlayCfg.height : frameH;
+
+    const anchorWidth = Math.max(1, Math.min(frameW, widthCfg));
+    const anchorHeight = Math.max(0, Math.min(frameH, heightCfg));
+
+    const anchor = overlayCfg.anchor || 'topLeft';
+    let baseX = 0;
+    let baseY = 0;
+    switch (anchor) {
+        case 'center':
+            baseX = (frameW - anchorWidth) * 0.5;
+            baseY = (frameH - anchorHeight) * 0.5;
+            break;
+        case 'topCenter':
+            baseX = (frameW - anchorWidth) * 0.5;
+            baseY = 0;
+            break;
+        case 'bottomCenter':
+            baseX = (frameW - anchorWidth) * 0.5;
+            baseY = frameH - anchorHeight;
+            break;
+        case 'bottomLeft':
+            baseX = 0;
+            baseY = frameH - anchorHeight;
+            break;
+        case 'topLeft':
+        default:
+            baseX = 0;
+            baseY = 0;
+            break;
+    }
+
+    const offsetX = overlayCfg.offsetX || 0;
+    const offsetY = overlayCfg.offsetY || 0;
+    const hasCropX = Number.isFinite(overlayCfg.cropX);
+    const hasCropY = Number.isFinite(overlayCfg.cropY);
+    const rawCropX = hasCropX ? overlayCfg.cropX : baseX + offsetX;
+    const rawCropY = hasCropY ? overlayCfg.cropY : baseY + offsetY;
+    const cropX = clamp(rawCropX, 0, Math.max(0, frameW - 1));
+    const cropY = clamp(rawCropY, 0, Math.max(0, frameH));
+    const canopyHeight = Number.isFinite(heightCfg) ? heightCfg : Math.max(0, frameH - cropY);
+    const cropWidthLimit = Number.isFinite(widthCfg) ? widthCfg : Math.max(0, frameW - cropX);
+    const cropWidth = Math.max(1, Math.min(frameW - cropX, cropWidthLimit));
+    const cropHeight = Math.max(0, Math.min(frameH - cropY, canopyHeight));
+
+    const trunkBody = trunk && trunk.body;
+    if (trunkBody && Number.isFinite(trunkBody.top) && Number.isFinite(heightCfg)) {
+        const topWorldY = y - (trunk.displayHeight * (originY || 0));
+        const scaleY = trunk.scaleY || 1;
+        const trunkTop = Math.ceil(trunkBody.top);
+        const distFrame = (trunkTop - topWorldY) / scaleY;
+        const calcHeight = Math.ceil(clamp(distFrame - cropY, 0, Math.max(0, frameH - cropY)));
+        if (calcHeight !== canopyHeight) {
+            console.warn(`overlay.height mismatch for ${resourceId}: DB=${canopyHeight} vs calc=${calcHeight}`);
+        }
+    }
+
+    trunk.setCrop(0, cropY + cropHeight, frameW, Math.max(0, frameH - (cropY + cropHeight)));
+
+    const overlayDepth = (scene.player?.depth ?? 900) + 2 + (hashResourceId(resourceId) % 10);
+    const overlaySprite = scene.add
+        .image(x, y, texKey)
+        .setOrigin(originX, originY)
+        .setScale(scale)
+        .setDepth(overlayDepth)
+        .setCrop(cropX, cropY, cropWidth, cropHeight);
+    scene.resourcesDecor && scene.resourcesDecor.add(overlaySprite);
+    overlaySprite.setData('noHitboxDebug', true);
+
+    const BODY = trunk && trunk.body;
+    let rect = null;
+    if (overlayCfg && BODY && Number.isFinite(BODY.top)) {
+        const sx = trunk.scaleX || 1;
+        const sy = trunk.scaleY || 1;
+        const useScale = !!overlayCfg.useScale;
+
+        const rectW = (overlayCfg.width || 0) * (useScale ? sx : 1);
+        const rectH = Math.max(0, (overlayCfg.height || 0) * (useScale ? sy : 1));
+        const offX = (overlayCfg.offsetX || 0) * (useScale ? sx : 1);
+        const offY = (overlayCfg.offsetY || 0) * (useScale ? sy : 1);
+
+        const dispLeft = trunk.x - (trunk.displayOriginX || trunk.displayWidth * 0.5);
+        const rectLeft = dispLeft + (trunk.displayWidth - rectW) * 0.5 + offX;
+
+        const trunkTop = Math.ceil(Number.isFinite(BODY.top) ? BODY.top : BODY.y);
+        const rectTop = trunkTop - rectH + offY;
+        rect = new Phaser.Geom.Rectangle(rectLeft, rectTop, Math.max(0, rectW), rectH);
+    } else {
+        const tCfg = def.world?.transparent;
+        const hasT = tCfg && Number.isFinite(tCfg.width) && Number.isFinite(tCfg.height);
+        if (hasT && BODY && Number.isFinite(BODY.top) && Number.isFinite(BODY.x) && Number.isFinite(BODY.width)) {
+            const bodyTop = Math.ceil(Number.isFinite(BODY.top) ? BODY.top : BODY.y);
+            const bodyX = BODY.x;
+            const bodyW = BODY.width;
+            const bodyCenterX = bodyX + bodyW * 0.5;
+            const useScale = !!tCfg.useScale;
+            const sx = trunk.scaleX || 1;
+            const sy = trunk.scaleY || 1;
+            const w = useScale ? tCfg.width * sx : tCfg.width;
+            const h = useScale ? tCfg.height * sy : tCfg.height;
+            const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
+            const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
+            const bottomY = bodyTop + offY;
+            const centerX = bodyCenterX + offX;
+            const left = centerX - w * 0.5;
+            const top = bottomY - h;
+            rect = new Phaser.Geom.Rectangle(left, top, Math.max(0, w), Math.max(0, h));
+        } else if (hasT) {
+            const useScale = !!tCfg.useScale;
+            const sx = trunk.scaleX || 1;
+            const sy = trunk.scaleY || 1;
+            const w = useScale ? tCfg.width * sx : tCfg.width;
+            const h = useScale ? tCfg.height * sy : tCfg.height;
+            const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
+            const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
+            const centerX = (trunk.x ?? x) + offX;
+            const bottomY = (trunk.y ?? y) + offY;
+            const left = centerX - w * 0.5;
+            const top = bottomY - h;
+            rect = new Phaser.Geom.Rectangle(left, top, Math.max(0, w), Math.max(0, h));
+        }
+    }
+
+    scene._treeLeaves = scene._treeLeaves || [];
+    const isStumpRes = /^stump/i.test(resourceId) || /stump/i.test(texKey || '');
+    const data = { leaves: overlaySprite, rect };
+    if (!isStumpRes && rect) {
+        scene._treeLeaves.push(data);
+    }
+
+    const cleanup = () => {
+        try { overlaySprite.destroy(); } catch {}
+        const arr = scene._treeLeaves;
+        if (arr) {
+            const idx = arr.indexOf(data);
+            if (idx !== -1) arr.splice(idx, 1);
+        }
+        trunk.setData('overlaySprite', null);
+        trunk.setData('overlayCleanup', null);
+    };
+    trunk.once('destroy', cleanup);
+    trunk.setData('overlaySprite', overlaySprite);
+    trunk.setData('overlayCleanup', cleanup);
+
+    if (!scene._treeLeavesUpdate) {
+        const playerRect = new Phaser.Geom.Rectangle();
+        scene._treeLeavesUpdate = () => {
+            const p = scene.player;
+            if (!p) return;
+            if (p.body) {
+                const pb = p.body;
+                playerRect.x = pb.x;
+                playerRect.y = pb.y;
+                playerRect.width = pb.width;
+                playerRect.height = pb.height;
+            } else if (typeof p.getBounds === 'function') {
+                const b = p.getBounds();
+                playerRect.x = b.x;
+                playerRect.y = b.y;
+                playerRect.width = b.width;
+                playerRect.height = b.height;
+            } else {
+                return;
+            }
+            for (const d of scene._treeLeaves) {
+                const overlap = Phaser.Geom.Intersects.RectangleToRectangle(playerRect, d.rect);
+                d.leaves.setAlpha(overlap ? 0.25 : 1);
+            }
+        };
+        scene._treeLeavesTimer = scene.time.addEvent({
+            delay: 120,
+            loop: true,
+            callback: scene._treeLeavesUpdate,
+        });
+        scene.events.once('shutdown', () => {
+            try { scene._treeLeavesTimer?.remove(false); } catch {}
+            scene._treeLeavesTimer = null;
+            scene._treeLeaves = [];
+            scene._treeLeavesUpdate = null;
+        });
+    }
+
+    return ctx;
+}
+
 // Biased cluster size picker favors single spawns
 export function pickClusterCount(min, max, rng = Math.random, growthChance = DEFAULT_CLUSTER_GROWTH) {
     let count = min;
@@ -343,374 +713,15 @@ function createResourceSystem(scene) {
         const createResourceAt = (id, def, x, y) => {
             x = Math.round(x);
             y = Math.round(y);
-            const originX = def.world?.origin?.x ?? 0.5;
-            const originY = def.world?.origin?.y ?? 0.5;
-            const scale = def.world?.scale ?? 1;
-            const texKey = def.world?.textureKey || id;
-
-            const isBush = !!def.tags?.includes('bush');
-            const isBlocking = !!def.blocking;
-            const needsPhysics = isBlocking || isBush;
-
-            const depthOff = Math.floor(y) % 899;
-            const trunkDepthBase = def.trunkDepth ?? def.depth ?? 5;
-            const playerDepth = scene.player?.depth ?? 900;
-            let trunkDepth = trunkDepthBase + depthOff;
-            if (trunkDepth >= playerDepth) trunkDepth -= 899;
-
-            let trunk;
-            const bodyCfg = def.world?.body;
-            // REVERT: Always create dynamic physics bodies for resources that need physics
-            if (needsPhysics) {
-                trunk = scene.physics.add
-                    .image(x, y, texKey)
-                    .setOrigin(originX, originY)
-                    .setScale(scale)
-                    .setDepth(trunkDepth)
-                    .setImmovable(true)
-                    .setPosition(x, y);
-                if (scene.resourcesDyn && scene.resourcesDyn.add) scene.resourcesDyn.add(trunk);
+            let ctx;
+            if (def.threeD) {
+                ctx = createLayeredResource(scene, def, x, y);
             } else {
-                trunk = scene.add
-                    .image(x, y, texKey)
-                    .setOrigin(originX, originY)
-                    .setScale(scale)
-                    .setDepth(trunkDepth);
-                scene.resourcesDecor && scene.resourcesDecor.add(trunk);
+                ctx = spawnBaseResource(scene, def, id, x, y);
             }
-
-            trunk.setData('blocking', isBlocking);
-
-            if (isBlocking && def.tags?.includes('rock')) {
-                const frameW = trunk.width;
-                const frameH = trunk.height;
-                const topH = frameH * 0.5;
-                const top = scene.add
-                    .image(x, y, texKey)
-                    .setOrigin(originX, originY)
-                    .setScale(scale)
-                    .setDepth((scene.player?.depth ?? 900) + 2 + depthOff)
-                    .setCrop(0, 0, frameW, topH);
-                scene.resourcesDecor && scene.resourcesDecor.add(top);
-                top.setData('noHitboxDebug', true);
-                trunk.setCrop(0, topH, frameW, frameH - topH);
-                trunk.setData('topSprite', top);
-                trunk.once('destroy', () => top.destroy());
-            }
-
-            if (isBush) trunk.setData('bush', true);
-
-            if (needsPhysics && trunk.body) {
-                const b = trunk.body;
-                if (typeof b.setAllowGravity === 'function') b.setAllowGravity(false);
-
-                if (isBush) {
-                    // Circular slow zone centered on the bush sprite
-                    const dispW = trunk.displayWidth;
-                    const dispH = trunk.displayHeight;
-                    const r = Math.min(dispW, dispH) * 0.36;
-                    const ox = dispW * 0.5 - r;
-                    const oy = dispH * 0.5 - r;
-                    if (typeof b.setCircle === 'function') b.setCircle(r, ox, oy);
-                    else if (typeof b.setSize === 'function') b.setSize(2 * r, 2 * r);
-                    if (typeof b.setOffset === 'function') b.setOffset(ox, oy);
-                } else if (bodyCfg) {
-                    const frameW = trunk.width;
-                    const frameH = trunk.height;
-                    const dispW = trunk.displayWidth;
-                    const dispH = trunk.displayHeight;
-
-                    const scaleX = trunk.scaleX || 1;
-                    const scaleY = trunk.scaleY || 1;
-                    const useScale = !!bodyCfg.useScale;
-
-                    let bw, bh, br;
-                    if (bodyCfg.kind === 'circle') {
-                        br = useScale
-                            ? bodyCfg.radius * scaleX
-                            : bodyCfg.radius;
-                        bw = bh = 2 * br;
-                    } else {
-                        bw = useScale ? bodyCfg.width * scaleX : bodyCfg.width;
-                        bh = useScale
-                            ? bodyCfg.height * scaleY
-                            : bodyCfg.height;
-                    }
-
-                    const anchorSpaceW = useScale ? dispW : frameW;
-                    const anchorSpaceH = useScale ? dispH : frameH;
-
-                    const anchor = bodyCfg.anchor || 'topLeft';
-                    let baseX = 0,
-                        baseY = 0;
-                    switch (anchor) {
-                        case 'center':
-                            baseX = (anchorSpaceW - bw) * 0.5;
-                            baseY = (anchorSpaceH - bh) * 0.5;
-                            break;
-                        case 'topCenter':
-                            baseX = (anchorSpaceW - bw) * 0.5;
-                            baseY = 0;
-                            break;
-                        case 'bottomCenter':
-                            baseX = (anchorSpaceW - bw) * 0.5;
-                            baseY = anchorSpaceH - bh;
-                            break;
-                        case 'bottomLeft':
-                            baseX = 0;
-                            baseY = anchorSpaceH - bh;
-                            break;
-                        case 'topLeft':
-                        default:
-                            baseX = 0;
-                            baseY = 0;
-                            break;
-                    }
-
-                    const addX = useScale
-                        ? (bodyCfg.offsetX || 0) * scaleX
-                        : bodyCfg.offsetX || 0;
-                    const addY = useScale
-                        ? (bodyCfg.offsetY || 0) * scaleY
-                        : bodyCfg.offsetY || 0;
-                    const ox = baseX + addX;
-                    const oy = baseY + addY;
-
-                    if (bodyCfg.kind === 'circle' && typeof b.setCircle === 'function') {
-                        b.setCircle(br, ox, oy);
-                    } else {
-                        if (typeof b.setSize === 'function') b.setSize(bw, bh);
-                        if (typeof b.setOffset === 'function') b.setOffset(ox, oy);
-                    }
-                    // static bodies are inherently immovable; for dynamic, guard the call
-                    if (typeof b.setImmovable === 'function') b.setImmovable(true);
-                } else {
-                    if (isBlocking) {
-                        if (typeof b.setImmovable === 'function') b.setImmovable(true);
-                    } else {
-                            if (typeof b.setSize === 'function') b.setSize(trunk.displayWidth, trunk.displayHeight);
-                            // Center align rect within the sprite's display frame
-                            if (typeof b.setOffset === 'function') {
-                                const ox = (trunk.displayOriginX || trunk.displayWidth * 0.5) - trunk.displayWidth * 0.5;
-                                const oy = (trunk.displayOriginY || trunk.displayHeight * 0.5) - trunk.displayHeight * 0.5;
-                                b.setOffset(ox, oy);
-                            }
-                        }
-                        if (typeof b.setImmovable === 'function') b.setImmovable(true);
-                    }
-                // Important for static bodies: refresh after size/offset/scale/origin/crop changes
-                if (b.moves === false && typeof trunk.refreshBody === 'function') {
-                    try { trunk.refreshBody(); } catch {}
-                }
-                }
-
-            const leavesCfg = def.world?.leaves;
-            if (leavesCfg) {
-                const frameW = trunk.width;
-                const frameH = trunk.height;
-
-                const lwCfg = leavesCfg.width;
-                let lhCfg = leavesCfg.height;
-                // Anchor computations need a provisional width/height
-                const lwAnchor = Math.max(1, Math.min(frameW, lwCfg || 0));
-                const lhAnchor = Math.max(0, Math.min(frameH, lhCfg || 0));
-
-                const anchor = leavesCfg.anchor || 'topLeft';
-                let baseX = 0,
-                    baseY = 0;
-                switch (anchor) {
-                    case 'center':
-                        baseX = (frameW - lwAnchor) * 0.5;
-                        baseY = (frameH - lhAnchor) * 0.5;
-                        break;
-                    case 'topCenter':
-                        baseX = (frameW - lwAnchor) * 0.5;
-                        baseY = 0;
-                        break;
-                    case 'bottomCenter':
-                        baseX = (frameW - lwAnchor) * 0.5;
-                        baseY = frameH - lhAnchor;
-                        break;
-                    case 'bottomLeft':
-                        baseX = 0;
-                        baseY = frameH - lhAnchor;
-                        break;
-                    case 'topLeft':
-                    default:
-                        baseX = 0;
-                        baseY = 0;
-                        break;
-                }
-
-                const addX = leavesCfg.offsetX || 0;
-                const addY = leavesCfg.offsetY || 0;
-                const cropX = baseX + addX;
-                const cropY = baseY + addY;
-
-                // Use database-configured canopy height but verify trunk collider alignment.
-                const trunkBody = trunk && trunk.body;
-                let canopyHeight = lhCfg;
-                if (trunkBody && Number.isFinite(trunkBody.top)) {
-                    // World-space Y of the top edge of the sprite frame (accounts for origin and scale)
-                    const topWorldY = y - (trunk.displayHeight * (originY || 0)); // originY=1 => bottom-aligned
-                    const scaleY = trunk.scaleY || 1;
-                    // Use a ceiled trunk top so the crop line does not sit above the collider
-                    const trunkTop = Math.ceil(trunkBody.top);
-                    // Distance from top of sprite to the trunk hitbox top, converted to source frame pixels
-                    const distFrame = (trunkTop - topWorldY) / scaleY;
-                    // Subtract cropY because our cropped leaves start at cropY within the frame
-                    const calcHeight = Math.ceil(
-                        Phaser.Math.Clamp(distFrame - cropY, 0, Math.max(0, frameH - cropY))
-                    );
-                    if (calcHeight !== canopyHeight) {
-                        console.warn(`leaves.height mismatch for ${id}: DB=${canopyHeight} vs calc=${calcHeight}`);
-                    }
-                }
-                // Ensure sane bounds
-                const lw = Math.max(1, Math.min(frameW, lwCfg));
-                const lh = Math.max(0, Math.min(frameH - cropY, canopyHeight));
-
-                trunk.setCrop(0, cropY + lh, frameW, Math.max(0, frameH - (cropY + lh)));
-
-                const leaves = scene.add
-                    .image(x, y, texKey)
-                    .setOrigin(originX, originY)
-                    .setScale(scale)
-                    // Depth: render canopy overlays above player so player walks under
-                    .setDepth((() => {
-                        // Force canopy above player with slight offset for stable ordering
-                        const orderJitter = depthOff % 10; // keep within a small band
-                        return (playerDepth + 2 + orderJitter);
-                    })())
-                    .setCrop(cropX, cropY, lw, lh);
-                scene.resourcesDecor && scene.resourcesDecor.add(leaves);
-                leaves.setData('noHitboxDebug', true);
-
-                // Build sensor column used to fade leaves when player is "under" the canopy.
-                // Build the canopy overlap rectangle used to fade leaves.
-                // Request: span from the trunk hitbox TOP upward using database canopy height
-                // so the fade sensor matches configured leaves height.
-                const BODY = trunk && trunk.body;
-                const lCfg = def.world?.leaves;
-                let rect;
-                if (lCfg && BODY && Number.isFinite(BODY.top)) {
-                    const sx = trunk.scaleX || 1;
-                    const sy = trunk.scaleY || 1;
-                    const useScale = !!lCfg.useScale;
-
-                    // Width equals leaves overlay width (widest leaves) in world space
-                    const rectW = (lCfg.width || 0) * (useScale ? sx : 1);
-
-                    // Compute world X for rect left: center above trunk, allow offsetX from config
-                    const dispLeft = trunk.x - (trunk.displayOriginX || trunk.displayWidth * 0.5);
-                    const rectLeft = dispLeft + (trunk.displayWidth - rectW) * 0.5
-                        + ((lCfg.offsetX || 0) * (useScale ? sx : 1));
-
-                    // Vertical bounds: trunk collider top to configured canopy height
-                    const trunkTop = Math.ceil(Number.isFinite(BODY.top) ? BODY.top : BODY.y);
-                    const rectH = Math.max(0, (lCfg.height || 0) * (useScale ? sy : 1));
-                    const offY = (lCfg.offsetY || 0) * (useScale ? sy : 1);
-                    const rectTop = trunkTop - rectH + offY;
-
-                    rect = new Phaser.Geom.Rectangle(rectLeft, rectTop, Math.max(0, rectW), rectH);
-                } else {
-                    // Fallback to database-provided transparent box if available
-                    const tCfg = def.world?.transparent;
-                    const hasT = tCfg && Number.isFinite(tCfg.width) && Number.isFinite(tCfg.height);
-                    if (hasT && BODY && Number.isFinite(BODY.top) && Number.isFinite(BODY.x) && Number.isFinite(BODY.width)) {
-                        const bodyTop = Math.ceil(Number.isFinite(BODY.top) ? BODY.top : BODY.y);
-                        const bodyX = BODY.x;
-                        const bodyW = BODY.width;
-                        const bodyCenterX = bodyX + bodyW * 0.5;
-                        const useScale = !!tCfg.useScale;
-                        const sx = trunk.scaleX || 1;
-                        const sy = trunk.scaleY || 1;
-                        const w = useScale ? tCfg.width * sx : tCfg.width;
-                        const h = useScale ? tCfg.height * sy : tCfg.height;
-                        const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
-                        const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
-                        const bottomY = bodyTop + offY;
-                        const centerX = bodyCenterX + offX;
-                        const left = centerX - w * 0.5;
-                        const top = bottomY - h;
-                        rect = new Phaser.Geom.Rectangle(left, top, Math.max(0, w), Math.max(0, h));
-                    } else if (hasT) {
-                        const useScale = !!tCfg.useScale;
-                        const sx = trunk.scaleX || 1;
-                        const sy = trunk.scaleY || 1;
-                        const w = useScale ? tCfg.width * sx : tCfg.width;
-                        const h = useScale ? tCfg.height * sy : tCfg.height;
-                        const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
-                        const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
-                        const centerX = (trunk.x ?? x) + offX;
-                        const bottomY = (trunk.y ?? y) + offY;
-                        const left = centerX - w * 0.5;
-                        const top = bottomY - h;
-                        rect = new Phaser.Geom.Rectangle(left, top, Math.max(0, w), Math.max(0, h));
-                    } else {
-                        rect = null;
-                    }
-                }
-
-                scene._treeLeaves = scene._treeLeaves || [];
-                // Identify stump overlays so we can skip fade behavior
-                // Use id/texture name only; ignore tags to avoid mislabeling trees
-                const isStumpRes = /^stump/i.test(id) || /stump/i.test(texKey);
-                const data = { leaves, rect };
-                if (!isStumpRes && rect) {
-                    scene._treeLeaves.push(data);
-                }
-                trunk.once('destroy', () => {
-                    leaves.destroy();
-                    const idx = scene._treeLeaves.indexOf(data);
-                    if (idx !== -1) scene._treeLeaves.splice(idx, 1);
-                });
-
-                if (!scene._treeLeavesUpdate) {
-                    const playerRect = new Phaser.Geom.Rectangle();
-                    scene._treeLeavesUpdate = () => {
-                        // Use physics hitbox as the source of truth so only canopy over the hitbox fades
-                        const p = scene.player;
-                        if (!p) return;
-                        if (p.body) {
-                            const pb = p.body;
-                            playerRect.x = pb.x;
-                            playerRect.y = pb.y;
-                            playerRect.width = pb.width;
-                            playerRect.height = pb.height;
-                        } else if (typeof p.getBounds === 'function') {
-                            const b = p.getBounds();
-                            playerRect.x = b.x;
-                            playerRect.y = b.y;
-                            playerRect.width = b.width;
-                            playerRect.height = b.height;
-                        } else {
-                            return;
-                        }
-                        // Use exact collider bounds for precise fade start at trunk top
-                        for (const d of scene._treeLeaves) {
-                            const overlap =
-                                Phaser.Geom.Intersects.RectangleToRectangle(
-                                    playerRect,
-                                    d.rect,
-                                );
-                            d.leaves.setAlpha(overlap ? 0.25 : 1);
-                        }
-                    };
-                    // Throttle updates with a timer instead of every frame
-                    scene._treeLeavesTimer = scene.time.addEvent({
-                        delay: 120,
-                        loop: true,
-                        callback: scene._treeLeavesUpdate,
-                    });
-                    scene.events.once('shutdown', () => {
-                        try { scene._treeLeavesTimer?.remove(false); } catch {}
-                        scene._treeLeavesTimer = null;
-                        scene._treeLeaves = [];
-                        scene._treeLeavesUpdate = null;
-                    });
-                }
-            }
+            const trunk = ctx?.trunk;
+            if (!trunk) return;
+            const needsPhysics = !!ctx.needsPhysics;
 
             if (def.collectible) {
                 trunk.setInteractive();
