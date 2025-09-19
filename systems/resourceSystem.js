@@ -29,6 +29,33 @@ function clamp(value, min, max) {
     return value;
 }
 
+function getMinimumTrunkHeight(def, trunk, frameH) {
+    const bodyCfg = def?.world?.body;
+    if (!bodyCfg || !Number.isFinite(frameH) || frameH <= 0) return 0;
+
+    const sy = trunk?.scaleY || 1;
+    const useScale = !!bodyCfg.useScale;
+
+    let rawHeight = 0;
+    if (bodyCfg.kind === 'circle' && Number.isFinite(bodyCfg.radius)) {
+        rawHeight = bodyCfg.radius * 2;
+    } else if (Number.isFinite(bodyCfg.height)) {
+        rawHeight = bodyCfg.height;
+    }
+
+    let heightFrame = useScale ? rawHeight : rawHeight / sy;
+    if (!Number.isFinite(heightFrame)) heightFrame = 0;
+
+    const offset = Number.isFinite(bodyCfg.offsetY) ? bodyCfg.offsetY : 0;
+    let offsetFrame = useScale ? offset : offset / sy;
+    if (!Number.isFinite(offsetFrame)) offsetFrame = 0;
+
+    const min = Math.ceil(heightFrame + Math.max(0, offsetFrame));
+    if (!Number.isFinite(min) || min <= 0) return 0;
+
+    return Math.max(1, Math.min(frameH, min));
+}
+
 function spawnBaseResource(scene, def, id, x, y) {
     const originX = def.world?.origin?.x ?? 0.5;
     const originY = def.world?.origin?.y ?? 0.5;
@@ -236,10 +263,33 @@ function createLayeredResource(scene, def, x, y) {
     const rawCropY = hasCropY ? overlayCfg.cropY : baseY + offsetY;
     const cropX = clamp(rawCropX, 0, Math.max(0, frameW - 1));
     const cropY = clamp(rawCropY, 0, Math.max(0, frameH));
-    const canopyHeight = Number.isFinite(heightCfg) ? heightCfg : Math.max(0, frameH - cropY);
+    const desiredHeight = Number.isFinite(heightCfg)
+        ? heightCfg
+        : Math.max(0, frameH - cropY);
+    let canopyHeight = desiredHeight;
     const cropWidthLimit = Number.isFinite(widthCfg) ? widthCfg : Math.max(0, frameW - cropX);
     const cropWidth = Math.max(1, Math.min(frameW - cropX, cropWidthLimit));
-    const cropHeight = Math.max(0, Math.min(frameH - cropY, canopyHeight));
+    let cropHeight = Math.max(0, Math.min(frameH - cropY, canopyHeight));
+    cropHeight = Math.floor(cropHeight);
+
+    let trunkHeight = Math.max(0, frameH - (cropY + cropHeight));
+    const minTrunk = getMinimumTrunkHeight(def, trunk, frameH);
+    if (minTrunk > 0 && trunkHeight < minTrunk) {
+        const needed = minTrunk - trunkHeight;
+        if (cropHeight > needed) {
+            cropHeight -= needed;
+        } else {
+            cropHeight = 0;
+        }
+        trunkHeight = Math.max(0, frameH - (cropY + cropHeight));
+    }
+
+    if (cropHeight <= 0 || trunkHeight <= 0) {
+        if (typeof trunk.clearCrop === 'function') trunk.clearCrop();
+        return ctx;
+    }
+
+    canopyHeight = cropHeight;
 
     const trunkBody = trunk && trunk.body;
     if (trunkBody && Number.isFinite(trunkBody.top) && Number.isFinite(heightCfg)) {
@@ -249,11 +299,13 @@ function createLayeredResource(scene, def, x, y) {
         const distFrame = (trunkTop - topWorldY) / scaleY;
         const calcHeight = Math.ceil(clamp(distFrame - cropY, 0, Math.max(0, frameH - cropY)));
         if (calcHeight !== canopyHeight) {
-            console.warn(`overlay.height mismatch for ${resourceId}: DB=${canopyHeight} vs calc=${calcHeight}`);
+            console.warn(
+                `overlay.height mismatch for ${resourceId}: DB=${desiredHeight} vs calc=${calcHeight}`,
+            );
         }
     }
 
-    trunk.setCrop(0, cropY + cropHeight, frameW, Math.max(0, frameH - (cropY + cropHeight)));
+    trunk.setCrop(0, cropY + cropHeight, frameW, trunkHeight);
 
     const overlayDepth = (scene.player?.depth ?? 900) + 2 + (hashResourceId(resourceId) % 10);
     const overlaySprite = scene.add
@@ -273,7 +325,7 @@ function createLayeredResource(scene, def, x, y) {
         const useScale = !!overlayCfg.useScale;
 
         const rectW = (overlayCfg.width || 0) * (useScale ? sx : 1);
-        const rectH = Math.max(0, (overlayCfg.height || 0) * (useScale ? sy : 1));
+        const rectH = Math.max(0, canopyHeight * sy);
         const offX = (overlayCfg.offsetX || 0) * (useScale ? sx : 1);
         const offY = (overlayCfg.offsetY || 0) * (useScale ? sy : 1);
 
