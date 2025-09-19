@@ -63,6 +63,11 @@ export default class MainScene extends Phaser.Scene {
         this._baseAmbientColor = 0xffffff;
         this._lightsTeardownHooked = false;
         this._boundLightTeardown = null;
+        this._playerLightNightRadius = 112;
+        this._playerLightNightIntensity = 0.35;
+        this._playerLightNightActive = false;
+        this._playerLightCachedRawSegment = null;
+        this._playerLightCachedNormalizedSegment = '';
     }
 
     preload() {
@@ -144,12 +149,14 @@ export default class MainScene extends Phaser.Scene {
             .setCollideWorldBounds(false);
 
         this._initLighting();
-        this.applyLightPipeline(this.player);
         this.playerLight = this.attachLightToObject(this.player, {
-            radius: 180,
-            intensity: 1.1,
+            radius: this._playerLightNightRadius,
+            intensity: 0,
             color: 0xfff2d1,
         });
+        if (this.playerLight) {
+            this.playerLight.visible = false;
+        }
         if (!this._boundLightTeardown) {
             this._boundLightTeardown = () => {
                 if (!this._lightsTeardownHooked) return;
@@ -748,6 +755,7 @@ export default class MainScene extends Phaser.Scene {
 
         this.dayNight.tick(delta);
         this._updateAttachedLights();
+        this._updatePlayerLightGlow();
 
         const w = WORLD_GEN.world.width;
         const h = WORLD_GEN.world.height;
@@ -1142,8 +1150,10 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    applyLightPipeline(gameObject) {
+    applyLightPipeline(gameObject, options = null) {
         if (!gameObject || typeof gameObject.setPipeline !== 'function') return gameObject;
+        const opts = options || {};
+        if (gameObject === this.player && !opts.allowPlayerPipeline) return gameObject;
         if (!this.lights || !this.lights.active) return gameObject;
         const pipeline = gameObject.pipeline?.name || gameObject.pipeline;
         if (pipeline === 'Light2D') return gameObject;
@@ -1280,6 +1290,45 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
+    _updatePlayerLightGlow() {
+        const light = this.playerLight;
+        if (!light) return;
+
+        let normalized = this._playerLightCachedNormalizedSegment;
+        const rawLabel = this.phaseSegmentLabel;
+        if (rawLabel !== this._playerLightCachedRawSegment) {
+            this._playerLightCachedRawSegment = rawLabel;
+            if (typeof rawLabel === 'string') {
+                normalized = rawLabel.trim().toLowerCase();
+            } else {
+                normalized = '';
+            }
+            this._playerLightCachedNormalizedSegment = normalized;
+        }
+
+        const shouldGlow =
+            this.phase === 'night' &&
+            (normalized === 'dusk' ||
+                normalized === 'midnight' ||
+                normalized === 'dawn');
+
+        if (shouldGlow === this._playerLightNightActive) return;
+
+        this._playerLightNightActive = shouldGlow;
+
+        const intensity = shouldGlow ? this._playerLightNightIntensity : 0;
+        if (typeof light.setIntensity === 'function') light.setIntensity(intensity);
+        else light.intensity = intensity;
+
+        if (shouldGlow) {
+            const radius = this._playerLightNightRadius;
+            if (typeof light.setRadius === 'function') light.setRadius(radius);
+            else light.radius = radius;
+        }
+
+        light.visible = shouldGlow;
+    }
+
     _teardownLights() {
         if (Array.isArray(this._lightBindings)) {
             for (let i = this._lightBindings.length - 1; i >= 0; i--) {
@@ -1292,6 +1341,9 @@ export default class MainScene extends Phaser.Scene {
         }
 
         this.playerLight = null;
+        this._playerLightNightActive = false;
+        this._playerLightCachedRawSegment = null;
+        this._playerLightCachedNormalizedSegment = '';
 
         if (Array.isArray(this._activeLights) && this.lights?.removeLight) {
             for (let i = this._activeLights.length - 1; i >= 0; i--) {
