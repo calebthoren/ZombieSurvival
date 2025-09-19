@@ -55,6 +55,14 @@ export default class MainScene extends Phaser.Scene {
         // Chunk streaming timer state
         this._chunkCheckEvent = null;
         this._chunkCheckDelay = 300;
+
+        // Lighting state
+        this._lightPool = [];
+        this._activeLights = [];
+        this._lightBindings = [];
+        this._baseAmbientColor = 0xffffff;
+        this._lightsTeardownHooked = false;
+        this._boundLightTeardown = null;
     }
 
     preload() {
@@ -134,6 +142,33 @@ export default class MainScene extends Phaser.Scene {
             .setScale(0.5)
             .setDepth(900)
             .setCollideWorldBounds(false);
+
+        this._initLighting();
+        this.applyLightPipeline(this.player);
+        this.playerLight = this.attachLightToObject(this.player, {
+            radius: 180,
+            intensity: 1.1,
+            color: 0xfff2d1,
+        });
+        if (!this._boundLightTeardown) {
+            this._boundLightTeardown = () => {
+                if (!this._lightsTeardownHooked) return;
+                this._lightsTeardownHooked = false;
+                this._teardownLights();
+                this._boundLightTeardown = null;
+            };
+        }
+        if (!this._lightsTeardownHooked) {
+            this._lightsTeardownHooked = true;
+            this.events.once(
+                Phaser.Scenes.Events.SHUTDOWN,
+                this._boundLightTeardown,
+            );
+            this.events.once(
+                Phaser.Scenes.Events.DESTROY,
+                this._boundLightTeardown,
+            );
+        }
 
         this.cameras.main.startFollow(this.player);
         this.cameras.main.setRoundPixels(true);
@@ -435,6 +470,11 @@ export default class MainScene extends Phaser.Scene {
             .setScale(0.5)
             .setInteractive();
 
+        this.applyLightPipeline(item);
+        const itemDef = ITEM_DB?.[id];
+        const lightCfg = itemDef?.world?.light;
+        if (lightCfg) this.attachLightToObject(item, lightCfg);
+
         const shadow = this.add
             .ellipse(
                 item.x,
@@ -707,6 +747,7 @@ export default class MainScene extends Phaser.Scene {
         }
 
         this.dayNight.tick(delta);
+        this._updateAttachedLights();
 
         const w = WORLD_GEN.world.width;
         const h = WORLD_GEN.world.height;
@@ -1078,6 +1119,210 @@ export default class MainScene extends Phaser.Scene {
         this.lastCharge = 0;
         this.uiScene?.events?.emit('weapon:chargeEnd');
         this._destroyEquippedItemGhost?.();
+    }
+
+    // ==========================
+    // LIGHTING
+    // ==========================
+    _initLighting() {
+        if (!this.lights || typeof this.lights.enable !== 'function') return;
+        if (!Array.isArray(this._lightPool)) this._lightPool = [];
+        if (!Array.isArray(this._activeLights)) this._activeLights = [];
+        if (!Array.isArray(this._lightBindings)) this._lightBindings = [];
+        if (typeof this._baseAmbientColor !== 'number') {
+            this._baseAmbientColor = 0xffffff;
+        }
+        if (!this.lights.active) this.lights.enable();
+        if (typeof this.lights.setAmbientColor === 'function') {
+            const baseColor =
+                typeof this._baseAmbientColor === 'number'
+                    ? this._baseAmbientColor
+                    : 0xffffff;
+            this.lights.setAmbientColor(baseColor);
+        }
+    }
+
+    applyLightPipeline(gameObject) {
+        if (!gameObject || typeof gameObject.setPipeline !== 'function') return gameObject;
+        if (!this.lights || !this.lights.active) return gameObject;
+        const pipeline = gameObject.pipeline?.name || gameObject.pipeline;
+        if (pipeline === 'Light2D') return gameObject;
+        gameObject.setPipeline('Light2D');
+        return gameObject;
+    }
+
+    acquireWorldLight(x, y, radius = 160, color = 0xffffff, intensity = 1) {
+        if (!this.lights || !this.lights.active) return null;
+        if (typeof this.lights.addLight !== 'function') return null;
+        const useRadius = Number.isFinite(radius) && radius > 0 ? radius : 160;
+        const useColor = typeof color === 'number' ? color : 0xffffff;
+        const useIntensity = Number.isFinite(intensity) ? intensity : 1;
+
+        if (!Array.isArray(this._lightPool)) this._lightPool = [];
+        if (!Array.isArray(this._activeLights)) this._activeLights = [];
+
+        let light = null;
+        if (this._lightPool.length > 0) {
+            light = this._lightPool.pop();
+        }
+
+        if (light) {
+            light.x = x;
+            light.y = y;
+            if (typeof light.setRadius === 'function') light.setRadius(useRadius);
+            else light.radius = useRadius;
+            if (typeof light.setColor === 'function') light.setColor(useColor);
+            else light.color = useColor;
+            if (typeof light.setIntensity === 'function') light.setIntensity(useIntensity);
+            else light.intensity = useIntensity;
+            light.visible = true;
+        } else {
+            light = this.lights.addLight(x, y, useRadius, useColor, useIntensity);
+        }
+
+        if (!light) return null;
+        this._activeLights.push(light);
+        return light;
+    }
+
+    attachLightToObject(target, cfg = {}) {
+        if (!target || !this.lights || !this.lights.active) return null;
+        const offsetX = Number.isFinite(cfg.offsetX) ? cfg.offsetX : 0;
+        const offsetY = Number.isFinite(cfg.offsetY) ? cfg.offsetY : 0;
+        const radius = Number.isFinite(cfg.radius) ? cfg.radius : 160;
+        const color = typeof cfg.color === 'number' ? cfg.color : 0xffffff;
+        const intensity = Number.isFinite(cfg.intensity) ? cfg.intensity : 1;
+
+        const light = this.acquireWorldLight(
+            (target.x || 0) + offsetX,
+            (target.y || 0) + offsetY,
+            radius,
+            color,
+            intensity,
+        );
+        if (!light) return null;
+
+        if (!Array.isArray(this._lightBindings)) this._lightBindings = [];
+        const binding = {
+            target,
+            light,
+            offsetX,
+            offsetY,
+        };
+        binding.destroyHandler = () => {
+            this.releaseWorldLight(light);
+        };
+        if (typeof target.once === 'function') {
+            target.once('destroy', binding.destroyHandler);
+        }
+        this._lightBindings.push(binding);
+        return light;
+    }
+
+    _removeLightBinding(light) {
+        if (!Array.isArray(this._lightBindings) || !light) return null;
+        for (let i = this._lightBindings.length - 1; i >= 0; i--) {
+            const binding = this._lightBindings[i];
+            if (!binding || binding.light !== light) continue;
+            const target = binding.target;
+            if (target && typeof target.off === 'function' && binding.destroyHandler) {
+                target.off('destroy', binding.destroyHandler);
+            }
+            this._lightBindings.splice(i, 1);
+            return binding;
+        }
+        return null;
+    }
+
+    releaseWorldLight(light) {
+        if (!light) return false;
+        this._removeLightBinding(light);
+
+        if (Array.isArray(this._activeLights)) {
+            const idx = this._activeLights.indexOf(light);
+            if (idx !== -1) this._activeLights.splice(idx, 1);
+        } else {
+            this._activeLights = [];
+        }
+
+        if (!Array.isArray(this._lightPool)) this._lightPool = [];
+        if (typeof light.setIntensity === 'function') light.setIntensity(0);
+        else light.intensity = 0;
+        light.visible = false;
+        if (this._lightPool.indexOf(light) === -1) {
+            this._lightPool.push(light);
+        }
+        return true;
+    }
+
+    _updateAttachedLights() {
+        if (!Array.isArray(this._lightBindings) || this._lightBindings.length === 0) return;
+        for (let i = this._lightBindings.length - 1; i >= 0; i--) {
+            const binding = this._lightBindings[i];
+            if (!binding) {
+                this._lightBindings.splice(i, 1);
+                continue;
+            }
+            const light = binding.light;
+            if (!light) {
+                this._lightBindings.splice(i, 1);
+                continue;
+            }
+            const target = binding.target;
+            if (!target || target.active === false || target.scene !== this) {
+                this.releaseWorldLight(light);
+                continue;
+            }
+            const x = (target.x || 0) + (binding.offsetX || 0);
+            const y = (target.y || 0) + (binding.offsetY || 0);
+            if (light.x !== x) light.x = x;
+            if (light.y !== y) light.y = y;
+        }
+    }
+
+    _teardownLights() {
+        if (Array.isArray(this._lightBindings)) {
+            for (let i = this._lightBindings.length - 1; i >= 0; i--) {
+                const binding = this._lightBindings[i];
+                if (binding?.light) this.releaseWorldLight(binding.light);
+            }
+            this._lightBindings.length = 0;
+        } else {
+            this._lightBindings = [];
+        }
+
+        this.playerLight = null;
+
+        if (Array.isArray(this._activeLights) && this.lights?.removeLight) {
+            for (let i = this._activeLights.length - 1; i >= 0; i--) {
+                const light = this._activeLights[i];
+                if (light) this.lights.removeLight(light);
+            }
+        }
+        if (Array.isArray(this._lightPool) && this.lights?.removeLight) {
+            for (let i = this._lightPool.length - 1; i >= 0; i--) {
+                const pooled = this._lightPool[i];
+                if (pooled) this.lights.removeLight(pooled);
+            }
+        }
+
+        if (Array.isArray(this._activeLights)) this._activeLights.length = 0;
+        else this._activeLights = [];
+        if (Array.isArray(this._lightPool)) this._lightPool.length = 0;
+        else this._lightPool = [];
+
+        if (this.lights) {
+            if (typeof this.lights.setAmbientColor === 'function') {
+                const baseColor =
+                    typeof this._baseAmbientColor === 'number'
+                        ? this._baseAmbientColor
+                        : 0xffffff;
+                this.lights.setAmbientColor(baseColor);
+            }
+            if (typeof this.lights.disable === 'function') {
+                this.lights.disable();
+            }
+        }
     }
 
     // ==========================
