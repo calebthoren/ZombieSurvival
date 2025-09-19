@@ -45,6 +45,16 @@ export default function createDayNightSystem(scene) {
     scene.phaseSegmentLabel = cachedSegmentLabel;
 
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, clearNightWaveTimers);
+    scene.events.once(Phaser.Scenes.Events.DESTROY, clearNightWaveTimers);
+
+    const clearSpawnTimer = () => {
+        if (scene.spawnZombieTimer?.remove) {
+            scene.spawnZombieTimer.remove(false);
+        }
+        scene.spawnZombieTimer = null;
+    };
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, clearSpawnTimer);
+    scene.events.once(Phaser.Scenes.Events.DESTROY, clearSpawnTimer);
 
     function resetSegmentForPhase(phase) {
         const isNight = phase === 'night';
@@ -248,6 +258,8 @@ export default function createDayNightSystem(scene) {
     }
 
     // ----- Visuals & UI -----
+    let midnightForced = false;
+
     function updateNightOverlay() {
         const { transitionMs, nightOverlayAlpha } = WORLD_GEN.dayNight;
         const elapsed = getPhaseElapsed();
@@ -267,7 +279,38 @@ export default function createDayNightSystem(scene) {
                 target = nightOverlayAlpha;
             }
         }
-        scene.nightOverlay.setAlpha(target);
+
+        const overlay = scene.nightOverlay;
+        const canSetOverlay = overlay && typeof overlay.setAlpha === 'function';
+        const segmentLabel = getSegmentLabel();
+        const normalizedLabel =
+            typeof segmentLabel === 'string'
+                ? segmentLabel.trim().toLowerCase()
+                : '';
+        const isMidnightSegment =
+            scene.phase === 'night' && normalizedLabel === 'midnight';
+
+        if (isMidnightSegment) {
+            midnightForced = true;
+            if (canSetOverlay) overlay.setAlpha(1);
+            if (scene.lights?.setAmbientColor) {
+                scene.lights.setAmbientColor(0x000000);
+            }
+            return;
+        }
+
+        if (midnightForced) {
+            midnightForced = false;
+            if (scene.lights?.setAmbientColor) {
+                const restoreColor =
+                    typeof scene._baseAmbientColor === 'number'
+                        ? scene._baseAmbientColor
+                        : 0xffffff;
+                scene.lights.setAmbientColor(restoreColor);
+            }
+        }
+
+        if (canSetOverlay) overlay.setAlpha(target);
     }
 
     function updateTimeUi() {
