@@ -8,6 +8,7 @@ import { getBiome } from './world_gen/biomes/biomeMap.js';
 import { getDensity } from './world_gen/noise.js';
 import * as poissonSampler from './world_gen/resources/poissonSampler.js';
 import './world_gen/resources/index.js';
+import { cleanupResourceLayers } from './pools/resourcePool.js';
 
 const DEFAULT_CLUSTER_GROWTH = 0.3;
 
@@ -80,7 +81,13 @@ function spawnBaseResource(scene, def, id, x, y) {
         top.setData('noHitboxDebug', true);
         trunk.setCrop(0, topH, frameW, frameH - topH);
         trunk.setData('topSprite', top);
-        trunk.once('destroy', () => top.destroy());
+        const destroyTop = () => {
+            if (top && typeof top.destroy === 'function' && (top.scene || top.active !== false)) {
+                top.destroy();
+            }
+        };
+        trunk.setData('topSpriteDestroy', destroyTop);
+        trunk.once('destroy', destroyTop);
     }
 
     if (isBush) trunk.setData('bush', true);
@@ -743,11 +750,14 @@ function createResourceSystem(scene) {
                         );
                     }
                     if (onHarvest) onHarvest(trunk, id, x, y);
+                    cleanupResourceLayers(trunk);
                     if (needsPhysics) {
-                        try { trunk.destroy(); } catch {}
+                        if (trunk.scene && typeof trunk.destroy === 'function') {
+                            trunk.destroy();
+                        }
                     } else if (scene.resourcePool) {
                         scene.resourcePool.release(trunk);
-                    } else {
+                    } else if (typeof trunk.destroy === 'function') {
                         trunk.destroy();
                     }
                     if (!noRespawn) {
