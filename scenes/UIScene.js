@@ -3,6 +3,7 @@ import InventoryModel from '../systems/inventoryModel.js';
 import { INVENTORY_CONFIG } from '../data/inventoryConfig.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
 import DevTools from '../systems/DevTools.js';
+import UIEscapeManager from '../systems/uiEscapeManager.js';
 
 export default class UIScene extends Phaser.Scene {
     constructor() {
@@ -22,6 +23,9 @@ export default class UIScene extends Phaser.Scene {
 
         // Reusable pointer projection scratch to avoid per-frame allocations
         this._pointerWorld = new Phaser.Math.Vector2();
+
+        // Shared ESC stack for layered menus/panels
+        this.escapeManager = new UIEscapeManager();
 
     }
 
@@ -175,6 +179,7 @@ export default class UIScene extends Phaser.Scene {
         // Inventory Panel (with top hotbar + 6x5 grid)
         // -------------------------
         this.inventoryPanel = this.add.container().setVisible(false);
+        this.escapeManager.register('inventory', () => this.closeInventory());
 
         const panelW = this.cameras.main.width - 100;
         const panelH = this.cameras.main.height - 240;
@@ -292,21 +297,8 @@ export default class UIScene extends Phaser.Scene {
         this.events.on('ui:lockInventory', (locked = true) => {
             this.inventoryLocked = !!locked;
 
-            if (this.inventoryLocked) {
-                // If panel is open while locking, snap carried item back and close it
-                if (this.inventoryPanel?.visible) {
-                    if (typeof this.#returnCarryOnClose === 'function') {
-                        this.#returnCarryOnClose();
-                    } else {
-                        // Fallback cleanup if helper isn't present
-                        this.dragCarry = null;
-                        this.dragOrigin = null;
-                        if (this.dragIcon) { this.dragIcon.destroy(); this.dragIcon = null; }
-                        if (this.dragText) { this.dragText.destroy(); this.dragText = null; }
-                        this.events.emit('inv:changed');
-                    }
-                    this.inventoryPanel.setVisible(false);
-                }
+            if (this.inventoryLocked && this.inventoryPanel?.visible) {
+                this.closeInventory();
             }
         });
 
@@ -478,13 +470,27 @@ export default class UIScene extends Phaser.Scene {
         if (this.inventoryLocked) return; // <- blocked after death
         if (this.scene.isActive('PauseScene')) return;
 
-        const wasVisible = this.inventoryPanel.visible;
-        if (wasVisible) {
-            // Closing: if we’re carrying something, put it back and clear carry state
-            this.#returnCarryOnClose();
+        if (this.inventoryPanel.visible) {
+            this.closeInventory();
+            return;
         }
-        this.inventoryPanel.setVisible(!wasVisible);
-        if (!wasVisible) this.#refreshAllIcons();
+
+        this.inventoryPanel.setVisible(true);
+        this.escapeManager.setOpen('inventory', true);
+        this.#refreshAllIcons();
+    }
+
+    closeInventory() {
+        if (!this.inventoryPanel.visible) return false;
+
+        this.#returnCarryOnClose();
+        this.inventoryPanel.setVisible(false);
+        this.escapeManager.setOpen('inventory', false);
+        return true;
+    }
+
+    handleEscape() {
+        return this.escapeManager.handleEscape();
     }
 
     setInventoryAlpha() {
