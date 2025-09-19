@@ -1,7 +1,10 @@
 // test/systems/dayNightSystem.test.js — verifies day/night timing
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import createDayNightSystem from '../../systems/world_gen/dayNightSystem.js';
+import createDayNightSystem, {
+    DAY_SEGMENTS,
+    NIGHT_SEGMENTS,
+} from '../../systems/world_gen/dayNightSystem.js';
 import DevTools from '../../systems/DevTools.js';
 import { WORLD_GEN } from '../../systems/world_gen/worldGenConfig.js';
 
@@ -14,18 +17,29 @@ globalThis.Phaser = {
     Scenes: {
         Events: {
             SHUTDOWN: 'shutdown',
+            DESTROY: 'destroy',
         },
     },
 };
 
 function createEventStub() {
-    let handler = null;
+    const handlers = Object.create(null);
     return {
         once(eventName, cb) {
-            handler = cb;
+            handlers[eventName] = cb;
+        },
+        emit(eventName) {
+            const handler = handlers[eventName];
+            if (typeof handler === 'function') {
+                delete handlers[eventName];
+                handler();
+            }
         },
         emitShutdown() {
-            if (handler) handler();
+            this.emit(Phaser.Scenes.Events.SHUTDOWN);
+        },
+        emitDestroy() {
+            this.emit(Phaser.Scenes.Events.DESTROY);
         },
     };
 }
@@ -55,6 +69,7 @@ test('tick scales day-night progression with time scale', () => {
 test('scheduleNightWave queues timers within each night segment', () => {
     const events = createEventStub();
     const scheduledDelays = [];
+    const reusableTimer = { remove() {} };
     const scene = {
         phase: 'night',
         dayIndex: 1,
@@ -63,9 +78,7 @@ test('scheduleNightWave queues timers within each night segment', () => {
         time: {
             delayedCall(delay) {
                 scheduledDelays.push(delay);
-                return {
-                    remove() {},
-                };
+                return reusableTimer;
             },
         },
         combat: {
