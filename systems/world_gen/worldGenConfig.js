@@ -68,7 +68,7 @@ export const WORLD_GEN = {
             labels: ['Morning', 'Afternoon', 'Evening'],
         },
         night: {
-            labels: ['Nightfall', 'Midnight', 'Late Night'],
+            labels: ['Dusk', 'Midnight', 'Dawn'],
         },
     },
     // (You can tweak these freely without touching scene code.)
