@@ -3,7 +3,83 @@
 import { WORLD_GEN } from './worldGenConfig.js';
 import DevTools from '../DevTools.js';
 
+const SEGMENT_CONFIG = WORLD_GEN.dayNight.segments || {};
+const SEGMENT_COUNT = Math.max(SEGMENT_CONFIG.perPhase ?? 3, 1);
+
+export const DAY_SEGMENTS =
+    Array.isArray(SEGMENT_CONFIG.day?.labels) && SEGMENT_CONFIG.day.labels.length > 0
+        ? SEGMENT_CONFIG.day.labels
+        : ['Daytime', 'Daytime', 'Daytime'];
+
+export const NIGHT_SEGMENTS =
+    Array.isArray(SEGMENT_CONFIG.night?.labels) && SEGMENT_CONFIG.night.labels.length > 0
+        ? SEGMENT_CONFIG.night.labels
+        : ['Night', 'Night', 'Night'];
+
+const DEFAULT_DAY_SEGMENT_LABEL = DAY_SEGMENTS[0] || 'Daytime';
+const DEFAULT_NIGHT_SEGMENT_LABEL = NIGHT_SEGMENTS[0] || 'Night';
+const MAX_DAY_SEGMENT_INDEX = Math.max(0, Math.min(DAY_SEGMENTS.length - 1, SEGMENT_COUNT - 1));
+const MAX_NIGHT_SEGMENT_INDEX = Math.max(
+    0,
+    Math.min(NIGHT_SEGMENTS.length - 1, SEGMENT_COUNT - 1),
+);
+
 export default function createDayNightSystem(scene) {
+    let cachedSegmentPhase = 'day';
+    let cachedSegmentIndex = 0;
+    let cachedSegmentLabel = DEFAULT_DAY_SEGMENT_LABEL;
+
+    scene.phaseSegmentIndex = cachedSegmentIndex;
+    scene.phaseSegmentLabel = cachedSegmentLabel;
+
+    function resetSegmentForPhase(phase) {
+        const isNight = phase === 'night';
+        const segments = isNight ? NIGHT_SEGMENTS : DAY_SEGMENTS;
+        const fallback = isNight
+            ? DEFAULT_NIGHT_SEGMENT_LABEL
+            : DEFAULT_DAY_SEGMENT_LABEL;
+
+        cachedSegmentPhase = phase;
+        cachedSegmentIndex = 0;
+        cachedSegmentLabel = segments[0] || fallback;
+        scene.phaseSegmentIndex = cachedSegmentIndex;
+        scene.phaseSegmentLabel = cachedSegmentLabel;
+    }
+
+    function refreshSegmentState(phaseElapsed, phaseDuration) {
+        const isNight = scene.phase === 'night';
+        const segments = isNight ? NIGHT_SEGMENTS : DAY_SEGMENTS;
+        const fallback = isNight
+            ? DEFAULT_NIGHT_SEGMENT_LABEL
+            : DEFAULT_DAY_SEGMENT_LABEL;
+        const maxIndex = isNight ? MAX_NIGHT_SEGMENT_INDEX : MAX_DAY_SEGMENT_INDEX;
+
+        const perSegment = phaseDuration / SEGMENT_COUNT;
+        let nextIndex =
+            perSegment > 0
+                ? Math.floor(phaseElapsed / perSegment)
+                : 0; // Math.floor(phaseElapsed / (phaseDuration / 3)) when SEGMENT_COUNT === 3
+        if (nextIndex > maxIndex) nextIndex = maxIndex;
+        if (nextIndex < 0) nextIndex = 0;
+        const nextLabel = segments[nextIndex] || fallback;
+
+        if (
+            cachedSegmentPhase !== scene.phase ||
+            cachedSegmentIndex !== nextIndex ||
+            cachedSegmentLabel !== nextLabel
+        ) {
+            cachedSegmentPhase = scene.phase;
+            cachedSegmentIndex = nextIndex;
+            cachedSegmentLabel = nextLabel;
+            scene.phaseSegmentIndex = nextIndex;
+            scene.phaseSegmentLabel = nextLabel;
+        }
+    }
+
+    function getSegmentLabel() {
+        return cachedSegmentLabel;
+    }
+
     // ----- Phase Transitions -----
     function startDay() {
         scene.phase = 'day';
@@ -18,6 +94,7 @@ export default function createDayNightSystem(scene) {
             scene.spawnZombieTimer = null;
         }
         scene.waveNumber = 0;
+        resetSegmentForPhase('day');
         scheduleDaySpawn();
         updateTimeUi();
     }
@@ -31,6 +108,7 @@ export default function createDayNightSystem(scene) {
             scene.spawnZombieTimer = null;
         }
         scene.waveNumber = 0;
+        resetSegmentForPhase('night');
         scheduleNightWave();
         scheduleNightTrickle();
         updateTimeUi();
@@ -172,14 +250,19 @@ export default function createDayNightSystem(scene) {
         const scale = DevTools.cheats.timeScale || 1;
         scene._phaseElapsedMs =
             (scene._phaseElapsedMs || 0) + ((delta * scale) | 0);
-        if (getPhaseElapsed() >= getPhaseDuration()) {
+        let phaseElapsed = getPhaseElapsed();
+        let phaseDuration = getPhaseDuration();
+        if (phaseElapsed >= phaseDuration) {
             if (scene.phase === 'day') {
                 startNight();
             } else {
                 scene.dayIndex++;
                 startDay();
             }
+            phaseElapsed = getPhaseElapsed();
+            phaseDuration = getPhaseDuration();
         }
+        refreshSegmentState(phaseElapsed, phaseDuration);
         updateNightOverlay();
     }
 
@@ -191,6 +274,7 @@ export default function createDayNightSystem(scene) {
         scheduleNightWave,
         getPhaseElapsed,
         getPhaseDuration,
+        getSegmentLabel,
         updateNightOverlay,
         updateTimeUi,
         tick,
