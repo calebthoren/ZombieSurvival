@@ -1256,6 +1256,7 @@ export default class MainScene extends Phaser.Scene {
 
     _updatePlayerLightGlow() {
         const light = this.playerLight;
+        if (!light) return;
 
         let normalized = this._playerLightCachedNormalizedSegment;
         const rawLabel = this.phaseSegmentLabel;
@@ -1275,24 +1276,47 @@ export default class MainScene extends Phaser.Scene {
                 normalized === 'midnight' ||
                 normalized === 'dawn');
 
+        const settings = this.lightSettings?.player;
+        const rawRadius = settings?.nightRadius;
+        let radius;
+        if (Number.isFinite(rawRadius)) {
+            radius = rawRadius < 0 ? 0 : rawRadius;
+            this._playerLightNightRadius = radius;
+        } else {
+            radius = Number.isFinite(this._playerLightNightRadius)
+                ? this._playerLightNightRadius
+                : 0;
+        }
+
+        let maskScale = settings?.maskScale;
+        if (!Number.isFinite(maskScale)) {
+            maskScale = 1;
+        }
+        if (maskScale < 0) {
+            maskScale = 0;
+        }
+
+        const hasRadius = radius > 0;
+        const desiredIntensity = shouldGlow && hasRadius ? 1 : 0;
+
+        if (light.radius !== radius) {
+            light.radius = radius;
+        }
+        if (light.maskScale !== maskScale) {
+            light.maskScale = maskScale;
+        }
+        if (light.intensity !== desiredIntensity) {
+            light.intensity = desiredIntensity;
+        }
+
         const stateChanged = shouldGlow !== this._playerLightNightActive;
         if (stateChanged) {
             this._playerLightNightActive = shouldGlow;
         }
 
-        if (!light || !stateChanged) return;
-
-        if (shouldGlow) {
-            const radius =
-                this.lightSettings?.player?.nightRadius ?? this._playerLightNightRadius;
-            const maskScale = this.lightSettings?.player?.maskScale ?? 1;
-            light.radius = radius;
-            light.maskScale = maskScale;
-            light.intensity = 1;
-            light.active = radius > 0;
-        } else {
-            light.intensity = 0;
-            light.active = false;
+        const shouldBeActive = shouldGlow && hasRadius;
+        if (light.active !== shouldBeActive) {
+            light.active = shouldBeActive;
         }
     }
 
