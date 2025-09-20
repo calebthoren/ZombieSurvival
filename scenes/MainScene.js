@@ -1255,7 +1255,6 @@ export default class MainScene extends Phaser.Scene {
 
     _updatePlayerLightGlow() {
         const light = this.playerLight;
-        if (!light) return;
 
         let normalized = this._playerLightCachedNormalizedSegment;
         const rawLabel = this.phaseSegmentLabel;
@@ -1275,9 +1274,12 @@ export default class MainScene extends Phaser.Scene {
                 normalized === 'midnight' ||
                 normalized === 'dawn');
 
-        if (shouldGlow === this._playerLightNightActive) return;
+        const stateChanged = shouldGlow !== this._playerLightNightActive;
+        if (stateChanged) {
+            this._playerLightNightActive = shouldGlow;
+        }
 
-        this._playerLightNightActive = shouldGlow;
+        if (!light || !stateChanged) return;
 
         if (shouldGlow) {
             const radius =
