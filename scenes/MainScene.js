@@ -66,6 +66,10 @@ export default class MainScene extends Phaser.Scene {
         this.lightSettings = {
             player: {
                 nightRadius: PLAYER_NIGHT_LIGHT_RADIUS,
+                baseRadius: PLAYER_NIGHT_LIGHT_RADIUS,
+                flickerAmplitude: 8,
+                flickerSpeed: 2.25,
+                upgradeMultiplier: 1,
                 maskScale: 0.9,
             },
         };
@@ -85,6 +89,9 @@ export default class MainScene extends Phaser.Scene {
             gradientCache: Object.create(null),
         };
         this._midnightAmbientStrength = 0;
+        this._playerLightUpgradeMultiplier = this.lightSettings.player.upgradeMultiplier;
+        this._playerLightFlickerPhase = Math.random() * Phaser.Math.PI2;
+        this._playerLightFlickerPhaseAlt = Math.random() * Phaser.Math.PI2;
     }
 
     preload() {
@@ -166,10 +173,12 @@ export default class MainScene extends Phaser.Scene {
             .setCollideWorldBounds(false);
 
         this._initLighting();
+        const playerLightSettings = this.lightSettings.player;
         this.playerLight = this.attachLightToObject(this.player, {
-            radius: this.lightSettings.player.nightRadius,
+            radius:
+                playerLightSettings.baseRadius ?? playerLightSettings.nightRadius,
             intensity: 0,
-            maskScale: this.lightSettings.player.maskScale,
+            maskScale: playerLightSettings.maskScale,
         });
         if (this.playerLight) {
             this.playerLight.active = false;
@@ -1170,12 +1179,71 @@ export default class MainScene extends Phaser.Scene {
     _initLighting() {
         if (!Array.isArray(this._lightBindings)) this._lightBindings = [];
         this._ensureLightMaskScratch();
-        const playerRadius = this.lightSettings?.player?.nightRadius;
-        if (Number.isFinite(playerRadius) && playerRadius > 0) {
-            this._playerLightNightRadius = playerRadius;
-        } else {
-            this._playerLightNightRadius = PLAYER_NIGHT_LIGHT_RADIUS;
+        const playerSettings = this.lightSettings?.player;
+        let baseRadius = playerSettings?.baseRadius;
+        if (!Number.isFinite(baseRadius) || baseRadius <= 0) {
+            baseRadius = playerSettings?.nightRadius;
         }
+        if (!Number.isFinite(baseRadius) || baseRadius <= 0) {
+            baseRadius = PLAYER_NIGHT_LIGHT_RADIUS;
+        }
+        this._playerLightNightRadius = baseRadius;
+        if (playerSettings) {
+            playerSettings.baseRadius = baseRadius;
+            if (!Number.isFinite(playerSettings.nightRadius) || playerSettings.nightRadius <= 0) {
+                playerSettings.nightRadius = baseRadius;
+            }
+            if (!Number.isFinite(playerSettings.flickerAmplitude)) {
+                playerSettings.flickerAmplitude = 0;
+            } else if (playerSettings.flickerAmplitude < 0) {
+                playerSettings.flickerAmplitude = 0;
+            }
+            if (!Number.isFinite(playerSettings.flickerSpeed)) {
+                playerSettings.flickerSpeed = 0;
+            } else if (playerSettings.flickerSpeed < 0) {
+                playerSettings.flickerSpeed = 0;
+            }
+            if (!Number.isFinite(playerSettings.upgradeMultiplier)) {
+                playerSettings.upgradeMultiplier = 1;
+            } else if (playerSettings.upgradeMultiplier < 0) {
+                playerSettings.upgradeMultiplier = 0;
+            }
+            this._playerLightUpgradeMultiplier = playerSettings.upgradeMultiplier;
+        } else {
+            this._playerLightUpgradeMultiplier = 1;
+        }
+    }
+
+    getPlayerLightUpgradeMultiplier() {
+        return this._playerLightUpgradeMultiplier;
+    }
+
+    setPlayerLightUpgradeMultiplier(multiplier = 1) {
+        const settings = this.lightSettings?.player;
+        let sanitized = Number.isFinite(multiplier) ? multiplier : 1;
+        if (sanitized < 0) sanitized = 0;
+        if (settings && settings.upgradeMultiplier !== sanitized) {
+            settings.upgradeMultiplier = sanitized;
+        }
+        this._playerLightUpgradeMultiplier = sanitized;
+        return this._playerLightUpgradeMultiplier;
+    }
+
+    bumpPlayerLightUpgradeMultiplier(multiplier = 1) {
+        if (!Number.isFinite(multiplier)) {
+            return this._playerLightUpgradeMultiplier;
+        }
+        let sanitized = multiplier;
+        if (sanitized < 0) sanitized = 0;
+        if (sanitized === 1) {
+            return this._playerLightUpgradeMultiplier;
+        }
+        const current = this._playerLightUpgradeMultiplier;
+        return this.setPlayerLightUpgradeMultiplier(current * sanitized);
+    }
+
+    resetPlayerLightUpgradeMultiplier() {
+        return this.setPlayerLightUpgradeMultiplier(1);
     }
 
     applyLightPipeline(gameObject, options = null) {
@@ -1304,14 +1372,78 @@ export default class MainScene extends Phaser.Scene {
             return;
         }
 
-        const radius =
-            this.lightSettings?.player?.nightRadius ?? this._playerLightNightRadius;
-        const maskScale = this.lightSettings?.player?.maskScale ?? 1;
-        const hasRadius = radius > 0;
+        const playerSettings = this.lightSettings?.player;
+        const maskScale = playerSettings?.maskScale ?? 1;
+        let baseRadius = playerSettings?.baseRadius;
+        if (!Number.isFinite(baseRadius)) {
+            baseRadius = this._playerLightNightRadius;
+        }
+        if (baseRadius < 0) {
+            baseRadius = 0;
+        }
 
-        light.radius = radius;
-        light.maskScale = maskScale;
-        light.intensity = hasRadius ? 1 : 0;
+        let amplitude = playerSettings?.flickerAmplitude;
+        if (!Number.isFinite(amplitude) || amplitude <= 0) {
+            amplitude = 0;
+        }
+        let speed = playerSettings?.flickerSpeed;
+        if (!Number.isFinite(speed) || speed <= 0) {
+            speed = 0;
+        }
+
+        let flickerOffset = 0;
+        if (amplitude > 0 && speed > 0 && this.time) {
+            const timeSeconds = this.time.now * 0.001;
+            const angularSpeed = speed * Phaser.Math.PI2;
+            const phase = timeSeconds * angularSpeed;
+            const primary = Math.sin(phase + this._playerLightFlickerPhase);
+            const secondary = Math.sin(
+                phase * 0.43 + this._playerLightFlickerPhaseAlt,
+            );
+            flickerOffset = (primary * 0.65 + secondary * 0.35) * amplitude;
+        }
+
+        let finalRadius = baseRadius + flickerOffset;
+        if (!Number.isFinite(finalRadius)) {
+            finalRadius = 0;
+        }
+        if (finalRadius < 0) {
+            finalRadius = 0;
+        }
+
+        let upgradeMultiplier = this._playerLightUpgradeMultiplier;
+        if (playerSettings) {
+            let configured = playerSettings.upgradeMultiplier;
+            if (!Number.isFinite(configured)) {
+                configured = upgradeMultiplier;
+            } else if (configured < 0) {
+                configured = 0;
+            }
+            if (configured !== upgradeMultiplier) {
+                upgradeMultiplier = configured;
+                this._playerLightUpgradeMultiplier = configured;
+            }
+        }
+        if (upgradeMultiplier !== 1) {
+            finalRadius *= upgradeMultiplier;
+        }
+
+        if (playerSettings && playerSettings.nightRadius !== finalRadius) {
+            playerSettings.nightRadius = finalRadius;
+        }
+
+        if (light.radius !== finalRadius) {
+            light.radius = finalRadius;
+        }
+        if (light.maskScale !== maskScale) {
+            light.maskScale = maskScale;
+        }
+
+        const hasRadius = finalRadius > 0;
+        const targetIntensity = hasRadius ? 1 : 0;
+        if (light.intensity !== targetIntensity) {
+            light.intensity = targetIntensity;
+        }
 
         if (stateChanged || light.active !== hasRadius) {
             light.active = hasRadius;
