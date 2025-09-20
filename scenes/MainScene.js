@@ -63,6 +63,7 @@ export default class MainScene extends Phaser.Scene {
         this._baseAmbientColor = 0xffffff;
         this._lightsTeardownHooked = false;
         this._boundLightTeardown = null;
+        this._lightsSupported = false;
         this._playerLightNightRadius = 112;
         this._playerLightNightIntensity = 0.35;
         this._playerLightNightActive = false;
@@ -1156,10 +1157,27 @@ export default class MainScene extends Phaser.Scene {
     // LIGHTING
     // ==========================
     _initLighting() {
-        if (!this.lights || typeof this.lights.enable !== 'function') return;
+        const renderer = this.game && this.game.renderer;
+        const isWebGL = renderer && renderer.type === Phaser.WEBGL;
+        this._lightsSupported =
+            !!(
+                isWebGL &&
+                this.lights &&
+                typeof this.lights.enable === 'function' &&
+                typeof this.lights.disable === 'function'
+            );
+
         if (!Array.isArray(this._lightPool)) this._lightPool = [];
         if (!Array.isArray(this._activeLights)) this._activeLights = [];
         if (!Array.isArray(this._lightBindings)) this._lightBindings = [];
+
+        if (!this._lightsSupported) {
+            if (this.lights && typeof this.lights.disable === 'function') {
+                this.lights.disable();
+            }
+            return;
+        }
+
         if (typeof this._baseAmbientColor !== 'number') {
             this._baseAmbientColor = 0xffffff;
         }
@@ -1175,6 +1193,7 @@ export default class MainScene extends Phaser.Scene {
 
     applyLightPipeline(gameObject, options = null) {
         if (!gameObject || typeof gameObject.setPipeline !== 'function') return gameObject;
+        if (!this._lightsSupported) return gameObject;
         const opts = options || {};
         if (gameObject === this.player && !opts.allowPlayerPipeline) return gameObject;
         if (!this.lights || !this.lights.active) return gameObject;
@@ -1315,7 +1334,6 @@ export default class MainScene extends Phaser.Scene {
 
     _updatePlayerLightGlow() {
         const light = this.playerLight;
-        if (!light) return;
 
         let normalized = this._playerLightCachedNormalizedSegment;
         const rawLabel = this.phaseSegmentLabel;
@@ -1335,9 +1353,12 @@ export default class MainScene extends Phaser.Scene {
                 normalized === 'midnight' ||
                 normalized === 'dawn');
 
-        if (shouldGlow === this._playerLightNightActive) return;
+        const stateChanged = shouldGlow !== this._playerLightNightActive;
+        if (stateChanged) {
+            this._playerLightNightActive = shouldGlow;
+        }
 
-        this._playerLightNightActive = shouldGlow;
+        if (!light || !stateChanged) return;
 
         const intensity = shouldGlow ? this._playerLightNightIntensity : 0;
         if (typeof light.setIntensity === 'function') light.setIntensity(intensity);
