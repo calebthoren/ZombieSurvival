@@ -37,20 +37,6 @@ const MIDNIGHT_SEGMENT_INDEX = (() => {
     return -1;
 })();
 
-function lerpColorToBlack(baseColor, strength) {
-    const sanitizedColor = (baseColor | 0) & 0xffffff;
-    let t = strength;
-    if (!Number.isFinite(t)) t = 0;
-    if (t <= 0) return sanitizedColor;
-    if (t >= 1) return 0x000000;
-
-    const inv = 1 - t;
-    const r = Math.round(((sanitizedColor >> 16) & 0xff) * inv);
-    const g = Math.round(((sanitizedColor >> 8) & 0xff) * inv);
-    const b = Math.round((sanitizedColor & 0xff) * inv);
-    return (r << 16) | (g << 8) | b;
-}
-
 let nightWaveTimers = [];
 
 function clearNightWaveTimers() {
@@ -308,7 +294,7 @@ export default function createDayNightSystem(scene) {
     }
 
     // ----- Visuals & UI -----
-    let lastAmbientColor = -1;
+    let lastMidnightStrength = -1;
 
     function updateNightOverlay() {
         const { transitionMs, nightOverlayAlpha } = WORLD_GEN.dayNight;
@@ -379,21 +365,11 @@ export default function createDayNightSystem(scene) {
     }
 
     function applyMidnightAmbient(strength) {
-        const lights = scene.lights;
-        if (!lights || typeof lights.setAmbientColor !== 'function') {
-            lastAmbientColor = -1;
-            return;
-        }
-
-        const baseColor =
-            typeof scene._baseAmbientColor === 'number'
-                ? scene._baseAmbientColor
-                : 0xffffff;
-        const targetColor = strength > 0 ? lerpColorToBlack(baseColor, strength) : baseColor;
-
-        if (targetColor !== lastAmbientColor) {
-            lights.setAmbientColor(targetColor);
-            lastAmbientColor = targetColor;
+        const normalized = Phaser.Math.Clamp(Number.isFinite(strength) ? strength : 0, 0, 1);
+        if (normalized === lastMidnightStrength) return;
+        lastMidnightStrength = normalized;
+        if (scene && typeof scene.updateNightAmbient === 'function') {
+            scene.updateNightAmbient(normalized);
         }
     }
 

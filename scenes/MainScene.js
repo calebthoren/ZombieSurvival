@@ -14,6 +14,9 @@ import createZombiePool from '../systems/pools/zombiePool.js';
 import createResourcePool from '../systems/pools/resourcePool.js';
 import { setBiomeSeed } from '../systems/world_gen/biomes/biomeMap.js';
 
+// Radius for the player's personal light at night (tweak-friendly).
+const PLAYER_NIGHT_LIGHT_RADIUS = 64;
+
 export default class MainScene extends Phaser.Scene {
     constructor() {
         super('MainScene');
@@ -57,24 +60,26 @@ export default class MainScene extends Phaser.Scene {
         this._chunkCheckDelay = 300;
 
         // Lighting state
-        this._lightPool = [];
-        this._activeLights = [];
         this._lightBindings = [];
-        this._baseAmbientColor = 0xffffff;
+        this.lightSettings = {
+            player: {
+                nightRadius: PLAYER_NIGHT_LIGHT_RADIUS,
+                maskScale: 0.9,
+            },
+        };
+        this._playerLightNightRadius = this.lightSettings.player.nightRadius;
         this._lightsTeardownHooked = false;
         this._boundLightTeardown = null;
-        this._lightsSupported = false;
-        this._playerLightNightRadius = 112;
-        this._playerLightNightIntensity = 0.35;
         this._playerLightNightActive = false;
         this._playerLightCachedRawSegment = null;
         this._playerLightCachedNormalizedSegment = '';
         this.nightOverlayMaskGraphics = null;
         this.nightOverlayMask = null;
         this._nightOverlayMaskEnabled = false;
-        this._nightOverlayMaskRadius = 0;
         this._nightMaskTeardownHooked = false;
         this._boundNightMaskTeardown = null;
+        this._lightMaskScratch = [];
+        this._midnightAmbientStrength = 0;
     }
 
     preload() {
@@ -157,12 +162,12 @@ export default class MainScene extends Phaser.Scene {
 
         this._initLighting();
         this.playerLight = this.attachLightToObject(this.player, {
-            radius: this._playerLightNightRadius,
+            radius: this.lightSettings.player.nightRadius,
             intensity: 0,
-            color: 0xfff2d1,
+            maskScale: this.lightSettings.player.maskScale,
         });
         if (this.playerLight) {
-            this.playerLight.visible = false;
+            this.playerLight.active = false;
         }
         if (!this._boundLightTeardown) {
             this._boundLightTeardown = () => {
@@ -1157,125 +1162,58 @@ export default class MainScene extends Phaser.Scene {
     // LIGHTING
     // ==========================
     _initLighting() {
-        const renderer = this.game && this.game.renderer;
-        const isWebGL = renderer && renderer.type === Phaser.WEBGL;
-        this._lightsSupported =
-            !!(
-                isWebGL &&
-                this.lights &&
-                typeof this.lights.enable === 'function' &&
-                typeof this.lights.disable === 'function'
-            );
-
-        if (!Array.isArray(this._lightPool)) this._lightPool = [];
-        if (!Array.isArray(this._activeLights)) this._activeLights = [];
         if (!Array.isArray(this._lightBindings)) this._lightBindings = [];
-
-        if (!this._lightsSupported) {
-            if (this.lights && typeof this.lights.disable === 'function') {
-                this.lights.disable();
-            }
-            return;
-        }
-
-        if (typeof this._baseAmbientColor !== 'number') {
-            this._baseAmbientColor = 0xffffff;
-        }
-        if (!this.lights.active) this.lights.enable();
-        if (typeof this.lights.setAmbientColor === 'function') {
-            const baseColor =
-                typeof this._baseAmbientColor === 'number'
-                    ? this._baseAmbientColor
-                    : 0xffffff;
-            this.lights.setAmbientColor(baseColor);
+        if (!Array.isArray(this._lightMaskScratch)) this._lightMaskScratch = [];
+        const playerRadius = this.lightSettings?.player?.nightRadius;
+        if (Number.isFinite(playerRadius) && playerRadius > 0) {
+            this._playerLightNightRadius = playerRadius;
+        } else {
+            this._playerLightNightRadius = PLAYER_NIGHT_LIGHT_RADIUS;
         }
     }
 
     applyLightPipeline(gameObject, options = null) {
-        if (!gameObject || typeof gameObject.setPipeline !== 'function') return gameObject;
-        if (!this._lightsSupported) return gameObject;
-        const opts = options || {};
-        if (gameObject === this.player && !opts.allowPlayerPipeline) return gameObject;
-        if (!this.lights || !this.lights.active) return gameObject;
-        const pipeline = gameObject.pipeline?.name || gameObject.pipeline;
-        if (pipeline === 'Light2D') return gameObject;
-        gameObject.setPipeline('Light2D');
         return gameObject;
     }
 
-    acquireWorldLight(x, y, radius = 160, color = 0xffffff, intensity = 1) {
-        if (!this.lights || !this.lights.active) return null;
-        if (typeof this.lights.addLight !== 'function') return null;
-        const useRadius = Number.isFinite(radius) && radius > 0 ? radius : 160;
-        const useColor = typeof color === 'number' ? color : 0xffffff;
-        const useIntensity = Number.isFinite(intensity) ? intensity : 1;
-
-        if (!Array.isArray(this._lightPool)) this._lightPool = [];
-        if (!Array.isArray(this._activeLights)) this._activeLights = [];
-
-        let light = null;
-        if (this._lightPool.length > 0) {
-            light = this._lightPool.pop();
-        }
-
-        if (light) {
-            light.x = x;
-            light.y = y;
-            if (typeof light.setRadius === 'function') light.setRadius(useRadius);
-            else light.radius = useRadius;
-            if (typeof light.setColor === 'function') light.setColor(useColor);
-            else light.color = useColor;
-            if (typeof light.setIntensity === 'function') light.setIntensity(useIntensity);
-            else light.intensity = useIntensity;
-            light.visible = true;
-        } else {
-            light = this.lights.addLight(x, y, useRadius, useColor, useIntensity);
-        }
-
-        if (!light) return null;
-        this._activeLights.push(light);
-        return light;
-    }
-
     attachLightToObject(target, cfg = {}) {
-        if (!target || !this.lights || !this.lights.active) return null;
+        if (!target) return null;
+        if (!Array.isArray(this._lightBindings)) this._lightBindings = [];
+
         const offsetX = Number.isFinite(cfg.offsetX) ? cfg.offsetX : 0;
         const offsetY = Number.isFinite(cfg.offsetY) ? cfg.offsetY : 0;
-        const radius = Number.isFinite(cfg.radius) ? cfg.radius : 160;
-        const color = typeof cfg.color === 'number' ? cfg.color : 0xffffff;
+        const radius = Number.isFinite(cfg.radius) ? cfg.radius : 0;
+        const maskScale = Number.isFinite(cfg.maskScale) ? cfg.maskScale : 1;
         const intensity = Number.isFinite(cfg.intensity) ? cfg.intensity : 1;
 
-        const light = this.acquireWorldLight(
-            (target.x || 0) + offsetX,
-            (target.y || 0) + offsetY,
-            radius,
-            color,
-            intensity,
-        );
-        if (!light) return null;
-
-        if (!Array.isArray(this._lightBindings)) this._lightBindings = [];
         const binding = {
             target,
-            light,
             offsetX,
             offsetY,
+            radius,
+            maskScale,
+            intensity: Phaser.Math.Clamp(intensity, 0, 1),
+            active: intensity > 0 && radius > 0,
+            x: (target.x || 0) + offsetX,
+            y: (target.y || 0) + offsetY,
         };
+
         binding.destroyHandler = () => {
-            this.releaseWorldLight(light);
+            this.releaseWorldLight(binding);
         };
         if (typeof target.once === 'function') {
             target.once('destroy', binding.destroyHandler);
         }
+
         this._lightBindings.push(binding);
-        return light;
+        return binding;
     }
 
     _removeLightBinding(light) {
         if (!Array.isArray(this._lightBindings) || !light) return null;
         for (let i = this._lightBindings.length - 1; i >= 0; i--) {
             const binding = this._lightBindings[i];
-            if (!binding || binding.light !== light) continue;
+            if (!binding || binding !== light) continue;
             const target = binding.target;
             if (target && typeof target.off === 'function' && binding.destroyHandler) {
                 target.off('destroy', binding.destroyHandler);
@@ -1288,23 +1226,11 @@ export default class MainScene extends Phaser.Scene {
 
     releaseWorldLight(light) {
         if (!light) return false;
-        this._removeLightBinding(light);
-
-        if (Array.isArray(this._activeLights)) {
-            const idx = this._activeLights.indexOf(light);
-            if (idx !== -1) this._activeLights.splice(idx, 1);
-        } else {
-            this._activeLights = [];
+        const removed = this._removeLightBinding(light);
+        if (removed) {
+            removed.active = false;
         }
-
-        if (!Array.isArray(this._lightPool)) this._lightPool = [];
-        if (typeof light.setIntensity === 'function') light.setIntensity(0);
-        else light.intensity = 0;
-        light.visible = false;
-        if (this._lightPool.indexOf(light) === -1) {
-            this._lightPool.push(light);
-        }
-        return true;
+        return !!removed;
     }
 
     _updateAttachedLights() {
@@ -1315,20 +1241,15 @@ export default class MainScene extends Phaser.Scene {
                 this._lightBindings.splice(i, 1);
                 continue;
             }
-            const light = binding.light;
-            if (!light) {
-                this._lightBindings.splice(i, 1);
-                continue;
-            }
             const target = binding.target;
             if (!target || target.active === false || target.scene !== this) {
-                this.releaseWorldLight(light);
+                this.releaseWorldLight(binding);
                 continue;
             }
             const x = (target.x || 0) + (binding.offsetX || 0);
             const y = (target.y || 0) + (binding.offsetY || 0);
-            if (light.x !== x) light.x = x;
-            if (light.y !== y) light.y = y;
+            binding.x = x;
+            binding.y = y;
         }
     }
 
@@ -1360,35 +1281,23 @@ export default class MainScene extends Phaser.Scene {
 
         if (!light || !stateChanged) return;
 
-        const intensity = shouldGlow ? this._playerLightNightIntensity : 0;
-        if (typeof light.setIntensity === 'function') light.setIntensity(intensity);
-        else light.intensity = intensity;
-
         if (shouldGlow) {
-            const radius = this._playerLightNightRadius;
-            if (typeof light.setRadius === 'function') light.setRadius(radius);
-            else light.radius = radius;
+            const radius =
+                this.lightSettings?.player?.nightRadius ?? this._playerLightNightRadius;
+            const maskScale = this.lightSettings?.player?.maskScale ?? 1;
+            light.radius = radius;
+            light.maskScale = maskScale;
+            light.intensity = 1;
+            light.active = radius > 0;
+        } else {
+            light.intensity = 0;
+            light.active = false;
         }
-
-        light.visible = shouldGlow;
-    }
-
-    _computeNightOverlayMaskRadius() {
-        const baseRadius =
-            Number.isFinite(this._playerLightNightRadius) &&
-            this._playerLightNightRadius > 0
-                ? this._playerLightNightRadius
-                : 96;
-        const scaled = Math.floor(baseRadius * 0.85);
-        const minRadius = 24;
-        return scaled > minRadius ? scaled : minRadius;
     }
 
     _ensureNightOverlayMask() {
         const overlay = this.nightOverlay;
         if (!overlay) return null;
-
-        const desiredRadius = this._computeNightOverlayMaskRadius();
 
         let gfx = this.nightOverlayMaskGraphics;
         if (!gfx || !gfx.scene) {
@@ -1396,8 +1305,6 @@ export default class MainScene extends Phaser.Scene {
                 gfx.destroy();
             }
             gfx = this.make.graphics({ x: 0, y: 0, add: false });
-            gfx.fillStyle(0xffffff, 1);
-            gfx.fillCircle(0, 0, desiredRadius);
             this.nightOverlayMaskGraphics = gfx;
 
             const mask = gfx.createGeometryMask();
@@ -1406,28 +1313,91 @@ export default class MainScene extends Phaser.Scene {
             } else {
                 mask.inverse = true;
             }
+            if (typeof mask.setPosition === 'function') {
+                mask.setPosition(0, 0);
+            }
             this.nightOverlayMask = mask;
-            this._nightOverlayMaskRadius = desiredRadius;
             this._nightOverlayMaskEnabled = false;
             return mask;
         }
+        return this.nightOverlayMask;
+    }
 
-        if (this._nightOverlayMaskRadius !== desiredRadius) {
-            gfx.clear();
-            gfx.fillStyle(0xffffff, 1);
-            gfx.fillCircle(0, 0, desiredRadius);
-            this._nightOverlayMaskRadius = desiredRadius;
+    _collectActiveMaskLights() {
+        const scratch = Array.isArray(this._lightMaskScratch)
+            ? this._lightMaskScratch
+            : (this._lightMaskScratch = []);
+        scratch.length = 0;
+
+        if (!Array.isArray(this._lightBindings) || this._lightBindings.length === 0) {
+            return scratch;
         }
 
-        return this.nightOverlayMask;
+        for (let i = 0; i < this._lightBindings.length; i++) {
+            const binding = this._lightBindings[i];
+            if (!binding) continue;
+            if (!binding.active) continue;
+            if (!Number.isFinite(binding.radius) || binding.radius <= 0) continue;
+            scratch.push(binding);
+        }
+
+        return scratch;
+    }
+
+    _drawNightOverlayMask(lights) {
+        const gfx = this.nightOverlayMaskGraphics;
+        if (!gfx || !lights) return;
+
+        gfx.clear();
+        if (!Array.isArray(lights) || lights.length === 0) return;
+
+        if (gfx.x !== 0) gfx.x = 0;
+        if (gfx.y !== 0) gfx.y = 0;
+        gfx.fillStyle(0xffffff, 1);
+
+        const cam = this.cameras?.main;
+        const scrollX = cam?.scrollX || 0;
+        const scrollY = cam?.scrollY || 0;
+
+        for (let i = 0; i < lights.length; i++) {
+            const binding = lights[i];
+            if (!binding) continue;
+
+            const baseRadius = Number.isFinite(binding.radius) ? binding.radius : 0;
+            if (baseRadius <= 0) continue;
+
+            const maskScale = Number.isFinite(binding.maskScale) ? binding.maskScale : 1;
+            const scaledRadius = baseRadius * maskScale;
+            if (!Number.isFinite(scaledRadius) || scaledRadius <= 0) continue;
+
+            const intensity = Number.isFinite(binding.intensity) ? binding.intensity : 1;
+            if (intensity <= 0) continue;
+
+            const x = Number.isFinite(binding.x)
+                ? binding.x
+                : (binding.target?.x || 0) + (binding.offsetX || 0);
+            const y = Number.isFinite(binding.y)
+                ? binding.y
+                : (binding.target?.y || 0) + (binding.offsetY || 0);
+
+            const screenX = x - scrollX;
+            const screenY = y - scrollY;
+            if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) continue;
+
+            const finalRadius = scaledRadius * Phaser.Math.Clamp(intensity, 0, 1);
+            if (finalRadius <= 0) continue;
+
+            gfx.fillCircle(screenX, screenY, finalRadius);
+        }
     }
 
     _updateNightOverlayMask() {
         const overlay = this.nightOverlay;
         if (!overlay || typeof overlay.setMask !== 'function') return;
 
+        const lights = this._collectActiveMaskLights();
         const shouldEnable =
-            !!this._playerLightNightActive && (overlay.alpha || 0) > 0.001;
+            lights.length > 0 && !!this._playerLightNightActive && (overlay.alpha || 0) > 0.001;
 
         if (!shouldEnable) {
             if (
@@ -1437,6 +1407,9 @@ export default class MainScene extends Phaser.Scene {
                 overlay.clearMask(false);
             }
             this._nightOverlayMaskEnabled = false;
+            if (this.nightOverlayMaskGraphics) {
+                this.nightOverlayMaskGraphics.clear();
+            }
             return;
         }
 
@@ -1448,23 +1421,7 @@ export default class MainScene extends Phaser.Scene {
             this._nightOverlayMaskEnabled = true;
         }
 
-        const cam = this.cameras?.main;
-        const player = this.player;
-        let screenX = player?.x || 0;
-        let screenY = player?.y || 0;
-        if (cam) {
-            screenX -= cam.scrollX || 0;
-            screenY -= cam.scrollY || 0;
-        }
-
-        const gfx = this.nightOverlayMaskGraphics;
-        if (gfx) {
-            if (gfx.x !== screenX) gfx.x = screenX;
-            if (gfx.y !== screenY) gfx.y = screenY;
-        }
-        if (typeof mask.setPosition === 'function') {
-            mask.setPosition(screenX, screenY);
-        }
+        this._drawNightOverlayMask(lights);
     }
 
     _teardownNightOverlayMask() {
@@ -1489,14 +1446,15 @@ export default class MainScene extends Phaser.Scene {
             gfx.destroy();
         }
         this.nightOverlayMaskGraphics = null;
-        this._nightOverlayMaskRadius = 0;
     }
 
     _teardownLights() {
         if (Array.isArray(this._lightBindings)) {
             for (let i = this._lightBindings.length - 1; i >= 0; i--) {
                 const binding = this._lightBindings[i];
-                if (binding?.light) this.releaseWorldLight(binding.light);
+                if (binding) {
+                    this.releaseWorldLight(binding);
+                }
             }
             this._lightBindings.length = 0;
         } else {
@@ -1507,38 +1465,12 @@ export default class MainScene extends Phaser.Scene {
         this._playerLightNightActive = false;
         this._playerLightCachedRawSegment = null;
         this._playerLightCachedNormalizedSegment = '';
-
-        if (Array.isArray(this._activeLights) && this.lights?.removeLight) {
-            for (let i = this._activeLights.length - 1; i >= 0; i--) {
-                const light = this._activeLights[i];
-                if (light) this.lights.removeLight(light);
-            }
-        }
-        if (Array.isArray(this._lightPool) && this.lights?.removeLight) {
-            for (let i = this._lightPool.length - 1; i >= 0; i--) {
-                const pooled = this._lightPool[i];
-                if (pooled) this.lights.removeLight(pooled);
-            }
-        }
-
-        if (Array.isArray(this._activeLights)) this._activeLights.length = 0;
-        else this._activeLights = [];
-        if (Array.isArray(this._lightPool)) this._lightPool.length = 0;
-        else this._lightPool = [];
-
-        if (this.lights) {
-            if (typeof this.lights.setAmbientColor === 'function') {
-                const baseColor =
-                    typeof this._baseAmbientColor === 'number'
-                        ? this._baseAmbientColor
-                        : 0xffffff;
-                this.lights.setAmbientColor(baseColor);
-            }
-            if (typeof this.lights.disable === 'function') {
-                this.lights.disable();
-            }
-        }
         this._teardownNightOverlayMask();
+    }
+
+    updateNightAmbient(strength = 0) {
+        const value = Number.isFinite(strength) ? strength : 0;
+        this._midnightAmbientStrength = Phaser.Math.Clamp(value, 0, 1);
     }
 
     // ==========================
