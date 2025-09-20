@@ -24,6 +24,33 @@ const MAX_NIGHT_SEGMENT_INDEX = Math.max(
     Math.min(NIGHT_SEGMENTS.length - 1, SEGMENT_COUNT - 1),
 );
 
+function normalizeSegmentLabel(label) {
+    return typeof label === 'string' ? label.trim().toLowerCase() : '';
+}
+
+const MIDNIGHT_SEGMENT_INDEX = (() => {
+    for (let i = 0; i < NIGHT_SEGMENTS.length; i++) {
+        if (normalizeSegmentLabel(NIGHT_SEGMENTS[i]) === 'midnight') {
+            return i;
+        }
+    }
+    return -1;
+})();
+
+function lerpColorToBlack(baseColor, strength) {
+    const sanitizedColor = (baseColor | 0) & 0xffffff;
+    let t = strength;
+    if (!Number.isFinite(t)) t = 0;
+    if (t <= 0) return sanitizedColor;
+    if (t >= 1) return 0x000000;
+
+    const inv = 1 - t;
+    const r = Math.round(((sanitizedColor >> 16) & 0xff) * inv);
+    const g = Math.round(((sanitizedColor >> 8) & 0xff) * inv);
+    const b = Math.round((sanitizedColor & 0xff) * inv);
+    return (r << 16) | (g << 8) | b;
+}
+
 let nightWaveTimers = [];
 
 function clearNightWaveTimers() {
@@ -281,59 +308,149 @@ export default function createDayNightSystem(scene) {
     }
 
     // ----- Visuals & UI -----
-    let midnightForced = false;
+    let lastAmbientColor = -1;
 
     function updateNightOverlay() {
         const { transitionMs, nightOverlayAlpha } = WORLD_GEN.dayNight;
         const elapsed = getPhaseElapsed();
         const duration = getPhaseDuration();
 
+        const hasTransition = transitionMs > 0;
         let target = 0;
+        let midnightStrength = 0;
+
         if (scene.phase === 'day') {
-            if (elapsed >= duration - transitionMs) {
-                const t = (elapsed - (duration - transitionMs)) / transitionMs;
-                target = Phaser.Math.Linear(0, nightOverlayAlpha, t);
+            if (hasTransition && duration > 0) {
+                const transitionStart = Math.max(0, duration - transitionMs);
+                const transitionSpan = duration - transitionStart;
+                if (transitionSpan > 0 && elapsed >= transitionStart) {
+                    const t = Phaser.Math.Clamp(
+                        (elapsed - transitionStart) / transitionSpan,
+                        0,
+                        1,
+                    );
+                    target = Phaser.Math.Linear(0, nightOverlayAlpha, t);
+                }
             }
         } else if (scene.phase === 'night') {
-            if (elapsed >= duration - transitionMs) {
-                const t = (elapsed - (duration - transitionMs)) / transitionMs;
-                target = Phaser.Math.Linear(nightOverlayAlpha, 0, t);
+            if (hasTransition && duration > 0) {
+                const transitionStart = Math.max(0, duration - transitionMs);
+                const transitionSpan = duration - transitionStart;
+                if (transitionSpan > 0 && elapsed >= transitionStart) {
+                    const t = Phaser.Math.Clamp(
+                        (elapsed - transitionStart) / transitionSpan,
+                        0,
+                        1,
+                    );
+                    target = Phaser.Math.Linear(nightOverlayAlpha, 0, t);
+                } else {
+                    target = nightOverlayAlpha;
+                    midnightStrength = calculateMidnightStrength(
+                        elapsed,
+                        duration,
+                        transitionMs,
+                    );
+                    if (midnightStrength > 0) {
+                        target = Phaser.Math.Linear(
+                            nightOverlayAlpha,
+                            1,
+                            midnightStrength,
+                        );
+                    }
+                }
             } else {
                 target = nightOverlayAlpha;
+                midnightStrength = calculateMidnightStrength(
+                    elapsed,
+                    duration,
+                    transitionMs,
+                );
             }
         }
 
-        const overlay = scene.nightOverlay;
-        const canSetOverlay = overlay && typeof overlay.setAlpha === 'function';
-        const segmentLabel = getSegmentLabel();
-        const normalizedLabel =
-            typeof segmentLabel === 'string'
-                ? segmentLabel.trim().toLowerCase()
-                : '';
-        const isMidnightSegment =
-            scene.phase === 'night' && normalizedLabel === 'midnight';
+        target = Phaser.Math.Clamp(target, 0, 1);
 
-        if (isMidnightSegment) {
-            midnightForced = true;
-            if (canSetOverlay) overlay.setAlpha(1);
-            if (scene.lights?.setAmbientColor) {
-                scene.lights.setAmbientColor(0x000000);
-            }
+        const overlay = scene.nightOverlay;
+        if (overlay && typeof overlay.setAlpha === 'function') {
+            overlay.setAlpha(target);
+        }
+
+        applyMidnightAmbient(midnightStrength);
+    }
+
+    function applyMidnightAmbient(strength) {
+        const lights = scene.lights;
+        if (!lights || typeof lights.setAmbientColor !== 'function') {
+            lastAmbientColor = -1;
             return;
         }
 
-        if (midnightForced) {
-            midnightForced = false;
-            if (scene.lights?.setAmbientColor) {
-                const restoreColor =
-                    typeof scene._baseAmbientColor === 'number'
-                        ? scene._baseAmbientColor
-                        : 0xffffff;
-                scene.lights.setAmbientColor(restoreColor);
+        const baseColor =
+            typeof scene._baseAmbientColor === 'number'
+                ? scene._baseAmbientColor
+                : 0xffffff;
+        const targetColor = strength > 0 ? lerpColorToBlack(baseColor, strength) : baseColor;
+
+        if (targetColor !== lastAmbientColor) {
+            lights.setAmbientColor(targetColor);
+            lastAmbientColor = targetColor;
+        }
+    }
+
+    function calculateMidnightStrength(phaseElapsed, phaseDuration, transitionMs) {
+        if (transitionMs <= 0) return 0;
+        if (MIDNIGHT_SEGMENT_INDEX < 0) return 0;
+        if (MIDNIGHT_SEGMENT_INDEX >= SEGMENT_COUNT) return 0;
+        if (phaseDuration <= 0) return 0;
+
+        const perSegment = phaseDuration / SEGMENT_COUNT;
+        if (!Number.isFinite(perSegment) || perSegment <= 0) return 0;
+
+        const midnightStart = perSegment * MIDNIGHT_SEGMENT_INDEX;
+        const midnightEnd = perSegment * (MIDNIGHT_SEGMENT_INDEX + 1);
+
+        if (phaseElapsed <= midnightStart) return 0;
+        if (phaseElapsed >= midnightEnd) return 0;
+
+        const fadeInStart = midnightStart;
+        const fadeInEnd = Math.min(midnightStart + transitionMs, midnightEnd);
+        const fadeOutEnd = midnightEnd;
+        const fadeOutStart = Math.max(midnightEnd - transitionMs, midnightStart);
+
+        if (fadeInEnd <= fadeOutStart) {
+            if (phaseElapsed <= fadeInEnd) {
+                const denom = fadeInEnd - fadeInStart;
+                if (denom <= 0) return 1;
+                const t = (phaseElapsed - fadeInStart) / denom;
+                return Phaser.Math.Clamp(t, 0, 1);
             }
+            if (phaseElapsed < fadeOutStart) return 1;
+            if (phaseElapsed < fadeOutEnd) {
+                const denom = fadeOutEnd - fadeOutStart;
+                if (denom <= 0) return 0;
+                const t = (phaseElapsed - fadeOutStart) / denom;
+                const strength = 1 - t;
+                return Phaser.Math.Clamp(strength, 0, 1);
+            }
+            return 0;
         }
 
-        if (canSetOverlay) overlay.setAlpha(target);
+        const totalDuration = fadeOutEnd - fadeInStart;
+        if (totalDuration <= 0) return 0;
+        const halfPoint = fadeInStart + totalDuration * 0.5;
+
+        if (phaseElapsed <= halfPoint) {
+            const denom = halfPoint - fadeInStart;
+            if (denom <= 0) return 1;
+            const t = (phaseElapsed - fadeInStart) / denom;
+            return Phaser.Math.Clamp(t, 0, 1);
+        }
+
+        const denom = fadeOutEnd - halfPoint;
+        if (denom <= 0) return 0;
+        const t = (phaseElapsed - halfPoint) / denom;
+        const strength = 1 - t;
+        return Phaser.Math.Clamp(strength, 0, 1);
     }
 
     function updateTimeUi() {
