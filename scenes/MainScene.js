@@ -16,6 +16,8 @@ import { setBiomeSeed } from '../systems/world_gen/biomes/biomeMap.js';
 
 // Radius for the player's personal light at night (tweak-friendly).
 const PLAYER_NIGHT_LIGHT_RADIUS = 64;
+const NIGHT_MASK_DEFAULT_TILE_SIZE = 16;
+const NIGHT_MASK_DEFAULT_TILE_COUNT = 5;
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -64,6 +66,10 @@ export default class MainScene extends Phaser.Scene {
         this.lightSettings = {
             player: {
                 nightRadius: PLAYER_NIGHT_LIGHT_RADIUS,
+                baseRadius: PLAYER_NIGHT_LIGHT_RADIUS,
+                flickerAmplitude: 8,
+                flickerSpeed: 2.25,
+                upgradeMultiplier: 1,
                 maskScale: 0.9,
             },
         };
@@ -78,8 +84,14 @@ export default class MainScene extends Phaser.Scene {
         this._nightOverlayMaskEnabled = false;
         this._nightMaskTeardownHooked = false;
         this._boundNightMaskTeardown = null;
-        this._lightMaskScratch = [];
+        this._lightMaskScratch = {
+            lights: [],
+            gradientCache: Object.create(null),
+        };
         this._midnightAmbientStrength = 0;
+        this._playerLightUpgradeMultiplier = this.lightSettings.player.upgradeMultiplier;
+        this._playerLightFlickerPhase = Math.random() * Phaser.Math.PI2;
+        this._playerLightFlickerPhaseAlt = Math.random() * Phaser.Math.PI2;
     }
 
     preload() {
@@ -161,10 +173,12 @@ export default class MainScene extends Phaser.Scene {
             .setCollideWorldBounds(false);
 
         this._initLighting();
+        const playerLightSettings = this.lightSettings.player;
         this.playerLight = this.attachLightToObject(this.player, {
-            radius: this.lightSettings.player.nightRadius,
+            radius:
+                playerLightSettings.baseRadius ?? playerLightSettings.nightRadius,
             intensity: 0,
-            maskScale: this.lightSettings.player.maskScale,
+            maskScale: playerLightSettings.maskScale,
         });
         if (this.playerLight) {
             this.playerLight.active = false;
@@ -1164,13 +1178,72 @@ export default class MainScene extends Phaser.Scene {
     // ==========================
     _initLighting() {
         if (!Array.isArray(this._lightBindings)) this._lightBindings = [];
-        if (!Array.isArray(this._lightMaskScratch)) this._lightMaskScratch = [];
-        const playerRadius = this.lightSettings?.player?.nightRadius;
-        if (Number.isFinite(playerRadius) && playerRadius > 0) {
-            this._playerLightNightRadius = playerRadius;
-        } else {
-            this._playerLightNightRadius = PLAYER_NIGHT_LIGHT_RADIUS;
+        this._ensureLightMaskScratch();
+        const playerSettings = this.lightSettings?.player;
+        let baseRadius = playerSettings?.baseRadius;
+        if (!Number.isFinite(baseRadius) || baseRadius <= 0) {
+            baseRadius = playerSettings?.nightRadius;
         }
+        if (!Number.isFinite(baseRadius) || baseRadius <= 0) {
+            baseRadius = PLAYER_NIGHT_LIGHT_RADIUS;
+        }
+        this._playerLightNightRadius = baseRadius;
+        if (playerSettings) {
+            playerSettings.baseRadius = baseRadius;
+            if (!Number.isFinite(playerSettings.nightRadius) || playerSettings.nightRadius <= 0) {
+                playerSettings.nightRadius = baseRadius;
+            }
+            if (!Number.isFinite(playerSettings.flickerAmplitude)) {
+                playerSettings.flickerAmplitude = 0;
+            } else if (playerSettings.flickerAmplitude < 0) {
+                playerSettings.flickerAmplitude = 0;
+            }
+            if (!Number.isFinite(playerSettings.flickerSpeed)) {
+                playerSettings.flickerSpeed = 0;
+            } else if (playerSettings.flickerSpeed < 0) {
+                playerSettings.flickerSpeed = 0;
+            }
+            if (!Number.isFinite(playerSettings.upgradeMultiplier)) {
+                playerSettings.upgradeMultiplier = 1;
+            } else if (playerSettings.upgradeMultiplier < 0) {
+                playerSettings.upgradeMultiplier = 0;
+            }
+            this._playerLightUpgradeMultiplier = playerSettings.upgradeMultiplier;
+        } else {
+            this._playerLightUpgradeMultiplier = 1;
+        }
+    }
+
+    getPlayerLightUpgradeMultiplier() {
+        return this._playerLightUpgradeMultiplier;
+    }
+
+    setPlayerLightUpgradeMultiplier(multiplier = 1) {
+        const settings = this.lightSettings?.player;
+        let sanitized = Number.isFinite(multiplier) ? multiplier : 1;
+        if (sanitized < 0) sanitized = 0;
+        if (settings && settings.upgradeMultiplier !== sanitized) {
+            settings.upgradeMultiplier = sanitized;
+        }
+        this._playerLightUpgradeMultiplier = sanitized;
+        return this._playerLightUpgradeMultiplier;
+    }
+
+    bumpPlayerLightUpgradeMultiplier(multiplier = 1) {
+        if (!Number.isFinite(multiplier)) {
+            return this._playerLightUpgradeMultiplier;
+        }
+        let sanitized = multiplier;
+        if (sanitized < 0) sanitized = 0;
+        if (sanitized === 1) {
+            return this._playerLightUpgradeMultiplier;
+        }
+        const current = this._playerLightUpgradeMultiplier;
+        return this.setPlayerLightUpgradeMultiplier(current * sanitized);
+    }
+
+    resetPlayerLightUpgradeMultiplier() {
+        return this.setPlayerLightUpgradeMultiplier(1);
     }
 
     applyLightPipeline(gameObject, options = null) {
@@ -1186,6 +1259,12 @@ export default class MainScene extends Phaser.Scene {
         const radius = Number.isFinite(cfg.radius) ? cfg.radius : 0;
         const maskScale = Number.isFinite(cfg.maskScale) ? cfg.maskScale : 1;
         const intensity = Number.isFinite(cfg.intensity) ? cfg.intensity : 1;
+        const maskTileSize = Number.isFinite(cfg.maskTileSize)
+            ? Phaser.Math.Clamp(cfg.maskTileSize, 1, 1024)
+            : null;
+        const maskTileCount = Number.isFinite(cfg.maskTileCount)
+            ? Phaser.Math.Clamp(Math.round(cfg.maskTileCount), 1, 32)
+            : null;
 
         const binding = {
             target,
@@ -1194,6 +1273,8 @@ export default class MainScene extends Phaser.Scene {
             radius,
             maskScale,
             intensity: Phaser.Math.Clamp(intensity, 0, 1),
+            maskTileSize,
+            maskTileCount,
             active: intensity > 0 && radius > 0,
             x: (target.x || 0) + offsetX,
             y: (target.y || 0) + offsetY,
@@ -1348,14 +1429,32 @@ export default class MainScene extends Phaser.Scene {
         return this.nightOverlayMask;
     }
 
+    _ensureLightMaskScratch() {
+        let scratch = this._lightMaskScratch;
+        if (!scratch || typeof scratch !== 'object' || Array.isArray(scratch)) {
+            scratch = {
+                lights: [],
+                gradientCache: Object.create(null),
+            };
+            this._lightMaskScratch = scratch;
+            return scratch;
+        }
+        if (!Array.isArray(scratch.lights)) {
+            scratch.lights = [];
+        }
+        if (!scratch.gradientCache) {
+            scratch.gradientCache = Object.create(null);
+        }
+        return scratch;
+    }
+
     _collectActiveMaskLights() {
-        const scratch = Array.isArray(this._lightMaskScratch)
-            ? this._lightMaskScratch
-            : (this._lightMaskScratch = []);
-        scratch.length = 0;
+        const scratch = this._ensureLightMaskScratch();
+        const lights = scratch.lights;
+        lights.length = 0;
 
         if (!Array.isArray(this._lightBindings) || this._lightBindings.length === 0) {
-            return scratch;
+            return lights;
         }
 
         for (let i = 0; i < this._lightBindings.length; i++) {
@@ -1363,10 +1462,70 @@ export default class MainScene extends Phaser.Scene {
             if (!binding) continue;
             if (!binding.active) continue;
             if (!Number.isFinite(binding.radius) || binding.radius <= 0) continue;
-            scratch.push(binding);
+            lights.push(binding);
         }
 
-        return scratch;
+        return lights;
+    }
+
+    _getLightMaskGradientDefinition(binding) {
+        const scratch = this._ensureLightMaskScratch();
+        let cache = scratch.gradientCache;
+        if (!cache) {
+            cache = scratch.gradientCache = Object.create(null);
+        }
+
+        const tileSizeSource = Number.isFinite(binding?.maskTileSize)
+            ? binding.maskTileSize
+            : NIGHT_MASK_DEFAULT_TILE_SIZE;
+        const tileSize = Phaser.Math.Clamp(tileSizeSource, 1, 1024);
+
+        const tileCountSource = Number.isFinite(binding?.maskTileCount)
+            ? Math.round(binding.maskTileCount)
+            : NIGHT_MASK_DEFAULT_TILE_COUNT;
+        const tileCount = Phaser.Math.Clamp(tileCountSource, 1, 32);
+
+        const cacheKey = `${tileSize}|${tileCount}`;
+        if (cache[cacheKey]) {
+            return cache[cacheKey];
+        }
+
+        const definition = this._buildLightMaskGradient(tileSize, tileCount);
+        cache[cacheKey] = definition;
+        return definition;
+    }
+
+    _buildLightMaskGradient(tileSize, tileCount) {
+        const layers = new Array(tileCount);
+        for (let ring = 0; ring < tileCount; ring++) {
+            const offsets = [];
+            if (ring === 0) {
+                offsets.push(0, 0);
+            } else {
+                for (let dx = -ring; dx <= ring; dx++) {
+                    for (let dy = -ring; dy <= ring; dy++) {
+                        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+                        offsets.push(dx, dy);
+                    }
+                }
+            }
+
+            const normalized = tileCount <= 1 ? 0 : ring / (tileCount - 1);
+            const alpha = Phaser.Math.Linear(1, 0.1, normalized);
+
+            layers[ring] = {
+                alpha: Phaser.Math.Clamp(alpha, 0, 1),
+                offsets,
+            };
+        }
+
+        const baseRadius = Math.max(tileSize * 0.5, (tileCount - 0.5) * tileSize);
+        return {
+            tileSize,
+            ringCount: tileCount,
+            baseRadius,
+            layers,
+        };
     }
 
     _drawNightOverlayMask(lights) {
@@ -1378,7 +1537,6 @@ export default class MainScene extends Phaser.Scene {
 
         if (gfx.x !== 0) gfx.x = 0;
         if (gfx.y !== 0) gfx.y = 0;
-        gfx.fillStyle(0xffffff, 1);
 
         const cam = this.cameras?.main;
         const scrollX = cam?.scrollX || 0;
@@ -1388,11 +1546,11 @@ export default class MainScene extends Phaser.Scene {
             const binding = lights[i];
             if (!binding) continue;
 
-            const baseRadius = Number.isFinite(binding.radius) ? binding.radius : 0;
-            if (baseRadius <= 0) continue;
+            const rawRadius = Number.isFinite(binding.radius) ? binding.radius : 0;
+            if (rawRadius <= 0) continue;
 
             const maskScale = Number.isFinite(binding.maskScale) ? binding.maskScale : 1;
-            const scaledRadius = baseRadius * maskScale;
+            const scaledRadius = rawRadius * maskScale;
             if (!Number.isFinite(scaledRadius) || scaledRadius <= 0) continue;
 
             const intensity = Number.isFinite(binding.intensity) ? binding.intensity : 1;
@@ -1412,7 +1570,44 @@ export default class MainScene extends Phaser.Scene {
             const finalRadius = scaledRadius * Phaser.Math.Clamp(intensity, 0, 1);
             if (finalRadius <= 0) continue;
 
-            gfx.fillCircle(screenX, screenY, finalRadius);
+            const gradient = this._getLightMaskGradientDefinition(binding);
+            if (!gradient) continue;
+
+            const gradientRadius = Number.isFinite(gradient.baseRadius)
+                ? gradient.baseRadius
+                : 0;
+            if (!(gradientRadius > 0)) continue;
+
+            const scale = finalRadius / gradientRadius;
+            if (!Number.isFinite(scale) || scale <= 0) continue;
+
+            const tileSize = gradient.tileSize * scale;
+            if (!Number.isFinite(tileSize) || tileSize <= 0) continue;
+
+            const halfTile = tileSize * 0.5;
+            const layers = gradient.layers;
+            if (!Array.isArray(layers) || layers.length === 0) continue;
+
+            for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+                const layer = layers[layerIndex];
+                if (!layer) continue;
+
+                const layerAlpha = Phaser.Math.Clamp(layer.alpha || 0, 0, 1);
+                if (!(layerAlpha > 0)) continue;
+
+                const offsets = layer.offsets;
+                if (!Array.isArray(offsets) || offsets.length === 0) continue;
+
+                gfx.fillStyle(0xffffff, layerAlpha);
+
+                for (let j = 0; j < offsets.length; j += 2) {
+                    const offsetX = offsets[j] * tileSize;
+                    const offsetY = offsets[j + 1] * tileSize;
+                    const rectX = screenX + offsetX - halfTile;
+                    const rectY = screenY + offsetY - halfTile;
+                    gfx.fillRect(rectX, rectY, tileSize, tileSize);
+                }
+            }
         }
     }
 
