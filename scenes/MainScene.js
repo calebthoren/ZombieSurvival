@@ -16,6 +16,8 @@ import { setBiomeSeed } from '../systems/world_gen/biomes/biomeMap.js';
 
 // Radius for the player's personal light at night (tweak-friendly).
 const PLAYER_NIGHT_LIGHT_RADIUS = 64;
+const PLAYER_LIGHT_FLICKER_AMPLITUDE = 6;
+const PLAYER_LIGHT_FLICKER_SPEED = 0.002;
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -63,11 +65,19 @@ export default class MainScene extends Phaser.Scene {
         this._lightBindings = [];
         this.lightSettings = {
             player: {
+                baseRadius: PLAYER_NIGHT_LIGHT_RADIUS,
                 nightRadius: PLAYER_NIGHT_LIGHT_RADIUS,
                 maskScale: 0.9,
+                flickerAmplitude: PLAYER_LIGHT_FLICKER_AMPLITUDE,
+                flickerSpeed: PLAYER_LIGHT_FLICKER_SPEED,
+                upgradeMultiplier: 1,
             },
         };
-        this._playerLightNightRadius = this.lightSettings.player.nightRadius;
+        this._playerLightNightRadius = this.lightSettings.player.baseRadius;
+        this._playerLightUpgradeMultiplier = this.lightSettings.player.upgradeMultiplier;
+        this._playerLightFlickerOffsetA = Math.random() * Math.PI * 2;
+        this._playerLightFlickerOffsetB = Math.random() * Math.PI * 2;
+        this._playerLightLastRadius = Number.NaN;
         this._lightsTeardownHooked = false;
         this._boundLightTeardown = null;
         this._playerLightNightActive = false;
@@ -1165,12 +1175,36 @@ export default class MainScene extends Phaser.Scene {
     _initLighting() {
         if (!Array.isArray(this._lightBindings)) this._lightBindings = [];
         if (!Array.isArray(this._lightMaskScratch)) this._lightMaskScratch = [];
-        const playerRadius = this.lightSettings?.player?.nightRadius;
-        if (Number.isFinite(playerRadius) && playerRadius > 0) {
-            this._playerLightNightRadius = playerRadius;
+        const playerSettings = this.lightSettings?.player;
+        let baseRadius = PLAYER_NIGHT_LIGHT_RADIUS;
+        if (playerSettings) {
+            if (Number.isFinite(playerSettings.baseRadius) && playerSettings.baseRadius > 0) {
+                baseRadius = playerSettings.baseRadius;
+            } else if (
+                Number.isFinite(playerSettings.nightRadius) &&
+                playerSettings.nightRadius > 0
+            ) {
+                baseRadius = playerSettings.nightRadius;
+            }
+            if (playerSettings.baseRadius !== baseRadius) {
+                playerSettings.baseRadius = baseRadius;
+            }
+            if (playerSettings.nightRadius !== baseRadius) {
+                playerSettings.nightRadius = baseRadius;
+            }
+            let upgradeMult = playerSettings.upgradeMultiplier;
+            if (!Number.isFinite(upgradeMult) || upgradeMult < 0) {
+                upgradeMult = 1;
+            }
+            if (playerSettings.upgradeMultiplier !== upgradeMult) {
+                playerSettings.upgradeMultiplier = upgradeMult;
+            }
+            this._playerLightUpgradeMultiplier = upgradeMult;
         } else {
-            this._playerLightNightRadius = PLAYER_NIGHT_LIGHT_RADIUS;
+            this._playerLightUpgradeMultiplier = 1;
         }
+        this._playerLightNightRadius = baseRadius;
+        this._playerLightLastRadius = Number.NaN;
     }
 
     applyLightPipeline(gameObject, options = null) {
@@ -1280,20 +1314,149 @@ export default class MainScene extends Phaser.Scene {
             this._playerLightNightActive = shouldGlow;
         }
 
-        if (!light || !stateChanged) return;
+        if (!light) return;
 
-        if (shouldGlow) {
-            const radius =
-                this.lightSettings?.player?.nightRadius ?? this._playerLightNightRadius;
-            const maskScale = this.lightSettings?.player?.maskScale ?? 1;
-            light.radius = radius;
-            light.maskScale = maskScale;
-            light.intensity = 1;
-            light.active = radius > 0;
-        } else {
-            light.intensity = 0;
-            light.active = false;
+        if (!shouldGlow) {
+            if (stateChanged) {
+                if (light.intensity !== 0) {
+                    light.intensity = 0;
+                }
+                if (light.active !== false) {
+                    light.active = false;
+                }
+            }
+            return;
         }
+
+        const settings = this.lightSettings ? this.lightSettings.player : null;
+
+        let baseRadius = this._playerLightNightRadius;
+        if (settings) {
+            let configuredBase = settings.baseRadius;
+            if (!Number.isFinite(configuredBase) || configuredBase <= 0) {
+                configuredBase = settings.nightRadius;
+            }
+            if (!Number.isFinite(configuredBase) || configuredBase <= 0) {
+                configuredBase = PLAYER_NIGHT_LIGHT_RADIUS;
+            }
+            baseRadius = configuredBase;
+            if (settings.baseRadius !== configuredBase) {
+                settings.baseRadius = configuredBase;
+            }
+            if (settings.nightRadius !== configuredBase) {
+                settings.nightRadius = configuredBase;
+            }
+        } else if (!Number.isFinite(baseRadius) || baseRadius <= 0) {
+            baseRadius = PLAYER_NIGHT_LIGHT_RADIUS;
+        }
+        if (this._playerLightNightRadius !== baseRadius) {
+            this._playerLightNightRadius = baseRadius;
+            this._playerLightLastRadius = Number.NaN;
+        }
+
+        let upgradeMultiplier = this._playerLightUpgradeMultiplier;
+        if (settings) {
+            const cfgMultiplier = settings.upgradeMultiplier;
+            if (Number.isFinite(cfgMultiplier) && cfgMultiplier >= 0) {
+                upgradeMultiplier = cfgMultiplier;
+            } else {
+                upgradeMultiplier = 1;
+            }
+        } else if (!Number.isFinite(upgradeMultiplier) || upgradeMultiplier < 0) {
+            upgradeMultiplier = 1;
+        }
+        if (!Number.isFinite(upgradeMultiplier) || upgradeMultiplier < 0) {
+            upgradeMultiplier = 0;
+        }
+        if (settings && settings.upgradeMultiplier !== upgradeMultiplier) {
+            settings.upgradeMultiplier = upgradeMultiplier;
+        }
+        if (this._playerLightUpgradeMultiplier !== upgradeMultiplier) {
+            this._playerLightUpgradeMultiplier = upgradeMultiplier;
+            this._playerLightLastRadius = Number.NaN;
+        }
+
+        let flickerAmplitude = 0;
+        let flickerSpeed = 0;
+        if (settings) {
+            if (Number.isFinite(settings.flickerAmplitude)) {
+                flickerAmplitude = Math.abs(settings.flickerAmplitude);
+            }
+            if (Number.isFinite(settings.flickerSpeed)) {
+                flickerSpeed = Math.abs(settings.flickerSpeed);
+            }
+        }
+
+        let radius = baseRadius;
+        if (flickerAmplitude > 0 && flickerSpeed > 0) {
+            const now = this.time?.now || 0;
+            const phase = now * flickerSpeed;
+            const offsetA = this._playerLightFlickerOffsetA || 0;
+            const offsetB = this._playerLightFlickerOffsetB || 0;
+            const waveA = Math.sin(phase + offsetA);
+            const waveB = Math.sin(phase * 0.37 + offsetB);
+            const flicker = (waveA + waveB) * 0.5 * flickerAmplitude;
+            radius += flicker;
+        }
+
+        radius *= upgradeMultiplier;
+        if (!Number.isFinite(radius) || radius < 0) {
+            radius = 0;
+        }
+
+        const lastRadius = this._playerLightLastRadius;
+        if (
+            !Number.isFinite(lastRadius) ||
+            Math.abs(radius - lastRadius) >= 0.01
+        ) {
+            light.radius = radius;
+            this._playerLightLastRadius = radius;
+        }
+
+        const maskScale =
+            settings && Number.isFinite(settings.maskScale)
+                ? settings.maskScale
+                : 1;
+        if (light.maskScale !== maskScale) {
+            light.maskScale = maskScale;
+        }
+
+        if (light.intensity !== 1) {
+            light.intensity = 1;
+        }
+        const active = radius > 0;
+        if (light.active !== active) {
+            light.active = active;
+        }
+    }
+
+    setPlayerLightUpgradeMultiplier(multiplier) {
+        const settings = this.lightSettings ? this.lightSettings.player : null;
+        let sanitized = Number.isFinite(multiplier) ? multiplier : 1;
+        if (sanitized < 0) {
+            sanitized = 0;
+        }
+        const current = this._playerLightUpgradeMultiplier;
+        if (sanitized !== current) {
+            this._playerLightUpgradeMultiplier = sanitized;
+            this._playerLightLastRadius = Number.NaN;
+        }
+        if (settings && settings.upgradeMultiplier !== sanitized) {
+            settings.upgradeMultiplier = sanitized;
+        }
+        return this._playerLightUpgradeMultiplier;
+    }
+
+    multiplyPlayerLightUpgradeMultiplier(multiplier) {
+        if (!Number.isFinite(multiplier)) {
+            return this._playerLightUpgradeMultiplier;
+        }
+        const next = Math.max(0, this._playerLightUpgradeMultiplier * multiplier);
+        return this.setPlayerLightUpgradeMultiplier(next);
+    }
+
+    resetPlayerLightUpgradeMultiplier() {
+        return this.setPlayerLightUpgradeMultiplier(1);
     }
 
     _ensureNightOverlayMask() {
