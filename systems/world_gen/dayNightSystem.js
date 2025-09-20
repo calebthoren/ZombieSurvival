@@ -468,9 +468,12 @@ export default function createDayNightSystem(scene) {
 
     // ----- Tick -----
     function tick(delta) {
-        const scale = DevTools.cheats.timeScale || 1;
+        const cheatScaleRaw = DevTools?.cheats?.timeScale;
+        let cheatScale =
+            typeof cheatScaleRaw === 'number' ? cheatScaleRaw : 1;
+        if (cheatScale < 0) cheatScale = 0;
         scene._phaseElapsedMs =
-            (scene._phaseElapsedMs || 0) + ((delta * scale) | 0);
+            (scene._phaseElapsedMs || 0) + ((delta * cheatScale) | 0);
         let phaseElapsed = getPhaseElapsed();
         let phaseDuration = getPhaseDuration();
         if (phaseElapsed >= phaseDuration) {
