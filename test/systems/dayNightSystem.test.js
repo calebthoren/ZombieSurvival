@@ -66,6 +66,50 @@ test('tick scales day-night progression with time scale', () => {
     events.emitShutdown();
 });
 
+test('noDarkness cheat suppresses night overlay and ambient', () => {
+    const events = createEventStub();
+    const overlay = { alpha: 0, setAlpha(v) { this.alpha = v; } };
+    let ambient = -1;
+    const scene = {
+        phase: 'night',
+        dayIndex: 1,
+        nightOverlay: overlay,
+        events,
+        time: {
+            addEvent() { return { remove() {} }; },
+            delayedCall() { return { remove() {} }; },
+        },
+        combat: {
+            getEligibleZombieTypesForPhase() { return ['basic']; },
+            pickZombieTypeWeighted() { return 'basic'; },
+            spawnZombie() {},
+        },
+        updateNightAmbient(value) {
+            ambient = value;
+        },
+    };
+
+    const system = createDayNightSystem(scene);
+    scene._phaseElapsedMs = 60_000;
+
+    DevTools.cheats.noDarkness = false;
+    system.updateNightOverlay();
+    assert.ok(overlay.alpha > 0.5);
+    assert.ok(ambient > 0.5);
+
+    DevTools.cheats.noDarkness = true;
+    system.updateNightOverlay();
+    assert.equal(overlay.alpha, 0);
+    assert.equal(ambient, 0);
+
+    DevTools.cheats.noDarkness = false;
+    system.updateNightOverlay();
+    assert.ok(overlay.alpha > 0.5);
+    assert.ok(ambient > 0.5);
+
+    events.emitShutdown();
+});
+
 test('scheduleNightWave queues timers within each night segment', () => {
     const events = createEventStub();
     const scheduledDelays = [];

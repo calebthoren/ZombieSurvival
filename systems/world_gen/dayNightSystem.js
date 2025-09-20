@@ -356,6 +356,11 @@ export default function createDayNightSystem(scene) {
 
         target = Phaser.Math.Clamp(target, 0, 1);
 
+        if (DevTools?.cheats?.noDarkness) {
+            target = 0;
+            midnightStrength = 0;
+        }
+
         const overlay = scene.nightOverlay;
         if (overlay && typeof overlay.setAlpha === 'function') {
             overlay.setAlpha(target);

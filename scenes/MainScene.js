@@ -432,6 +432,7 @@ export default class MainScene extends Phaser.Scene {
         // --- DevTools integration ---
         // Apply current hitbox cheat right away (responds to future toggles too)
         DevTools.applyHitboxCheat(this);
+        DevTools.setNoDarkness(DevTools.cheats.noDarkness, this);
         DevTools.applyTimeScale(this);
 
         // Listen for dev spawn events

@@ -25,6 +25,7 @@ const DevTools = {
         noAmmo:       false,
         noStamina:    false,
         noCooldown:   false,
+        noDarkness:   false,
 
         // Debug overlays
         chunkDetails:    false,
@@ -60,6 +61,7 @@ const DevTools = {
     _lastFastDraw: 0,
     _lastSlowDraw: 0,
     _lastScene: null,
+    _noDarknessScene: null,
 
     // Chunk grid & performance HUD
     _chunkGfx: null,
@@ -108,6 +110,7 @@ const DevTools = {
         this.cheats.noAmmo         = false;
         this.cheats.noStamina      = false;
         this.cheats.noCooldown     = false;
+        this.cheats.noDarkness     = false;
         this.cheats.chunkDetails   = false;
         this.cheats.performanceHud = false;
         this.cheats.meleeSliceBatch = 1;
@@ -120,6 +123,13 @@ const DevTools = {
         try { this.applyHitboxCheat(scene || this._lastScene); } catch {}
         // Reset global game speed
         try { this.setTimeScale(1, (scene || this._lastScene)?.game); } catch {}
+        // Restore default night overlay state
+        try {
+            this.setNoDarkness(false, scene || this._noDarknessScene);
+        } catch {}
+        if (!scene) {
+            this._noDarknessScene = null;
+        }
     },
 
     // Public API: change between 1 or 2 slices per tick at runtime
@@ -234,6 +244,22 @@ const DevTools = {
         this.cheats.performanceHud = !!value;
         if (value) this._startPerformanceHud(scene);
         else this._stopPerformanceHud();
+    },
+
+    setNoDarkness(value, scene) {
+        this.cheats.noDarkness = !!value;
+        if (scene) {
+            this._noDarknessScene = scene;
+        }
+        const target = scene || this._noDarknessScene;
+        if (!target) return;
+        try {
+            if (typeof target.updateNightOverlay === 'function') {
+                target.updateNightOverlay();
+            } else if (target.dayNight && typeof target.dayNight.updateNightOverlay === 'function') {
+                target.dayNight.updateNightOverlay();
+            }
+        } catch {}
     },
 
     _overlayBaseY(scene) {

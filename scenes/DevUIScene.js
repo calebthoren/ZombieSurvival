@@ -182,6 +182,7 @@ export default class DevUIScene extends Phaser.Scene {
         y = this._rowToggle('Infinite Ammo',   () => DevTools.cheats.noAmmo,       v => DevTools.cheats.noAmmo = v, y);
         y = this._rowToggle('Chunk Details',   () => DevTools.cheats.chunkDetails, v => DevTools.setChunkDetails(v, main), y);
         y = this._rowToggle('Performance HUD', () => DevTools.cheats.performanceHud, v => DevTools.setPerformanceHud(v, main), y);
+        y = this._rowToggle('No Darkness',     () => DevTools.cheats.noDarkness,   v => DevTools.setNoDarkness(v, main), y);
 
         y = this._sectionTitle('Spawners', y);
         y = this._enemySpawnerRow(y);
@@ -213,6 +214,7 @@ export default class DevUIScene extends Phaser.Scene {
         DevTools.applyHitboxCheat(main);
         DevTools.setChunkDetails(DevTools.cheats.chunkDetails, main);
         DevTools.setPerformanceHud(DevTools.cheats.performanceHud, main);
+        DevTools.setNoDarkness(DevTools.cheats.noDarkness, main);
         DevTools.applyTimeScale(this);
     }
 
