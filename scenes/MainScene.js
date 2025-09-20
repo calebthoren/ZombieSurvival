@@ -68,6 +68,12 @@ export default class MainScene extends Phaser.Scene {
         this._playerLightNightActive = false;
         this._playerLightCachedRawSegment = null;
         this._playerLightCachedNormalizedSegment = '';
+        this.nightOverlayMaskGraphics = null;
+        this.nightOverlayMask = null;
+        this._nightOverlayMaskEnabled = false;
+        this._nightOverlayMaskRadius = 0;
+        this._nightMaskTeardownHooked = false;
+        this._boundNightMaskTeardown = null;
     }
 
     preload() {
@@ -400,6 +406,22 @@ export default class MainScene extends Phaser.Scene {
             // Render above all world sprites so night affects trees/rocks
             .setDepth(10000)
             .setAlpha(0);
+
+        this._ensureNightOverlayMask();
+
+        if (!this._boundNightMaskTeardown) {
+            this._boundNightMaskTeardown = () => {
+                if (!this._nightMaskTeardownHooked) return;
+                this._nightMaskTeardownHooked = false;
+                this._teardownNightOverlayMask();
+                this._boundNightMaskTeardown = null;
+            };
+        }
+        if (!this._nightMaskTeardownHooked) {
+            this._nightMaskTeardownHooked = true;
+            this.events.once(Phaser.Scenes.Events.SHUTDOWN, this._boundNightMaskTeardown);
+            this.events.once(Phaser.Scenes.Events.DESTROY, this._boundNightMaskTeardown);
+        }
 
         // --- DevTools integration ---
         // Apply current hitbox cheat right away (responds to future toggles too)
@@ -756,6 +778,7 @@ export default class MainScene extends Phaser.Scene {
         this.dayNight.tick(delta);
         this._updateAttachedLights();
         this._updatePlayerLightGlow();
+        this._updateNightOverlayMask();
 
         const w = WORLD_GEN.world.width;
         const h = WORLD_GEN.world.height;
@@ -1329,6 +1352,125 @@ export default class MainScene extends Phaser.Scene {
         light.visible = shouldGlow;
     }
 
+    _computeNightOverlayMaskRadius() {
+        const baseRadius =
+            Number.isFinite(this._playerLightNightRadius) &&
+            this._playerLightNightRadius > 0
+                ? this._playerLightNightRadius
+                : 96;
+        const scaled = Math.floor(baseRadius * 0.85);
+        const minRadius = 24;
+        return scaled > minRadius ? scaled : minRadius;
+    }
+
+    _ensureNightOverlayMask() {
+        const overlay = this.nightOverlay;
+        if (!overlay) return null;
+
+        const desiredRadius = this._computeNightOverlayMaskRadius();
+
+        let gfx = this.nightOverlayMaskGraphics;
+        if (!gfx || !gfx.scene) {
+            if (gfx?.destroy) {
+                gfx.destroy();
+            }
+            gfx = this.make.graphics({ x: 0, y: 0, add: false });
+            gfx.fillStyle(0xffffff, 1);
+            gfx.fillCircle(0, 0, desiredRadius);
+            this.nightOverlayMaskGraphics = gfx;
+
+            const mask = gfx.createGeometryMask();
+            if (typeof mask.setInvertAlpha === 'function') {
+                mask.setInvertAlpha(true);
+            } else {
+                mask.inverse = true;
+            }
+            this.nightOverlayMask = mask;
+            this._nightOverlayMaskRadius = desiredRadius;
+            this._nightOverlayMaskEnabled = false;
+            return mask;
+        }
+
+        if (this._nightOverlayMaskRadius !== desiredRadius) {
+            gfx.clear();
+            gfx.fillStyle(0xffffff, 1);
+            gfx.fillCircle(0, 0, desiredRadius);
+            this._nightOverlayMaskRadius = desiredRadius;
+        }
+
+        return this.nightOverlayMask;
+    }
+
+    _updateNightOverlayMask() {
+        const overlay = this.nightOverlay;
+        if (!overlay || typeof overlay.setMask !== 'function') return;
+
+        const shouldEnable =
+            !!this._playerLightNightActive && (overlay.alpha || 0) > 0.001;
+
+        if (!shouldEnable) {
+            if (
+                this._nightOverlayMaskEnabled &&
+                typeof overlay.clearMask === 'function'
+            ) {
+                overlay.clearMask(false);
+            }
+            this._nightOverlayMaskEnabled = false;
+            return;
+        }
+
+        const mask = this._ensureNightOverlayMask();
+        if (!mask) return;
+
+        if (!this._nightOverlayMaskEnabled) {
+            overlay.setMask(mask);
+            this._nightOverlayMaskEnabled = true;
+        }
+
+        const cam = this.cameras?.main;
+        const player = this.player;
+        let screenX = player?.x || 0;
+        let screenY = player?.y || 0;
+        if (cam) {
+            screenX -= cam.scrollX || 0;
+            screenY -= cam.scrollY || 0;
+        }
+
+        const gfx = this.nightOverlayMaskGraphics;
+        if (gfx) {
+            if (gfx.x !== screenX) gfx.x = screenX;
+            if (gfx.y !== screenY) gfx.y = screenY;
+        }
+        if (typeof mask.setPosition === 'function') {
+            mask.setPosition(screenX, screenY);
+        }
+    }
+
+    _teardownNightOverlayMask() {
+        const overlay = this.nightOverlay;
+        if (
+            overlay &&
+            typeof overlay.clearMask === 'function' &&
+            this._nightOverlayMaskEnabled
+        ) {
+            overlay.clearMask(false);
+        }
+        this._nightOverlayMaskEnabled = false;
+
+        const mask = this.nightOverlayMask;
+        if (mask && typeof mask.destroy === 'function') {
+            mask.destroy();
+        }
+        this.nightOverlayMask = null;
+
+        const gfx = this.nightOverlayMaskGraphics;
+        if (gfx && typeof gfx.destroy === 'function') {
+            gfx.destroy();
+        }
+        this.nightOverlayMaskGraphics = null;
+        this._nightOverlayMaskRadius = 0;
+    }
+
     _teardownLights() {
         if (Array.isArray(this._lightBindings)) {
             for (let i = this._lightBindings.length - 1; i >= 0; i--) {
@@ -1375,6 +1517,7 @@ export default class MainScene extends Phaser.Scene {
                 this.lights.disable();
             }
         }
+        this._teardownNightOverlayMask();
     }
 
     // ==========================
