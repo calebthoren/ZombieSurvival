@@ -1357,96 +1357,47 @@ export default class MainScene extends Phaser.Scene {
                 normalized === 'midnight' ||
                 normalized === 'dawn');
 
+        const settings = this.lightSettings?.player;
+        const rawRadius = settings?.nightRadius;
+        let radius;
+        if (Number.isFinite(rawRadius)) {
+            radius = rawRadius < 0 ? 0 : rawRadius;
+            this._playerLightNightRadius = radius;
+        } else {
+            radius = Number.isFinite(this._playerLightNightRadius)
+                ? this._playerLightNightRadius
+                : 0;
+        }
+
+        let maskScale = settings?.maskScale;
+        if (!Number.isFinite(maskScale)) {
+            maskScale = 1;
+        }
+        if (maskScale < 0) {
+            maskScale = 0;
+        }
+
+        const hasRadius = radius > 0;
+        const desiredIntensity = shouldGlow && hasRadius ? 1 : 0;
+
+        if (light.radius !== radius) {
+            light.radius = radius;
+        }
+        if (light.maskScale !== maskScale) {
+            light.maskScale = maskScale;
+        }
+        if (light.intensity !== desiredIntensity) {
+            light.intensity = desiredIntensity;
+        }
+
         const stateChanged = shouldGlow !== this._playerLightNightActive;
         if (stateChanged) {
             this._playerLightNightActive = shouldGlow;
         }
 
-        if (!shouldGlow) {
-            if (stateChanged || light.intensity !== 0) {
-                light.intensity = 0;
-            }
-            if (stateChanged && light.active) {
-                light.active = false;
-            }
-            return;
-        }
-
-        const playerSettings = this.lightSettings?.player;
-        const maskScale = playerSettings?.maskScale ?? 1;
-        let baseRadius = playerSettings?.baseRadius;
-        if (!Number.isFinite(baseRadius)) {
-            baseRadius = this._playerLightNightRadius;
-        }
-        if (baseRadius < 0) {
-            baseRadius = 0;
-        }
-
-        let amplitude = playerSettings?.flickerAmplitude;
-        if (!Number.isFinite(amplitude) || amplitude <= 0) {
-            amplitude = 0;
-        }
-        let speed = playerSettings?.flickerSpeed;
-        if (!Number.isFinite(speed) || speed <= 0) {
-            speed = 0;
-        }
-
-        let flickerOffset = 0;
-        if (amplitude > 0 && speed > 0 && this.time) {
-            const timeSeconds = this.time.now * 0.001;
-            const angularSpeed = speed * Phaser.Math.PI2;
-            const phase = timeSeconds * angularSpeed;
-            const primary = Math.sin(phase + this._playerLightFlickerPhase);
-            const secondary = Math.sin(
-                phase * 0.43 + this._playerLightFlickerPhaseAlt,
-            );
-            flickerOffset = (primary * 0.65 + secondary * 0.35) * amplitude;
-        }
-
-        let finalRadius = baseRadius + flickerOffset;
-        if (!Number.isFinite(finalRadius)) {
-            finalRadius = 0;
-        }
-        if (finalRadius < 0) {
-            finalRadius = 0;
-        }
-
-        let upgradeMultiplier = this._playerLightUpgradeMultiplier;
-        if (playerSettings) {
-            let configured = playerSettings.upgradeMultiplier;
-            if (!Number.isFinite(configured)) {
-                configured = upgradeMultiplier;
-            } else if (configured < 0) {
-                configured = 0;
-            }
-            if (configured !== upgradeMultiplier) {
-                upgradeMultiplier = configured;
-                this._playerLightUpgradeMultiplier = configured;
-            }
-        }
-        if (upgradeMultiplier !== 1) {
-            finalRadius *= upgradeMultiplier;
-        }
-
-        if (playerSettings && playerSettings.nightRadius !== finalRadius) {
-            playerSettings.nightRadius = finalRadius;
-        }
-
-        if (light.radius !== finalRadius) {
-            light.radius = finalRadius;
-        }
-        if (light.maskScale !== maskScale) {
-            light.maskScale = maskScale;
-        }
-
-        const hasRadius = finalRadius > 0;
-        const targetIntensity = hasRadius ? 1 : 0;
-        if (light.intensity !== targetIntensity) {
-            light.intensity = targetIntensity;
-        }
-
-        if (stateChanged || light.active !== hasRadius) {
-            light.active = hasRadius;
+        const shouldBeActive = shouldGlow && hasRadius;
+        if (light.active !== shouldBeActive) {
+            light.active = shouldBeActive;
         }
     }
 
