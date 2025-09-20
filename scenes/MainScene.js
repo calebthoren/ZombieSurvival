@@ -1256,6 +1256,7 @@ export default class MainScene extends Phaser.Scene {
 
     _updatePlayerLightGlow() {
         const light = this.playerLight;
+        if (!light) return;
 
         let normalized = this._playerLightCachedNormalizedSegment;
         const rawLabel = this.phaseSegmentLabel;
@@ -1280,19 +1281,27 @@ export default class MainScene extends Phaser.Scene {
             this._playerLightNightActive = shouldGlow;
         }
 
-        if (!light || !stateChanged) return;
+        if (!shouldGlow) {
+            if (stateChanged || light.intensity !== 0) {
+                light.intensity = 0;
+            }
+            if (stateChanged && light.active) {
+                light.active = false;
+            }
+            return;
+        }
 
-        if (shouldGlow) {
-            const radius =
-                this.lightSettings?.player?.nightRadius ?? this._playerLightNightRadius;
-            const maskScale = this.lightSettings?.player?.maskScale ?? 1;
-            light.radius = radius;
-            light.maskScale = maskScale;
-            light.intensity = 1;
-            light.active = radius > 0;
-        } else {
-            light.intensity = 0;
-            light.active = false;
+        const radius =
+            this.lightSettings?.player?.nightRadius ?? this._playerLightNightRadius;
+        const maskScale = this.lightSettings?.player?.maskScale ?? 1;
+        const hasRadius = radius > 0;
+
+        light.radius = radius;
+        light.maskScale = maskScale;
+        light.intensity = hasRadius ? 1 : 0;
+
+        if (stateChanged || light.active !== hasRadius) {
+            light.active = hasRadius;
         }
     }
 
