@@ -1575,16 +1575,20 @@ export default class MainScene extends Phaser.Scene {
             const normalized = tileCount <= 1 ? 0 : ring / (tileCount - 1);
             const falloff = Phaser.Math.Easing.Quadratic.Out(1 - normalized);
             const alpha = Phaser.Math.Clamp(0.05 + falloff * 0.95, 0, 1);
-            const radiusNormalized =
-                baseRadius > 0
-                    ? Phaser.Math.Clamp(
-                          (ring <= 0
-                              ? tileSize * 0.35
-                              : tileSize * (ring + 0.5)) / baseRadius,
-                          0,
-                          1,
-                      )
-                    : 0;
+            const minInnerRadiusNormalized = 0.35;
+            let radiusNormalized;
+            if (tileCount <= 1) {
+                radiusNormalized = 1;
+            } else {
+                radiusNormalized =
+                    minInnerRadiusNormalized +
+                    (1 - minInnerRadiusNormalized) * normalized;
+                radiusNormalized = Phaser.Math.Clamp(
+                    radiusNormalized,
+                    minInnerRadiusNormalized,
+                    1,
+                );
+            }
 
             layers[ring] = {
                 alpha: Phaser.Math.Clamp(alpha, 0, 1),
