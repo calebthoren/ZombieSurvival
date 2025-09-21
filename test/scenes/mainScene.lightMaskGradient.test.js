@@ -45,16 +45,30 @@ test('player light mask gradient reserves a large inner bubble', async () => {
         const outerLayer = gradient.layers[gradient.layers.length - 1];
         assert.equal(outerLayer.radiusNormalized, 1);
 
-        const midLayer = gradient.layers[2];
+        const midLayerIndex = 2;
+        const midLayer = gradient.layers[midLayerIndex];
         assert.ok(midLayer.radiusNormalized > innerLayer.radiusNormalized);
         assert.ok(midLayer.radiusNormalized < outerLayer.radiusNormalized);
-        assert.ok(Math.abs(midLayer.radiusNormalized - 0.675) <= 0.01);
+        const expectedMidRadius = Math.max(
+            0.35,
+            (midLayerIndex + 1) / gradient.layers.length,
+        );
+        assert.ok(Math.abs(midLayer.radiusNormalized - expectedMidRadius) <= 0.01);
 
         for (let i = 1; i < gradient.layers.length; i++) {
             assert.ok(
                 gradient.layers[i].radiusNormalized >=
                     gradient.layers[i - 1].radiusNormalized,
             );
+        }
+
+        for (let ring = 0; ring < gradient.layers.length; ring++) {
+            const layer = gradient.layers[ring];
+            const expectedRadius = Math.max(
+                0.35,
+                (ring + 1) / gradient.layers.length,
+            );
+            assert.ok(Math.abs(layer.radiusNormalized - expectedRadius) <= 0.000001);
         }
     } finally {
         globalThis.Phaser = previousPhaser;
