@@ -15,7 +15,7 @@ import createResourcePool from '../systems/pools/resourcePool.js';
 import { setBiomeSeed } from '../systems/world_gen/biomes/biomeMap.js';
 
 // Radius for the player's personal light at night (tweak-friendly).
-const PLAYER_NIGHT_LIGHT_RADIUS = 64;
+const PLAYER_NIGHT_LIGHT_RADIUS = 48;
 const NIGHT_MASK_DEFAULT_TILE_SIZE = 16;
 const NIGHT_MASK_DEFAULT_TILE_COUNT = 5;
 
@@ -70,7 +70,7 @@ export default class MainScene extends Phaser.Scene {
                 flickerAmplitude: 8,
                 flickerSpeed: 2.25,
                 upgradeMultiplier: 1,
-                maskScale: 0.9,
+                maskScale: 0.8,
             },
         };
         this._playerLightNightRadius = this.lightSettings.player.nightRadius;
@@ -798,7 +798,7 @@ export default class MainScene extends Phaser.Scene {
 
         this.dayNight.tick(delta);
         this._updateAttachedLights();
-        this._updatePlayerLightGlow();
+        this._updatePlayerLightGlow(delta);
         this._updateNightOverlayMask();
 
         const w = WORLD_GEN.world.width;
@@ -1335,7 +1335,7 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    _updatePlayerLightGlow() {
+    _updatePlayerLightGlow(delta = 0) {
         const light = this.playerLight;
         if (!light) return;
 
@@ -1359,15 +1359,20 @@ export default class MainScene extends Phaser.Scene {
 
         const settings = this.lightSettings?.player;
         const rawRadius = settings?.nightRadius;
-        let radius;
+        let radiusBase;
         if (Number.isFinite(rawRadius)) {
-            radius = rawRadius < 0 ? 0 : rawRadius;
-            this._playerLightNightRadius = radius;
+            radiusBase = rawRadius < 0 ? 0 : rawRadius;
+            this._playerLightNightRadius = radiusBase;
         } else {
-            radius = Number.isFinite(this._playerLightNightRadius)
+            radiusBase = Number.isFinite(this._playerLightNightRadius)
                 ? this._playerLightNightRadius
                 : 0;
         }
+
+        const upgradeMultiplier = Number.isFinite(this._playerLightUpgradeMultiplier)
+            ? this._playerLightUpgradeMultiplier
+            : 1;
+        let radius = radiusBase * upgradeMultiplier;
 
         let maskScale = settings?.maskScale;
         if (!Number.isFinite(maskScale)) {
@@ -1380,22 +1385,78 @@ export default class MainScene extends Phaser.Scene {
         const hasRadius = radius > 0;
         const desiredIntensity = shouldGlow && hasRadius ? 1 : 0;
 
+        let flickerRadius = radius;
+        let flickerIntensity = desiredIntensity;
+
+        if (shouldGlow && hasRadius) {
+            const flickerAmplitude = Phaser.Math.Clamp(
+                Number.isFinite(settings?.flickerAmplitude)
+                    ? settings.flickerAmplitude
+                    : 0,
+                0,
+                256,
+            );
+            const flickerSpeed = Phaser.Math.Clamp(
+                Number.isFinite(settings?.flickerSpeed)
+                    ? settings.flickerSpeed
+                    : 0,
+                0,
+                32,
+            );
+            const dt = Math.max(0, delta || 0) / 1000;
+            if (flickerAmplitude > 0 && flickerSpeed > 0 && dt > 0) {
+                const baseRadius = radius;
+                this._playerLightFlickerPhase += flickerSpeed * dt;
+                this._playerLightFlickerPhaseAlt += flickerSpeed * 1.618 * dt;
+                this._playerLightFlickerPhase = Phaser.Math.Wrap(
+                    this._playerLightFlickerPhase,
+                    0,
+                    Phaser.Math.PI2,
+                );
+                this._playerLightFlickerPhaseAlt = Phaser.Math.Wrap(
+                    this._playerLightFlickerPhaseAlt,
+                    0,
+                    Phaser.Math.PI2,
+                );
+
+                const waveA = Math.sin(this._playerLightFlickerPhase);
+                const waveB = Math.sin(this._playerLightFlickerPhaseAlt);
+                const mix = Phaser.Math.Clamp((waveA * 0.6 + waveB * 0.4) * 0.5, -1, 1);
+
+                const radiusJitter = mix * flickerAmplitude;
+                flickerRadius = Phaser.Math.Clamp(
+                    baseRadius + radiusJitter,
+                    Math.max(0, baseRadius - flickerAmplitude),
+                    baseRadius + flickerAmplitude,
+                );
+
+                const intensityJitter = 1 + mix * 0.08;
+                flickerIntensity = Phaser.Math.Clamp(
+                    desiredIntensity * intensityJitter,
+                    0,
+                    1,
+                );
+            }
+        }
+
+        radius = flickerRadius;
+
         if (light.radius !== radius) {
             light.radius = radius;
         }
         if (light.maskScale !== maskScale) {
             light.maskScale = maskScale;
         }
-        if (light.intensity !== desiredIntensity) {
-            light.intensity = desiredIntensity;
+        if (light.intensity !== flickerIntensity) {
+            light.intensity = flickerIntensity;
         }
 
-        const stateChanged = shouldGlow !== this._playerLightNightActive;
+        const shouldBeActive = shouldGlow && hasRadius && flickerIntensity > 0.001;
+        const stateChanged = shouldBeActive !== this._playerLightNightActive;
         if (stateChanged) {
-            this._playerLightNightActive = shouldGlow;
+            this._playerLightNightActive = shouldBeActive;
         }
 
-        const shouldBeActive = shouldGlow && hasRadius;
         if (light.active !== shouldBeActive) {
             light.active = shouldBeActive;
         }
@@ -1496,6 +1557,7 @@ export default class MainScene extends Phaser.Scene {
     }
 
     _buildLightMaskGradient(tileSize, tileCount) {
+        const baseRadius = Math.max(tileSize * 0.5, (tileCount - 0.5) * tileSize);
         const layers = new Array(tileCount);
         for (let ring = 0; ring < tileCount; ring++) {
             const offsets = [];
@@ -1511,15 +1573,26 @@ export default class MainScene extends Phaser.Scene {
             }
 
             const normalized = tileCount <= 1 ? 0 : ring / (tileCount - 1);
-            const alpha = Phaser.Math.Linear(1, 0.1, normalized);
+            const falloff = Phaser.Math.Easing.Quadratic.Out(1 - normalized);
+            const alpha = Phaser.Math.Clamp(0.05 + falloff * 0.95, 0, 1);
+            const radiusNormalized =
+                baseRadius > 0
+                    ? Phaser.Math.Clamp(
+                          (ring <= 0
+                              ? tileSize * 0.35
+                              : tileSize * (ring + 0.5)) / baseRadius,
+                          0,
+                          1,
+                      )
+                    : 0;
 
             layers[ring] = {
                 alpha: Phaser.Math.Clamp(alpha, 0, 1),
                 offsets,
+                radiusNormalized,
             };
         }
 
-        const baseRadius = Math.max(tileSize * 0.5, (tileCount - 0.5) * tileSize);
         return {
             tileSize,
             ringCount: tileCount,
@@ -1576,27 +1649,38 @@ export default class MainScene extends Phaser.Scene {
             const gradientRadius = Number.isFinite(gradient.baseRadius)
                 ? gradient.baseRadius
                 : 0;
-            if (!(gradientRadius > 0)) continue;
-
-            const scale = finalRadius / gradientRadius;
-            if (!Number.isFinite(scale) || scale <= 0) continue;
-
-            const tileSize = gradient.tileSize * scale;
-            if (!Number.isFinite(tileSize) || tileSize <= 0) continue;
-
-            const halfTile = tileSize * 0.5;
             const layers = gradient.layers;
             if (!Array.isArray(layers) || layers.length === 0) continue;
 
-            for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+            const scale =
+                gradientRadius > 0 ? finalRadius / gradientRadius : 1;
+            const baseTileSize = Number.isFinite(gradient.tileSize)
+                ? gradient.tileSize
+                : 0;
+            const tileSize = baseTileSize > 0 ? baseTileSize * scale : 0;
+            const halfTile = tileSize * 0.5;
+
+            for (let layerIndex = layers.length - 1; layerIndex >= 0; layerIndex--) {
                 const layer = layers[layerIndex];
                 if (!layer) continue;
 
                 const layerAlpha = Phaser.Math.Clamp(layer.alpha || 0, 0, 1);
                 if (!(layerAlpha > 0)) continue;
 
+                const radiusNormalized = Number.isFinite(layer.radiusNormalized)
+                    ? layer.radiusNormalized
+                    : null;
+                if (radiusNormalized !== null) {
+                    const ringRadius = finalRadius * radiusNormalized;
+                    if (!(ringRadius > 0)) continue;
+                    gfx.fillStyle(0xffffff, layerAlpha);
+                    gfx.fillCircle(screenX, screenY, ringRadius);
+                    continue;
+                }
+
                 const offsets = layer.offsets;
                 if (!Array.isArray(offsets) || offsets.length === 0) continue;
+                if (!(tileSize > 0)) continue;
 
                 gfx.fillStyle(0xffffff, layerAlpha);
 
@@ -1616,8 +1700,29 @@ export default class MainScene extends Phaser.Scene {
         if (!overlay || typeof overlay.setMask !== 'function') return;
 
         const lights = this._collectActiveMaskLights();
-        const shouldEnable =
-            lights.length > 0 && !!this._playerLightNightActive && (overlay.alpha || 0) > 0.001;
+
+        let hasDrawableLight = false;
+        for (let i = 0; i < lights.length; i++) {
+            const binding = lights[i];
+            if (!binding) continue;
+
+            const rawRadius = Number.isFinite(binding.radius) ? binding.radius : 0;
+            if (!(rawRadius > 0)) continue;
+
+            const maskScale = Number.isFinite(binding.maskScale) ? binding.maskScale : 1;
+            const scaledRadius = rawRadius * maskScale;
+            if (!(scaledRadius > 0)) continue;
+
+            const intensity = Number.isFinite(binding.intensity)
+                ? Phaser.Math.Clamp(binding.intensity, 0, 1)
+                : 0;
+            if (intensity <= 0.001) continue;
+
+            hasDrawableLight = true;
+            break;
+        }
+
+        const shouldEnable = hasDrawableLight && (overlay.alpha || 0) > 0.001;
 
         if (!shouldEnable) {
             if (
