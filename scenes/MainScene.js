@@ -1451,12 +1451,12 @@ export default class MainScene extends Phaser.Scene {
             light.intensity = flickerIntensity;
         }
 
-        const stateChanged = shouldGlow !== this._playerLightNightActive;
+        const shouldBeActive = shouldGlow && hasRadius && flickerIntensity > 0.001;
+        const stateChanged = shouldBeActive !== this._playerLightNightActive;
         if (stateChanged) {
-            this._playerLightNightActive = shouldGlow;
+            this._playerLightNightActive = shouldBeActive;
         }
 
-        const shouldBeActive = shouldGlow && hasRadius && flickerIntensity > 0.001;
         if (light.active !== shouldBeActive) {
             light.active = shouldBeActive;
         }
@@ -1700,8 +1700,29 @@ export default class MainScene extends Phaser.Scene {
         if (!overlay || typeof overlay.setMask !== 'function') return;
 
         const lights = this._collectActiveMaskLights();
-        const shouldEnable =
-            lights.length > 0 && !!this._playerLightNightActive && (overlay.alpha || 0) > 0.001;
+
+        let hasDrawableLight = false;
+        for (let i = 0; i < lights.length; i++) {
+            const binding = lights[i];
+            if (!binding) continue;
+
+            const rawRadius = Number.isFinite(binding.radius) ? binding.radius : 0;
+            if (!(rawRadius > 0)) continue;
+
+            const maskScale = Number.isFinite(binding.maskScale) ? binding.maskScale : 1;
+            const scaledRadius = rawRadius * maskScale;
+            if (!(scaledRadius > 0)) continue;
+
+            const intensity = Number.isFinite(binding.intensity)
+                ? Phaser.Math.Clamp(binding.intensity, 0, 1)
+                : 0;
+            if (intensity <= 0.001) continue;
+
+            hasDrawableLight = true;
+            break;
+        }
+
+        const shouldEnable = hasDrawableLight && (overlay.alpha || 0) > 0.001;
 
         if (!shouldEnable) {
             if (
