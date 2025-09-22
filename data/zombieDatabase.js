@@ -44,11 +44,12 @@ const ZOMBIES = {
     },
 
     // Fire zombie with light emission
-    flamed_walker: {
-        name: 'Flamed Walker',
-        texture: 'flamed_walker',   // fallback for older code
-        textureKey: 'flamed_walker',
-        scale: 0.1,
+    walker_flamed: {
+        name: 'Walker Flamed',
+        texture: 'walker_flamed',   // fallback for older code
+        textureKey: 'walker_flamed',
+        // Match regular walker visual size: 0.1 * (229 / 1024) ≈ 0.0224
+        scale: 0.0224,
         depth: 900,
 
         // Core stats - same as walker but night-only
