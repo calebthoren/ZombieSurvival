@@ -44,10 +44,10 @@ const ZOMBIES = {
     },
 
     // Fire zombie with light emission
-    walker_flamed: {
-        name: 'Walker Flamed',
-        texture: 'walker_flamed',   // fallback for older code
-        textureKey: 'walker_flamed',
+    flamed_walker: {
+        name: 'Flamed Walker',
+        texture: 'flamed_walker',   // fallback for older code
+        textureKey: 'flamed_walker',
         // Match regular walker visual size: 0.1 * (229 / 1024) ≈ 0.0224
         scale: 0.0224,
         depth: 900,
@@ -73,8 +73,8 @@ const ZOMBIES = {
         // HP bar visuals
         hpBar: { width: 18, height: 3, yOffsetFactor: 0.6 },
 
-        // Light emission - glows in the dark
-        light: { radius: 96, intensity: 1, maskScale: 0.9 },
+        // Light emission - glows in the dark (player-like)
+        light: { radius: 120, intensity: 1, maskScale: 1.0, maskTileCount: 7, maskTileSize: 16 },
 
         // Loot scaffolding (placeholder)
         loot: {

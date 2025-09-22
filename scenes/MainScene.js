@@ -107,7 +107,7 @@ export default class MainScene extends Phaser.Scene {
         );
         // zombies
         this.load.image('zombie', 'assets/enemies/zombie.png');
-        this.load.image('walker_flamed', 'assets/enemies/walker_flamed.png');
+        this.load.image('flamed_walker', 'assets/enemies/flamed_walker.png');
         // weapons & ammo
         this.load.image('bullet', 'assets/weapons/bullet.png');
         this.load.image('slingshot', 'assets/weapons/slingshot.png');
