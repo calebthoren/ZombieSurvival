@@ -43,6 +43,44 @@ const ZOMBIES = {
         }
     },
 
+    // Fire zombie with light emission
+    flamed_walker: {
+        name: 'Flamed Walker',
+        texture: 'flamed_walker',   // fallback for older code
+        textureKey: 'flamed_walker',
+        scale: 0.1,
+        depth: 900,
+
+        // Core stats - same as walker but night-only
+        health: 25,
+        speed: 40,
+        damage: 5,
+        aggroRange: 200,
+        attackCooldownMs: 800,
+
+        // Spawning - night only, lower weight to keep special
+        spawnWeight: 4,
+        canSpawnDay: false,
+
+        // Resistances - same as walker
+        resist: { rangedMult: 1, meleeMult: 1, knockback: 0.0 },
+
+        // Stagger/Stun
+        staggerThreshold: 10,
+        stunDurationMs: 250,
+
+        // HP bar visuals
+        hpBar: { width: 18, height: 3, yOffsetFactor: 0.6 },
+
+        // Light emission - glows in the dark
+        light: { radius: 96, intensity: 1, maskScale: 0.9 },
+
+        // Loot scaffolding (placeholder)
+        loot: {
+            table: []
+        }
+    },
+
 };
 
 export default ZOMBIES;

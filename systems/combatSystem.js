@@ -176,9 +176,11 @@ export default function createCombatSystem(scene) {
         const v = scene.physics.velocityFromRotation(angle, speed * scale);
         bullet.setVelocity(v.x, v.y);
         bullet.setRotation(angle);
+        // Lifetime scales by 1/scale so that, combined with timer timeScale (1/scale),
+        // real-world projectile travel remains consistent across speeds.
         const lifetimeMs = Math.max(
             1,
-            Math.floor((travel / Math.max(1, speed)) * 1000 / scale),
+            Math.floor((travel / Math.max(1, speed)) * 1000 / Math.max(0.0001, scale)),
         );
         scene.time.delayedCall(lifetimeMs, () => {
             if (bullet.active && bullet.destroy) bullet.destroy();
@@ -357,6 +359,8 @@ export default function createCombatSystem(scene) {
             lowStamina && st ? (st.cooldownMultiplier ?? 6) : 1;
         const scale = DevTools.cheats.timeScale || 1;
         const applied = scale <= 0 ? 0 : 1 / scale;
+        // Shorten swing duration at higher speeds (match gameplay pace)
+        swingDurationMs = Math.max(1, Math.floor(swingDurationMs * applied));
         scene._nextSwingCooldownMs = Math.floor(
             baseCooldownMs * cooldownMult * applied,
         );
@@ -478,7 +482,7 @@ export default function createCombatSystem(scene) {
     // ----- Zombie Spawning -----
     function spawnZombie(typeKey = 'walker', pos = null) {
         const def = ZOMBIES[typeKey] || ZOMBIES.walker || {};
-        const tex = def.texture || 'zombie';
+        const tex = def.texture || def.textureKey || 'zombie';
         let x, y;
         if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
             x = pos.x;
@@ -536,6 +540,12 @@ export default function createCombatSystem(scene) {
         zombie.hpBarW = def.hpBarW ?? zombie.hpBarW;
         zombie.hpBarH = def.hpBarH ?? zombie.hpBarH;
         zombie.hpYOffset = def.hpYOffset ?? zombie.hpYOffset;
+        
+        // Attach light if configured
+        if (def.light && typeof scene.attachLightToObject === 'function') {
+            scene.attachLightToObject(zombie, def.light);
+        }
+        
         return zombie;
     }
 
@@ -602,7 +612,9 @@ export default function createCombatSystem(scene) {
         const dx = zombie.x - srcX,
             dy = zombie.y - srcY;
         const len = Math.max(1e-3, Math.hypot(dx, dy));
-        const impulse = effKb * 18;
+        const scale = DevTools?.cheats?.timeScale || 1;
+        const applied = scale <= 0 ? 0 : 1 / scale;
+        const impulse = effKb * 18 * applied;
         const vx = (dx / len) * impulse;
         const vy = (dy / len) * impulse;
         zombie.setVelocity(vx, vy);

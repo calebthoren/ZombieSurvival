@@ -107,6 +107,7 @@ export default class MainScene extends Phaser.Scene {
         );
         // zombies
         this.load.image('zombie', 'assets/enemies/zombie.png');
+        this.load.image('flamed_walker', 'assets/enemies/flamed_walker.png');
         // weapons & ammo
         this.load.image('bullet', 'assets/weapons/bullet.png');
         this.load.image('slingshot', 'assets/weapons/slingshot.png');
@@ -580,6 +581,8 @@ export default class MainScene extends Phaser.Scene {
         item.on('pointerdown', (pointer) => {
             if (!pointer.rightButtonDown()) return;
             if (this.isCharging) return;
+            // If the player starts holding RMB with this same click, enable auto-pickup immediately
+            try { this._scheduleAutoPickup(); } catch {}
             this._pickupItem(item);
         });
 
@@ -615,7 +618,7 @@ export default class MainScene extends Phaser.Scene {
 
     _scheduleAutoPickup() {
         this._cancelAutoPickup();
-        this._autoPickupTimer = this.time.delayedCall(500, () => {
+        this._autoPickupTimer = this.time.delayedCall(1000, () => {
             if (this.isCharging || !this.input.activePointer.rightButtonDown())
                 return;
             this._autoPickupActive = true;
@@ -645,17 +648,14 @@ export default class MainScene extends Phaser.Scene {
             this._cancelAutoPickup();
             return;
         }
-        const ptr = this.input.activePointer;
-        const px = ptr.worldX;
-        const py = ptr.worldY;
         const pickupRange = 40;
         const pickupRangeSq = pickupRange * pickupRange;
+
+        // Scan dropped items within range of the player (ignores pointer position)
         const items = this.droppedItems.getChildren();
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
             if (!item.active) continue;
-            if (!Phaser.Geom.Rectangle.Contains(item.getBounds(), px, py))
-                continue;
             const dx = this.player.x - item.x;
             const dy = this.player.y - item.y;
             const d2 = dx * dx + dy * dy;
@@ -663,6 +663,7 @@ export default class MainScene extends Phaser.Scene {
             if (this._pickupItem(item)) break;
         }
 
+        // Scan simple resources within range of the player (ignores pointer position)
         const scanGroups = [this.resources, this.resourcesDecor];
         for (const grp of scanGroups) {
             if (!grp || !grp.getChildren) continue;
@@ -670,8 +671,6 @@ export default class MainScene extends Phaser.Scene {
             for (let i = 0; i < resources.length; i++) {
                 const res = resources[i];
                 if (!res.active) continue;
-                if (!Phaser.Geom.Rectangle.Contains(res.getBounds(), px, py))
-                    continue;
                 const dx = this.player.x - res.x;
                 const dy = this.player.y - res.y;
                 const d2 = dx * dx + dy * dy;
