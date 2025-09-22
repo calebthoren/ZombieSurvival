@@ -8,6 +8,39 @@ import { ITEM_DB } from '../data/itemDatabase.js';
 import { WORLD_GEN, BIOME_IDS } from './world_gen/worldGenConfig.js';
 import { getBiome } from './world_gen/biomes/biomeMap.js';
 
+// Helper function to format time as M:SS
+function formatTime(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${min}:${sec.toString().padStart(2, '0')}`;
+}
+
+// Helper function to get formatted day/night clock string
+function getPhaseClock(scene) {
+    if (!scene) return 'Time: --';
+    
+    // Get day/night config
+    const dayMs = WORLD_GEN.dayNight.dayMs;
+    const nightMs = WORLD_GEN.dayNight.nightMs;
+    const totalCycle = dayMs + nightMs;
+    
+    // Get current game time (scaled and pause-aware)
+    const currentPhaseMs = scene._phaseElapsedMs || 0;
+    const dayIndex = scene.dayIndex || 1;
+    const phase = scene.phase || 'day';
+    
+    if (phase === 'day') {
+        const elapsed = formatTime(currentPhaseMs);
+        const total = formatTime(dayMs);
+        return `Day ${dayIndex} - ${elapsed}/${total}`;
+    } else {
+        const elapsed = formatTime(currentPhaseMs);
+        const total = formatTime(nightMs);
+        return `Night ${dayIndex} - ${elapsed}/${total}`;
+    }
+}
+
 const BIOME_NAMES = {
     [BIOME_IDS.PLAINS]: 'Plains',
     [BIOME_IDS.FOREST]: 'Forest',
@@ -454,7 +487,8 @@ const DevTools = {
         const fps = Math.round(scene.game?.loop?.actualFps || 0);
         const heap = performance?.memory?.usedJSHeapSize ? Math.round(performance.memory.usedJSHeapSize / 1048576) : 0;
         const timers = scene.time?.events?.size || 0;
-        this._perfText.setText(`FPS: ${fps}\nHeap: ${heap}MB\nTimers: ${timers}`);
+        const clockStr = getPhaseClock(scene);
+        this._perfText.setText(`FPS: ${fps}\nHeap: ${heap}MB\nTimers: ${timers}\n${clockStr}`);
     },
 
     // ─────────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ import { setBiomeSeed } from '../systems/world_gen/biomes/biomeMap.js';
 import createLightingSystem from '../systems/lightingSystem.js';
 
 // Radius for the player's personal light at night (tweak-friendly).
-const PLAYER_NIGHT_LIGHT_RADIUS = 48;
+const PLAYER_NIGHT_LIGHT_RADIUS = 96; // Doubled from 48
 const NIGHT_MASK_DEFAULT_TILE_SIZE = 16;
 const NIGHT_MASK_DEFAULT_TILE_COUNT = 5;
 
@@ -426,6 +426,53 @@ export default class MainScene extends Phaser.Scene {
         const h = this.sys.game.config.height;
         this.lighting.createOverlayIfNeeded();
 
+        // Simple radial BitmapMask light (ported from main) — overrides lightingSystem when active
+        try {
+            const texKey = 'light_radial_mask_v17';
+            const size = 192; // square texture (px)
+            if (!this.textures.exists(texKey)) {
+                const c = this.textures.createCanvas(texKey, size, size);
+                const ctx = c.getContext();
+                const cx = size / 2;
+                const cy = size / 2;
+                const r = size / 2;
+                const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+                // center fully white (alpha 1), edge transparent (alpha 0)
+                grad.addColorStop(0.0, 'rgba(255,255,255,1)');
+                grad.addColorStop(0.7, 'rgba(255,255,255,0.5)');
+                grad.addColorStop(1.0, 'rgba(255,255,255,0)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, size, size);
+                c.refresh();
+            }
+            this._lightMaskSprite = this.add.image(0, 0, texKey)
+                .setOrigin(0.5, 0.5)
+                .setScrollFactor(0)
+                .setDepth(10001)
+                .setVisible(false);
+            this._lightMaskBM = new Phaser.Display.Masks.BitmapMask(this, this._lightMaskSprite);
+            this._lightMaskBM.invertAlpha = true; // punch a hole in darkness
+
+            // Tunables
+            this._lightTexSize = 192;
+            this._lightBaseRadiusMult = 1.1;  // matches main (twice the earlier 0.55)
+            this._lightFlickerPct = 0.06;
+            this._lightFlickerHz = 6.3;
+            this._lightFlickerHz2 = 9.7;
+
+            // Cleanup on shutdown/destroy
+            const onTearDown = () => {
+                try { if (this.nightOverlay && this.nightOverlay.mask === this._lightMaskBM) this.nightOverlay.clearMask(true); } catch {}
+                try { this._lightMaskSprite?.destroy(); } catch {}
+                this._lightMaskSprite = null;
+                this._lightMaskBM = null;
+            };
+            this.events.once(Phaser.Scenes.Events.SHUTDOWN, onTearDown);
+            this.events.once(Phaser.Scenes.Events.DESTROY, onTearDown);
+        } catch (e) {
+            console?.warn?.('V1.7 simple light mask init failed', e);
+        }
+
         // --- DevTools integration ---
         // Apply current hitbox cheat right away (responds to future toggles too)
         DevTools.applyHitboxCheat(this);
@@ -783,6 +830,46 @@ export default class MainScene extends Phaser.Scene {
         // Keep overlay alpha up-to-date before drawing the mask
         this.updateNightOverlay();
         this.lighting.update(delta);
+
+        // Override lightingSystem mask with simple BitmapMask when darkness is visible
+        try {
+            const overlay = this.nightOverlay;
+            const hasDarkness = !!(overlay && (overlay.alpha || 0) > 0.01);
+            if (!hasDarkness) {
+                if (overlay && overlay.mask === this._lightMaskBM) overlay.clearMask(true);
+            } else if (overlay && this._lightMaskBM) {
+                // Position mask at player (screen space)
+                const cam = this.cameras?.main;
+                const p = this.player;
+                if (cam && p && this._lightMaskSprite) {
+                    const sx = p.x - cam.scrollX;
+                    const sy = p.y - cam.scrollY;
+                    this._lightMaskSprite.setPosition(sx, sy);
+
+                    // Base radius from player collider/display
+                    let baseDiam = 24;
+                    const b = p.body;
+                    if (b && b.width && b.height) baseDiam = Math.max(b.width, b.height);
+                    else baseDiam = Math.max(p.displayWidth || 24, p.displayHeight || 24);
+
+                    const baseRadius = Math.max(8, baseDiam * (this._lightBaseRadiusMult || 1.1));
+
+                    // Edge flicker
+                    const tsec = (this.time?.now || 0) * 0.001;
+                    const f1 = Math.sin(2 * Math.PI * (this._lightFlickerHz || 6.3) * tsec);
+                    const f2 = Math.sin(2 * Math.PI * (this._lightFlickerHz2 || 9.7) * tsec + 1.234);
+                    const flicker = 1 + (this._lightFlickerPct || 0.06) * (0.5 * f1 + 0.5 * f2);
+
+                    const diameter = baseRadius * 2 * flicker;
+                    const texSize = this._lightTexSize || 192;
+                    const scale = diameter / texSize;
+                    this._lightMaskSprite.setScale(scale);
+
+                    // Force overlay to use our mask (after lightingSystem)
+                    overlay.setMask(this._lightMaskBM);
+                }
+            }
+        } catch {}
 
         const w = WORLD_GEN.world.width;
         const h = WORLD_GEN.world.height;
