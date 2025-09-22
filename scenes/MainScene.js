@@ -1351,11 +1351,23 @@ export default class MainScene extends Phaser.Scene {
             this._playerLightCachedNormalizedSegment = normalized;
         }
 
-        const shouldGlow =
-            this.phase === 'night' &&
-            (normalized === 'dusk' ||
+        const overlayRef = this.nightOverlay;
+        const overlayAlphaRaw = overlayRef?.alpha;
+        let overlayAlpha;
+        if (Number.isFinite(overlayAlphaRaw)) {
+            overlayAlpha = Phaser.Math.Clamp(overlayAlphaRaw, 0, 1);
+        } else {
+            overlayAlpha = this.phase === 'night' ? 1 : 0;
+        }
+        const overlayDarkEnough = overlayAlpha > 0.001;
+
+        let shouldGlow = overlayDarkEnough;
+        if (!shouldGlow && this.phase === 'night') {
+            shouldGlow =
+                normalized === 'dusk' ||
                 normalized === 'midnight' ||
-                normalized === 'dawn');
+                normalized === 'dawn';
+        }
 
         const settings = this.lightSettings?.player;
         const rawRadius = settings?.nightRadius;
