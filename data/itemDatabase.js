@@ -8,6 +8,8 @@ export const ITEM_IDS = {
   CRUDE_BAT: 'crude_bat',
   ROCK1A: 'rock1A',
   ROCK2A: 'rock2A',
+  ROCK3A: 'rock3A',
+  ROCK4A: 'rock4A',
   ROCK5A: 'rock5A',
 };
 
@@ -241,6 +243,60 @@ export const ITEM_DB = {
     meta: { rarity: 'common' },
   },
 
+  [ITEM_IDS.ROCK3A]: {
+    id: ITEM_IDS.ROCK3A,
+    name: 'Small Sandstone',
+    type: ITEM_TYPES.AMMO,
+    stackable: true,
+    maxStack: 99,
+
+    icon: { textureKey: 'rock3A', scale: 1.0, ox: 0, oy: 0 },
+    world: { textureKey: 'rock3A', scale: 0.65 },
+
+    showCountOnIcon: true,
+    sounds: { pickup: 'sfx_pickup_small' },
+
+    ammo: {
+      minDamage: 1,
+      maxDamage: 3,
+      minRange: 50,
+      maxRange: 100,
+      maxChargeMs: 2000,
+      speed: 300,
+      knockback: 0,
+    },
+
+    tags: ['ammo', 'material', 'rock'],
+    meta: { rarity: 'common' },
+  },
+
+  [ITEM_IDS.ROCK4A]: {
+    id: ITEM_IDS.ROCK4A,
+    name: 'Small Limestone',
+    type: ITEM_TYPES.AMMO,
+    stackable: true,
+    maxStack: 99,
+
+    icon: { textureKey: 'rock4A', scale: 1.0, ox: 0, oy: 0 },
+    world: { textureKey: 'rock4A', scale: 0.65 },
+
+    showCountOnIcon: true,
+    sounds: { pickup: 'sfx_pickup_small' },
+
+    ammo: {
+      minDamage: 1,
+      maxDamage: 3,
+      minRange: 50,
+      maxRange: 100,
+      maxChargeMs: 2000,
+      speed: 300,
+      knockback: 0,
+    },
+
+    tags: ['ammo', 'material', 'rock'],
+    meta: { rarity: 'common' },
+  },
+
   [ITEM_IDS.ROCK5A]: {
     id: ITEM_IDS.ROCK5A,
     name: 'Small Marble Rock',
@@ -276,7 +332,15 @@ export const GROUPS = {
     ITEM_IDS.SLINGSHOT_ROCK,
     ITEM_IDS.ROCK1A,
     ITEM_IDS.ROCK2A,
+    ITEM_IDS.ROCK3A,
+    ITEM_IDS.ROCK4A,
     ITEM_IDS.ROCK5A,
   ],
-  materials: [ITEM_IDS.ROCK1A, ITEM_IDS.ROCK2A, ITEM_IDS.ROCK5A],
+  materials: [
+    ITEM_IDS.ROCK1A,
+    ITEM_IDS.ROCK2A,
+    ITEM_IDS.ROCK3A,
+    ITEM_IDS.ROCK4A,
+    ITEM_IDS.ROCK5A,
+  ],
 };

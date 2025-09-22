@@ -58,9 +58,9 @@ export const WORLD_GEN = {
   // Goal: fast cycles, plenty of daytime to build/explore, but night happens often.
   // Total cycle = dayMs + nightMs (plus smooth transitions for the overlay).
   dayNight: {
-    dayMs: 240_000,          // 4 min day
-    nightMs: 120_000,        // 2 min night
-    transitionMs: 15_000,    // 15s fade before/after night
+    dayMs: 360_000,          // 6 min day (was 4 min)
+    nightMs: 180_000,        // 3 min night (was 2 min)
+    transitionMs: 3_000,     // 3s fade before/after night (was 15s)
     nightOverlayAlpha: 0.55, // darkness amount at deepest night (0..1)
     segments: {
         perPhase: 3, // day/night are broken into thirds for pacing cues
@@ -68,7 +68,7 @@ export const WORLD_GEN = {
             labels: ['Morning', 'Afternoon', 'Evening'],
         },
         night: {
-            labels: ['Nightfall', 'Midnight', 'Late Night'],
+            labels: ['Dusk', 'Midnight', 'Dawn'],
         },
     },
     // (You can tweak these freely without touching scene code.)

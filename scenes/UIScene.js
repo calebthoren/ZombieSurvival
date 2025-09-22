@@ -3,6 +3,7 @@ import InventoryModel from '../systems/inventoryModel.js';
 import { INVENTORY_CONFIG } from '../data/inventoryConfig.js';
 import { ITEM_DB } from '../data/itemDatabase.js';
 import DevTools from '../systems/DevTools.js';
+import UIEscapeManager from '../systems/uiEscapeManager.js';
 
 export default class UIScene extends Phaser.Scene {
     constructor() {
@@ -19,6 +20,12 @@ export default class UIScene extends Phaser.Scene {
         this._slotOverlays = [];           // [{kind:'bottom'|'hotbar'|'grid', area, index, itemId, rect}]
 
         this._pauseStart = 0;
+
+        // Reusable pointer projection scratch to avoid per-frame allocations
+        this._pointerWorld = new Phaser.Math.Vector2();
+
+        // Shared ESC stack for layered menus/panels
+        this.escapeManager = new UIEscapeManager();
 
     }
 
@@ -172,6 +179,7 @@ export default class UIScene extends Phaser.Scene {
         // Inventory Panel (with top hotbar + 6x5 grid)
         // -------------------------
         this.inventoryPanel = this.add.container().setVisible(false);
+        this.escapeManager.register('inventory', () => this.closeInventory());
 
         const panelW = this.cameras.main.width - 100;
         const panelH = this.cameras.main.height - 240;
@@ -289,21 +297,8 @@ export default class UIScene extends Phaser.Scene {
         this.events.on('ui:lockInventory', (locked = true) => {
             this.inventoryLocked = !!locked;
 
-            if (this.inventoryLocked) {
-                // If panel is open while locking, snap carried item back and close it
-                if (this.inventoryPanel?.visible) {
-                    if (typeof this.#returnCarryOnClose === 'function') {
-                        this.#returnCarryOnClose();
-                    } else {
-                        // Fallback cleanup if helper isn't present
-                        this.dragCarry = null;
-                        this.dragOrigin = null;
-                        if (this.dragIcon) { this.dragIcon.destroy(); this.dragIcon = null; }
-                        if (this.dragText) { this.dragText.destroy(); this.dragText = null; }
-                        this.events.emit('inv:changed');
-                    }
-                    this.inventoryPanel.setVisible(false);
-                }
+            if (this.inventoryLocked && this.inventoryPanel?.visible) {
+                this.closeInventory();
             }
         });
 
@@ -428,6 +423,24 @@ export default class UIScene extends Phaser.Scene {
         this.timeBarFill = this.add.rectangle(this.cameras.main.centerX - barW / 2, 30, 0, barH, 0xffff66)
             .setOrigin(0, 0.5).setAlpha(0.9);
 
+        const barStartX = this.cameras.main.centerX - barW / 2;
+        const markerWidth = 2;
+        const markerHeight = barH + 2;
+        const markerAlpha = 0.35;
+        const firstMarkerX = barStartX + barW / 3;
+        const secondMarkerX = barStartX + (2 * barW) / 3;
+
+        this.timeBarMarkers = [
+            this.add
+                .rectangle(firstMarkerX, 30, markerWidth, markerHeight, 0xffffff)
+                .setOrigin(0.5, 0.5)
+                .setAlpha(markerAlpha),
+            this.add
+                .rectangle(secondMarkerX, 30, markerWidth, markerHeight, 0xffffff)
+                .setOrigin(0.5, 0.5)
+                .setAlpha(markerAlpha),
+        ];
+
         // Initial paint (panel may start hidden, but we prep visuals)
         this.#refreshAllIcons();
         this.#queueBottomHotbarRefresh();
@@ -475,13 +488,27 @@ export default class UIScene extends Phaser.Scene {
         if (this.inventoryLocked) return; // <- blocked after death
         if (this.scene.isActive('PauseScene')) return;
 
-        const wasVisible = this.inventoryPanel.visible;
-        if (wasVisible) {
-            // Closing: if we’re carrying something, put it back and clear carry state
-            this.#returnCarryOnClose();
+        if (this.inventoryPanel.visible) {
+            this.closeInventory();
+            return;
         }
-        this.inventoryPanel.setVisible(!wasVisible);
-        if (!wasVisible) this.#refreshAllIcons();
+
+        this.inventoryPanel.setVisible(true);
+        this.escapeManager.setOpen('inventory', true);
+        this.#refreshAllIcons();
+    }
+
+    closeInventory() {
+        if (!this.inventoryPanel.visible) return false;
+
+        this.#returnCarryOnClose();
+        this.inventoryPanel.setVisible(false);
+        this.escapeManager.setOpen('inventory', false);
+        return true;
+    }
+
+    handleEscape() {
+        return this.escapeManager.handleEscape();
     }
 
     setInventoryAlpha() {
@@ -928,7 +955,9 @@ export default class UIScene extends Phaser.Scene {
 
         // Icon
         if (!this.dragIcon) {
-            this.dragIcon = this.add.image(0, 0, this.dragCarry.id).setDepth(1000);
+            this.dragIcon = this.add.image(0, 0, this.dragCarry.id)
+                .setDepth(1000)
+                .setScrollFactor(0);
         } else if (this.dragIcon.texture?.key !== this.dragCarry.id) {
             this.dragIcon.setTexture(this.dragCarry.id);
         }
@@ -950,7 +979,7 @@ export default class UIScene extends Phaser.Scene {
                 fontSize: '12px',
                 fill: '#ffffff',
                 fontFamily: 'monospace'
-            }).setDepth(1001);
+            }).setDepth(1001).setScrollFactor(0);
         } else if (this.dragText.text !== labelText) {
             this.dragText.setText(labelText);
         }
@@ -994,8 +1023,22 @@ export default class UIScene extends Phaser.Scene {
     update() {
         if (this.dragIcon && this.input.activePointer) {
             const p = this.input.activePointer;
-            this.dragIcon.setPosition(p.worldX, p.worldY);
-            if (this.dragText) this.dragText.setPosition(p.worldX + 12, p.worldY + 12);
+            const cam = this.cameras?.main;
+            const point = this._pointerWorld;
+            if (cam) {
+                if (typeof p.positionToCamera === 'function') {
+                    p.positionToCamera(cam, point);
+                } else if (cam.getWorldPoint) {
+                    cam.getWorldPoint(p.x, p.y, point);
+                } else {
+                    point.set(p.x, p.y);
+                }
+            } else {
+                point.set(p.x, p.y);
+            }
+
+            this.dragIcon.setPosition(point.x, point.y);
+            if (this.dragText) this.dragText.setPosition(point.x + 12, point.y + 12);
         }
         // NEW: animate cooldown overlays
         this.#updateCooldownOverlays();
@@ -1004,13 +1047,13 @@ export default class UIScene extends Phaser.Scene {
     // -------------------------
     // Day/Night HUD update (called by MainScene)
     // -------------------------
-    updateTimeDisplay(dayIndex, phaseLabel, progress) {
+    updateTimeDisplay(dayIndex, segmentLabel, progress) {
         // skip if elements were destroyed (e.g., during scene restart)
         if (!this.dayNightLabel?.active || !this.timeBarFill?.active || !this.timeBarBg?.active) return;
-        this.dayNightLabel.setText(`Day ${dayIndex} — ${phaseLabel}`);
+        const label = segmentLabel || 'Daytime';
+        this.dayNightLabel.setText(`Day ${dayIndex} — ${label}`);
         const barW = this.timeBarBg.width;
         const clamped = Phaser.Math.Clamp(progress, 0, 1);
         this.timeBarFill.width = Math.max(0, barW * clamped);
-        this.timeBarFill.setFillStyle(phaseLabel === 'Night' ? 0x66aaff : 0xffff66);
     }
 }
