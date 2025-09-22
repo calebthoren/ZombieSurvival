@@ -2,7 +2,7 @@ name: Deploy static content to Pages
 
 on:
   push:
-    branches: ["ZombieSurvival-V1.7"]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
