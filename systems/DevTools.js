@@ -178,6 +178,7 @@ const DevTools = {
         if (v < 0) v = 0;
         if (v > 10) v = 10;
         this.cheats.timeScale = v;
+        try { this._saveCheatsToStorage?.(); } catch {}
 
         // Engine treats smaller values as faster; invert so higher is faster
         const applied = (v <= 0) ? 0 : 1 / v;
@@ -194,11 +195,23 @@ const DevTools = {
                 } catch {}
             }
             try { this._rescaleTimers(prev, applied, mgr.scenes); } catch {}
+            // Ask UI to refresh overlays (cooldowns) after re-scaling
+            try {
+                for (let i = 0; i < mgr.scenes.length; i++) {
+                    const sc = mgr.scenes[i];
+                    if (sc?.uiScene?.events?.emit) {
+                        sc.uiScene.events.emit('inv:changed');
+                        sc.uiScene.events.emit('ui:refreshCooldowns');
+                    }
+                }
+            } catch {}
         }
     },
 
     _rescaleTimers(prev, applied, scenes) {
         if (!Array.isArray(scenes)) return;
+        // Scale remaining durations by (applied / prev) so speeding up the game shortens cooldowns.
+        const factor = (prev === 0) ? 1 : (applied / prev);
         for (let i = 0; i < scenes.length; i++) {
             const sc = scenes[i];
             const clock = sc?.time;
@@ -207,21 +220,20 @@ const DevTools = {
                 // Ranged cooldown
                 if (sc._nextRangedReadyTime != null && sc._nextRangedReadyTime > now) {
                     const remaining = sc._nextRangedReadyTime - now;
-                    sc._nextRangedReadyTime = now + remaining * (prev / applied);
+                    sc._nextRangedReadyTime = now + remaining * factor;
                 }
                 // Melee swing cooldown
                 if (sc._nextSwingCooldownMs != null && sc._lastSwingEndTime != null) {
                     const duration = sc._nextSwingCooldownMs;
                     const elapsed = now - sc._lastSwingEndTime;
-                    const newDuration = duration * (prev / applied);
-                    const newElapsed = elapsed * (prev / applied);
+                    const newDuration = duration * factor;
+                    const newElapsed = elapsed * factor;
                     sc._nextSwingCooldownMs = newDuration;
                     sc._lastSwingEndTime = now - newElapsed;
                 }
                 // Charging adjustments
                 if (sc.isCharging && sc.chargeStart != null) {
                     const elapsed = now - sc.chargeStart;
-                    const factor = prev / applied;
                     sc.chargeStart = now - elapsed * factor;
                     if (sc.chargeMaxMs != null) {
                         sc.chargeMaxMs = Math.floor(sc.chargeMaxMs * factor);
@@ -234,8 +246,8 @@ const DevTools = {
                 sc._activeCooldowns.forEach((info) => {
                     const duration = info.end - info.start;
                     const elapsed = nowUi - info.start;
-                    const newDuration = duration * (prev / applied);
-                    const newElapsed = elapsed * (prev / applied);
+                    const newDuration = duration * factor;
+                    const newElapsed = elapsed * factor;
                     info.start = nowUi - newElapsed;
                     info.end = info.start + newDuration;
                 });
@@ -263,24 +275,28 @@ const DevTools = {
     // Toggle entry point used by Dev UI
     setShowHitboxes(value, scene) {
         this.cheats.showHitboxes = !!value;
+        try { this._saveCheatsToStorage?.(); } catch {}
         if (scene) this._lastScene = scene;
         if (this._lastScene) this.applyHitboxCheat(this._lastScene);
     },
 
     setChunkDetails(value, scene) {
         this.cheats.chunkDetails = !!value;
+        try { this._saveCheatsToStorage?.(); } catch {}
         if (value) this._startChunkDetails(scene);
         else this._stopChunkDetails();
     },
 
     setPerformanceHud(value, scene) {
         this.cheats.performanceHud = !!value;
+        try { this._saveCheatsToStorage?.(); } catch {}
         if (value) this._startPerformanceHud(scene);
         else this._stopPerformanceHud();
     },
 
     setNoDarkness(value, scene) {
         this.cheats.noDarkness = !!value;
+        try { this._saveCheatsToStorage?.(); } catch {}
         if (scene) {
             this._noDarknessScene = scene;
         }
@@ -575,7 +591,7 @@ const DevTools = {
         if (mh && mh.children?.iterate) {
             const N     = Math.max(1, (this._MELEE_SUBDIV | 0));                 // total slices across cone
             const batch = Math.max(1, (this.cheats.meleeSliceBatch | 0)) > 1 ? 2 : 1; // 1 or 2
-            const now   = this.now(scene) | 0;
+            const now   = (scene?.time?.now | 0);
 
             mh.children.iterate((hit) => {
                 if (!hit || !hit.active) return;
@@ -734,5 +750,41 @@ const DevTools = {
     },
 
 };
+
+// Persistence (browser only)
+DevTools._saveCheatsToStorage = function () {
+    try {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        const data = {
+            showHitboxes: !!this.cheats.showHitboxes,
+            invisible: !!this.cheats.invisible,
+            invincible: !!this.cheats.invincible,
+            noAmmo: !!this.cheats.noAmmo,
+            noStamina: !!this.cheats.noStamina,
+            noCooldown: !!this.cheats.noCooldown,
+            noDarkness: !!this.cheats.noDarkness,
+            chunkDetails: !!this.cheats.chunkDetails,
+            performanceHud: !!this.cheats.performanceHud,
+            meleeSliceBatch: (this.cheats.meleeSliceBatch | 0) <= 1 ? 1 : 2,
+            timeScale: Number.isFinite(this.cheats.timeScale) ? this.cheats.timeScale : 1,
+        };
+        window.localStorage.setItem('ZS_DEV_CHEATS', JSON.stringify(data));
+    } catch {}
+};
+
+DevTools._loadCheatsFromStorage = function () {
+    try {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        const raw = window.localStorage.getItem('ZS_DEV_CHEATS');
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (!data || typeof data !== 'object') return;
+        Object.assign(this.cheats, data);
+        const v = this.cheats.timeScale;
+        this._appliedTimeScale = (v <= 0) ? 0 : 1 / v;
+    } catch {}
+};
+
+try { DevTools._loadCheatsFromStorage(); } catch {}
 
 export default DevTools;

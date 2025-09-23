@@ -370,17 +370,31 @@ function createLayeredResource(scene, def, x, y) {
 
     canopyHeight = cropHeight;
 
+    // Enhanced trunk-top calculation for precise tree splitting
     const trunkBody = trunk && trunk.body;
-    if (trunkBody && Number.isFinite(trunkBody.top) && Number.isFinite(heightCfg)) {
+    if (trunkBody && Number.isFinite(trunkBody.top) && Number.isFinite(trunkBody.bottom)) {
         const topWorldY = y - (trunk.displayHeight * (originY || 0));
         const scaleY = trunk.scaleY || 1;
-        const trunkTop = Math.ceil(trunkBody.top);
-        const distFrame = (trunkTop - topWorldY) / scaleY;
-        const calcHeight = Math.ceil(clamp(distFrame - cropY, 0, Math.max(0, frameH - cropY)));
-        if (calcHeight !== canopyHeight) {
-            console.warn(
-                `overlay.height mismatch for ${resourceId}: DB=${desiredHeight} vs calc=${calcHeight}`,
-            );
+        
+        // Calculate the exact trunk top position
+        const trunkTop = Math.ceil(Number.isFinite(trunkBody.top) ? trunkBody.top : trunkBody.y);
+        const trunkBottom = Math.floor(Number.isFinite(trunkBody.bottom) ? trunkBody.bottom : trunkBody.y + trunkBody.height);
+        
+        // Convert trunk top from world space to frame space for cropping
+        const trunkTopFrame = (trunkTop - topWorldY) / scaleY;
+        
+        // Ensure the crop starts exactly where the trunk ends
+        const preciseCropY = Math.max(0, Math.min(frameH - 1, Math.floor(trunkTopFrame)));
+        
+        // Recalculate crop height to start from trunk top
+        if (preciseCropY !== cropY) {
+            cropY = preciseCropY;
+            cropHeight = Math.max(0, Math.min(frameH - cropY, canopyHeight));
+            trunkHeight = Math.max(0, frameH - (cropY + cropHeight));
+            
+            if (DevTools?.cheats?.resourceDetails) {
+                console.log(`[${resourceId}] Trunk-aligned crop: cropY=${cropY}, cropHeight=${cropHeight}, trunkHeight=${trunkHeight}`);
+            }
         }
     }
 
@@ -404,15 +418,16 @@ function createLayeredResource(scene, def, x, y) {
         const useScale = !!overlayCfg.useScale;
 
         const rectW = (overlayCfg.width || 0) * (useScale ? sx : 1);
-        const rectH = Math.max(0, canopyHeight * sy);
+        const rectH = Math.max(0, heightCfg * sy);
         const offX = (overlayCfg.offsetX || 0) * (useScale ? sx : 1);
         const offY = (overlayCfg.offsetY || 0) * (useScale ? sy : 1);
 
         const dispLeft = trunk.x - (trunk.displayOriginX || trunk.displayWidth * 0.5);
         const rectLeft = dispLeft + (trunk.displayWidth - rectW) * 0.5 + offX;
 
+        // Position sensor rectangle at trunk top for precise canopy detection
         const trunkTop = Math.ceil(Number.isFinite(BODY.top) ? BODY.top : BODY.y);
-        const rectTop = trunkTop - rectH + offY;
+        const rectTop = trunkTop + offY; // Sensor bottom aligns with trunk top
         rect = new Phaser.Geom.Rectangle(rectLeft, rectTop, Math.max(0, rectW), rectH);
     } else {
         const tCfg = def.world?.transparent;
@@ -429,10 +444,11 @@ function createLayeredResource(scene, def, x, y) {
             const h = useScale ? tCfg.height * sy : tCfg.height;
             const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
             const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
-            const bottomY = bodyTop + offY;
+            // Sensor positioned at trunk top with proper offset
+            const sensorTop = bodyTop + offY; // Bottom of sensor aligns with trunk top
             const centerX = bodyCenterX + offX;
             const left = centerX - w * 0.5;
-            const top = bottomY - h;
+            const top = sensorTop;
             rect = new Phaser.Geom.Rectangle(left, top, Math.max(0, w), Math.max(0, h));
         } else if (hasT) {
             const useScale = !!tCfg.useScale;
@@ -948,6 +964,9 @@ function createResourceSystem(scene) {
                         trunk.y,
                     );
                     if (d2 > pickupRange * pickupRange) return;
+
+                    // If the player begins holding RMB with this click, schedule auto-pickup
+                    try { scene._scheduleAutoPickup && scene._scheduleAutoPickup(); } catch {}
 
                     if (def.givesItem && scene.uiScene?.inventory) {
                         scene.uiScene.inventory.addItem(

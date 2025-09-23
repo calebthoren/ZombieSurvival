@@ -394,6 +394,13 @@ export default class UIScene extends Phaser.Scene {
             this.#syncCooldownOverlays();
         });
 
+        // Allow external systems (DevTools) to force a cooldown overlay refresh
+        this.events.on('ui:refreshCooldowns', () => {
+            this.#syncCooldownOverlays();
+            // Immediately recompute overlay heights to reflect updated timing
+            this.#updateCooldownOverlays();
+        });
+
         // Charging UI events from MainScene
         this.events.on('weapon:charge', (percent) => {
             this.#updateChargeBar(percent);

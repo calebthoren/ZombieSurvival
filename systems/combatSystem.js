@@ -152,15 +152,18 @@ export default function createCombatSystem(scene) {
             pointer.worldX,
             pointer.worldY,
         );
+        const spawnOffset = 12; // push spawn point forward to avoid immediate self/terrain collision
+        const sx = scene.player.x + Math.cos(angle) * spawnOffset;
+        const sy = scene.player.y + Math.sin(angle) * spawnOffset;
         const bullet =
             scene.bullets.get(
-                scene.player.x,
-                scene.player.y,
+                sx,
+                sy,
                 textureKey,
             ) ||
             scene.physics.add.image(
-                scene.player.x,
-                scene.player.y,
+                sx,
+                sy,
                 textureKey,
             );
         if (!bullet) return;
