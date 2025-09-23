@@ -7,6 +7,7 @@
 import { ITEM_DB } from '../data/itemDatabase.js';
 import { WORLD_GEN, BIOME_IDS } from './world_gen/worldGenConfig.js';
 import { getBiome } from './world_gen/biomes/biomeMap.js';
+import { RESOURCE_DB } from '../data/resourceDatabase.js';
 
 // Helper function to format time as M:SS
 function formatTime(ms) {
@@ -47,29 +48,32 @@ const BIOME_NAMES = {
     [BIOME_IDS.DESERT]: 'Desert',
 };
 
+// Default dev settings that should be restored on every fresh load or respawn
+const DEFAULT_DEV_SETTINGS = {
+    showHitboxes: false,
+    invisible:    false,
+    invincible:   false,
+    noAmmo:       false,
+    noStamina:    false,
+    noCooldown:   false,
+    noDarkness:   false,
+
+    // Debug overlays
+    chunkDetails:    false,
+    performanceHud:  false,
+
+    // NEW: how many slices to draw per fast tick (1 or 2)
+    meleeSliceBatch: 1,
+
+    // Global game speed (0..10, 1 = normal)
+    timeScale: 1
+};
+
 const DevTools = {
     // ─────────────────────────────────────────────────────────────
     // CHEATS (wired from Dev UI)
     // ─────────────────────────────────────────────────────────────
-    cheats: {
-        showHitboxes: false,
-        invisible:    false,
-        invincible:   false,
-        noAmmo:       false,
-        noStamina:    false,
-        noCooldown:   false,
-        noDarkness:   false,
-
-        // Debug overlays
-        chunkDetails:    false,
-        performanceHud:  false,
-
-        // NEW: how many slices to draw per fast tick (1 or 2)
-        meleeSliceBatch: 1,
-
-        // Global game speed (0..10, 1 = normal)
-        timeScale: 1
-    },
+    cheats: { ...DEFAULT_DEV_SETTINGS },
 
     _appliedTimeScale: 1,
     _resourcePoolDebug: false,
@@ -137,17 +141,7 @@ const DevTools = {
 
     // reset dev toggles to defaults (used on death)
     resetToDefaults(scene = null) {
-        this.cheats.showHitboxes   = false;
-        this.cheats.invincible     = false;
-        this.cheats.invisible      = false;
-        this.cheats.noAmmo         = false;
-        this.cheats.noStamina      = false;
-        this.cheats.noCooldown     = false;
-        this.cheats.noDarkness     = false;
-        this.cheats.chunkDetails   = false;
-        this.cheats.performanceHud = false;
-        this.cheats.meleeSliceBatch = 1;
-        this.cheats.timeScale       = 1;
+        Object.assign(this.cheats, DEFAULT_DEV_SETTINGS);
         this._enemySpawnPrefs = null;
         this._itemSpawnPrefs  = null;
         this._stopChunkDetails();
@@ -178,7 +172,6 @@ const DevTools = {
         if (v < 0) v = 0;
         if (v > 10) v = 10;
         this.cheats.timeScale = v;
-        try { this._saveCheatsToStorage?.(); } catch {}
 
         // Engine treats smaller values as faster; invert so higher is faster
         const applied = (v <= 0) ? 0 : 1 / v;
@@ -275,28 +268,24 @@ const DevTools = {
     // Toggle entry point used by Dev UI
     setShowHitboxes(value, scene) {
         this.cheats.showHitboxes = !!value;
-        try { this._saveCheatsToStorage?.(); } catch {}
         if (scene) this._lastScene = scene;
         if (this._lastScene) this.applyHitboxCheat(this._lastScene);
     },
 
     setChunkDetails(value, scene) {
         this.cheats.chunkDetails = !!value;
-        try { this._saveCheatsToStorage?.(); } catch {}
         if (value) this._startChunkDetails(scene);
         else this._stopChunkDetails();
     },
 
     setPerformanceHud(value, scene) {
         this.cheats.performanceHud = !!value;
-        try { this._saveCheatsToStorage?.(); } catch {}
         if (value) this._startPerformanceHud(scene);
         else this._stopPerformanceHud();
     },
 
     setNoDarkness(value, scene) {
         this.cheats.noDarkness = !!value;
-        try { this._saveCheatsToStorage?.(); } catch {}
         if (scene) {
             this._noDarknessScene = scene;
         }
@@ -749,42 +738,68 @@ const DevTools = {
         // Ignore leftovers when inventory + hotbar are full
     },
 
-};
+    // ─────────────────────────────────────────────────────────────
+    // Canopy calibration helper — spawns all tree variants near player and prints suggested offsets
+    // ─────────────────────────────────────────────────────────────
+    spawnAllTreeVariantsForCanopy(scene) {
+        if (!scene) scene = this._lastScene;
+        if (!scene) return;
+        try { this.cheats.resourceDetails = true; } catch {}
 
-// Persistence (browser only)
-DevTools._saveCheatsToStorage = function () {
-    try {
-        if (typeof window === 'undefined' || !window.localStorage) return;
-        const data = {
-            showHitboxes: !!this.cheats.showHitboxes,
-            invisible: !!this.cheats.invisible,
-            invincible: !!this.cheats.invincible,
-            noAmmo: !!this.cheats.noAmmo,
-            noStamina: !!this.cheats.noStamina,
-            noCooldown: !!this.cheats.noCooldown,
-            noDarkness: !!this.cheats.noDarkness,
-            chunkDetails: !!this.cheats.chunkDetails,
-            performanceHud: !!this.cheats.performanceHud,
-            meleeSliceBatch: (this.cheats.meleeSliceBatch | 0) <= 1 ? 1 : 2,
-            timeScale: Number.isFinite(this.cheats.timeScale) ? this.cheats.timeScale : 1,
+        // Collect all tree IDs from DB
+        const ids = Object.keys(RESOURCE_DB).filter((k) => /^tree\d+[A-Z]$/i.test(RESOURCE_DB[k]?.id || ''))
+            .map((k) => RESOURCE_DB[k].id);
+        if (!ids.length) return;
+
+        const p = scene.player || { x: 0, y: 0 };
+        const cols = 6;
+        const spacing = 140;
+        let row = 0, col = 0;
+
+        const spawnOne = (id, x, y) => {
+            const cfg = { variants: [{ id, weight: 1 }], clusterMin: 1, clusterMax: 1 };
+            try {
+                scene.resourceSystem?.__testSpawnResourceGroup('trees', cfg, {
+                    bounds: { minX: x, maxX: x, minY: y, maxY: y },
+                    count: 1,
+                    noRespawn: true,
+                    proximityGroup: scene.resources,
+                });
+            } catch (e) {
+                console.warn('[DevTools] spawn failed for', id, e);
+            }
         };
-        window.localStorage.setItem('ZS_DEV_CHEATS', JSON.stringify(data));
-    } catch {}
+
+        for (let i = 0; i < ids.length; i++) {
+            const id = ids[i];
+            const x = Math.round(p.x + (col - Math.floor(cols / 2)) * spacing);
+            const y = Math.round(p.y + row * spacing);
+            spawnOne(id, x, y);
+            col++;
+            if (col >= cols) { col = 0; row++; }
+        }
+
+        // After a short delay, print consolidated suggestions
+        try {
+            scene.time.delayedCall(300, () => {
+                const map = scene._canopyCalib;
+                if (!map || typeof map.forEach !== 'function') {
+                    console.log('[DevTools] No canopy suggestions collected yet. Ensure cheats.resourceDetails is ON.');
+                    return;
+                }
+                console.log('=== Canopy offsetY suggestions (per tree id) ===');
+                map.forEach((info, id) => {
+                    console.log(`${id}: transparent.offsetY=${info.suggestedOffsetY} (was ${info.currentTransparentOffsetY}), overlay.offsetY=${info.suggestedOffsetY} (was ${info.currentOverlayOffsetY})`);
+                });
+                console.log('===============================================');
+            });
+        } catch {}
+    },
+
 };
 
-DevTools._loadCheatsFromStorage = function () {
-    try {
-        if (typeof window === 'undefined' || !window.localStorage) return;
-        const raw = window.localStorage.getItem('ZS_DEV_CHEATS');
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        if (!data || typeof data !== 'object') return;
-        Object.assign(this.cheats, data);
-        const v = this.cheats.timeScale;
-        this._appliedTimeScale = (v <= 0) ? 0 : 1 / v;
-    } catch {}
-};
-
-try { DevTools._loadCheatsFromStorage(); } catch {}
+// Note: DevTools settings are no longer persisted to localStorage.
+// They reset to defaults on page refresh/reload and respawn events.
+// This prevents settings from carrying over between game sessions.
 
 export default DevTools;
