@@ -341,7 +341,7 @@ function createLayeredResource(scene, def, x, y) {
     const rawCropX = hasCropX ? overlayCfg.cropX : baseX + offsetX;
     const rawCropY = hasCropY ? overlayCfg.cropY : baseY + offsetY;
     const cropX = clamp(rawCropX, 0, Math.max(0, frameW - 1));
-    const cropY = clamp(rawCropY, 0, Math.max(0, frameH));
+    let cropY = clamp(rawCropY, 0, Math.max(0, frameH));
     const desiredHeight = Number.isFinite(heightCfg)
         ? heightCfg
         : Math.max(0, frameH - cropY);
@@ -372,7 +372,7 @@ function createLayeredResource(scene, def, x, y) {
 
     // Enhanced trunk-top calculation for precise tree splitting
     const trunkBody = trunk && trunk.body;
-    if (trunkBody && Number.isFinite(trunkBody.top) && Number.isFinite(trunkBody.bottom)) {
+    if (trunkBody && Number.isFinite(trunkBody.top)) {
         const topWorldY = y - (trunk.displayHeight * (originY || 0));
         const scaleY = trunk.scaleY || 1;
         
@@ -425,9 +425,9 @@ function createLayeredResource(scene, def, x, y) {
         const dispLeft = trunk.x - (trunk.displayOriginX || trunk.displayWidth * 0.5);
         const rectLeft = dispLeft + (trunk.displayWidth - rectW) * 0.5 + offX;
 
-        // Position sensor rectangle at trunk top for precise canopy detection
+        // Place sensor so its bottom sits at the trunk top (extends upward over canopy)
         const trunkTop = Math.ceil(Number.isFinite(BODY.top) ? BODY.top : BODY.y);
-        const rectTop = trunkTop + offY; // Sensor bottom aligns with trunk top
+        const rectTop = trunkTop - rectH + offY;
         rect = new Phaser.Geom.Rectangle(rectLeft, rectTop, Math.max(0, rectW), rectH);
     } else {
         const tCfg = def.world?.transparent;
@@ -444,11 +444,11 @@ function createLayeredResource(scene, def, x, y) {
             const h = useScale ? tCfg.height * sy : tCfg.height;
             const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
             const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
-            // Sensor positioned at trunk top with proper offset
-            const sensorTop = bodyTop + offY; // Bottom of sensor aligns with trunk top
+            // Place sensor so its bottom sits at trunk top (extends upward over canopy)
+            const bottomY = bodyTop + offY;
             const centerX = bodyCenterX + offX;
             const left = centerX - w * 0.5;
-            const top = sensorTop;
+            const top = bottomY - h;
             rect = new Phaser.Geom.Rectangle(left, top, Math.max(0, w), Math.max(0, h));
         } else if (hasT) {
             const useScale = !!tCfg.useScale;

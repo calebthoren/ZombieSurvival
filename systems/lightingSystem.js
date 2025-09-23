@@ -24,8 +24,13 @@ export default function createLightingSystem(scene) {
     for (let i = 0; i < scene._lightBindings.length; i++) {
       const binding = scene._lightBindings[i];
       if (!binding) continue;
-      if (!binding.active) continue;
+      // Check if light should be drawable based on radius, intensity, and target validity
       if (!Number.isFinite(binding.radius) || binding.radius <= 0) continue;
+      const intensity = Number.isFinite(binding.intensity) ? binding.intensity : 0;
+      if (intensity <= 0.001) continue;
+      // Check if target is still valid
+      const target = binding.target;
+      if (target && (target.active === false || target.scene !== scene)) continue;
       lights.push(binding);
     }
     return lights;
@@ -211,10 +216,6 @@ export default function createLightingSystem(scene) {
     if (!overlay || typeof overlay.setMask !== 'function') return;
 
     const lights = _collectActiveMaskLights();
-    // Fallback: always consider the player light if present, even if not marked active yet.
-    if (lights.length === 0 && scene.playerLight) {
-      lights.push(scene.playerLight);
-    }
 
     let hasDrawableLight = false;
     for (let i = 0; i < lights.length; i++) {
@@ -356,10 +357,11 @@ export default function createLightingSystem(scene) {
         releaseWorldLight(binding);
         continue;
       }
-      const x = (target.x || 0) + (binding.offsetX || 0);
-      const y = (target.y || 0) + (binding.offsetY || 0);
-      binding.x = x;
-      binding.y = y;
+      // Always update position for valid targets
+      const x = Number.isFinite(target.x) ? target.x : 0;
+      const y = Number.isFinite(target.y) ? target.y : 0;
+      binding.x = x + (binding.offsetX || 0);
+      binding.y = y + (binding.offsetY || 0);
 
       // Player-like flicker for any light that opts in via flickerAmplitude/flickerSpeed
       const amp = Number.isFinite(binding.flickerAmplitude) ? binding.flickerAmplitude : 0;
@@ -574,6 +576,36 @@ export default function createLightingSystem(scene) {
     _updateAttachedLights();
     _updatePlayerLightGlow(delta);
     _updateNightOverlayMask();
+    
+    // Temporary debug logging
+    if (scene.nightOverlay && scene.nightOverlay.alpha > 0.1) {
+      const lights = _collectActiveMaskLights();
+      if (scene._debugLogTimer == null || Date.now() - scene._debugLogTimer > 2000) {
+        scene._debugLogTimer = Date.now();
+        console.log('[LIGHTING] Debug - Overlay alpha:', scene.nightOverlay.alpha, 'Lights found:', lights.length);
+        if (scene.playerLight) {
+          console.log('[LIGHTING] Player light:', {
+            radius: scene.playerLight.radius,
+            intensity: scene.playerLight.intensity,
+            x: scene.playerLight.x,
+            y: scene.playerLight.y,
+            active: scene.playerLight.active
+          });
+        }
+        scene._lightBindings?.forEach((binding, i) => {
+          if (binding.target?.texture?.key === 'flamed_walker') {
+            console.log(`[LIGHTING] Flamed Walker light ${i}:`, {
+              radius: binding.radius,
+              intensity: binding.intensity,
+              x: binding.x,
+              y: binding.y,
+              active: binding.active,
+              targetActive: binding.target?.active
+            });
+          }
+        });
+      }
+    }
   }
 
   return {

@@ -427,52 +427,6 @@ export default class MainScene extends Phaser.Scene {
         const h = this.sys.game.config.height;
         this.lighting.createOverlayIfNeeded();
 
-        // Simple radial BitmapMask light (ported from main) — overrides lightingSystem when active
-        try {
-            const texKey = 'light_radial_mask_v17';
-            const size = 192; // square texture (px)
-            if (!this.textures.exists(texKey)) {
-                const c = this.textures.createCanvas(texKey, size, size);
-                const ctx = c.getContext();
-                const cx = size / 2;
-                const cy = size / 2;
-                const r = size / 2;
-                const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-                // center fully white (alpha 1), edge transparent (alpha 0)
-                grad.addColorStop(0.0, 'rgba(255,255,255,1)');
-                grad.addColorStop(0.7, 'rgba(255,255,255,0.5)');
-                grad.addColorStop(1.0, 'rgba(255,255,255,0)');
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, size, size);
-                c.refresh();
-            }
-            this._lightMaskSprite = this.add.image(0, 0, texKey)
-                .setOrigin(0.5, 0.5)
-                .setScrollFactor(0)
-                .setDepth(10001)
-                .setVisible(false);
-            this._lightMaskBM = new Phaser.Display.Masks.BitmapMask(this, this._lightMaskSprite);
-            this._lightMaskBM.invertAlpha = true; // punch a hole in darkness
-
-            // Tunables
-            this._lightTexSize = 192;
-            this._lightBaseRadiusMult = 1.1;  // matches main (twice the earlier 0.55)
-            this._lightFlickerPct = 0.06;
-            this._lightFlickerHz = 6.3;
-            this._lightFlickerHz2 = 9.7;
-
-            // Cleanup on shutdown/destroy
-            const onTearDown = () => {
-                try { if (this.nightOverlay && this.nightOverlay.mask === this._lightMaskBM) this.nightOverlay.clearMask(true); } catch {}
-                try { this._lightMaskSprite?.destroy(); } catch {}
-                this._lightMaskSprite = null;
-                this._lightMaskBM = null;
-            };
-            this.events.once(Phaser.Scenes.Events.SHUTDOWN, onTearDown);
-            this.events.once(Phaser.Scenes.Events.DESTROY, onTearDown);
-        } catch (e) {
-            console?.warn?.('V1.7 simple light mask init failed', e);
-        }
 
         // --- DevTools integration ---
         // Apply current hitbox cheat right away (responds to future toggles too)

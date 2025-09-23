@@ -48,8 +48,8 @@ const ZOMBIES = {
         name: 'Flamed Walker',
         texture: 'flamed_walker',   // fallback for older code
         textureKey: 'flamed_walker',
-        // Match regular walker visual size: 0.1 * (229 / 1024) ≈ 0.0224
-        scale: 0.0224,
+        // Use same scale as walker for consistent hitbox
+        scale: 0.1,
         depth: 900,
 
         // Core stats - same as walker but night-only
