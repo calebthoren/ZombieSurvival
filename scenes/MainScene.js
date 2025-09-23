@@ -830,68 +830,10 @@ export default class MainScene extends Phaser.Scene {
         this.updateNightOverlay();
         this.lighting.update(delta);
 
-        // Prefer the multi-light geometry mask when any non-player lights are active.
-        // Fall back to the simple BitmapMask only when the player is the ONLY light.
-        try {
-            const overlay = this.nightOverlay;
-            const hasDarkness = !!(overlay && (overlay.alpha || 0) > 0.01);
-            if (!hasDarkness) {
-                if (overlay && overlay.mask === this._lightMaskBM) overlay.clearMask(true);
-            } else {
-                // Count active lights and check if any belong to non-player objects
-                const lights = Array.isArray(this._lightBindings) ? this._lightBindings : [];
-                let activeCount = 0;
-                let hasNonPlayer = false;
-                for (let i = 0; i < lights.length; i++) {
-                    const L = lights[i];
-                    if (!L || L.active !== true) continue;
-                    const r = Number.isFinite(L.radius) ? L.radius : 0;
-                    const intensity = Number.isFinite(L.intensity) ? L.intensity : 0;
-                    if (r > 0 && intensity > 0.001) {
-                        activeCount++;
-                        if (L.target && L.target !== this.player) hasNonPlayer = true;
-                    }
-                }
-
-                const shouldUseSimpleMask = activeCount <= 1 && !hasNonPlayer;
-
-                if (!shouldUseSimpleMask) {
-                    // Ensure we are NOT forcing the simple player mask so the geometry mask shows holes around enemies
-                    if (overlay && overlay.mask === this._lightMaskBM) overlay.clearMask(true);
-                } else if (overlay && this._lightMaskBM) {
-                    // Position simple mask at player (screen space)
-                    const cam = this.cameras?.main;
-                    const p = this.player;
-                    if (cam && p && this._lightMaskSprite) {
-                        const sx = p.x - cam.scrollX;
-                        const sy = p.y - cam.scrollY;
-                        this._lightMaskSprite.setPosition(sx, sy);
-
-                        // Base radius from player collider/display
-                        let baseDiam = 24;
-                        const b = p.body;
-                        if (b && b.width && b.height) baseDiam = Math.max(b.width, b.height);
-                        else baseDiam = Math.max(p.displayWidth || 24, p.displayHeight || 24);
-
-                        const baseRadius = Math.max(8, baseDiam * (this._lightBaseRadiusMult || 1.1));
-
-                        // Edge flicker
-                        const tsec = (this.time?.now || 0) * 0.001;
-                        const f1 = Math.sin(2 * Math.PI * (this._lightFlickerHz || 6.3) * tsec);
-                        const f2 = Math.sin(2 * Math.PI * (this._lightFlickerHz2 || 9.7) * tsec + 1.234);
-                        const flicker = 1 + (this._lightFlickerPct || 0.06) * (0.5 * f1 + 0.5 * f2);
-
-                        const diameter = baseRadius * 2 * flicker;
-                        const texSize = this._lightTexSize || 192;
-                        const scale = diameter / texSize;
-                        this._lightMaskSprite.setScale(scale);
-
-                        // Force overlay to use our simple mask (after lightingSystem)
-                        overlay.setMask(this._lightMaskBM);
-                    }
-                }
-            }
-        } catch {}
+        // NOTE: Do not override overlay masks here. The lighting system now handles
+        // all hole-in-darkness rendering (player + enemies) via its geometry mask.
+        // This avoids conflicts that hid non-player lights like Flamed Walker.
+        // Intentionally left empty.
 
         const w = WORLD_GEN.world.width;
         const h = WORLD_GEN.world.height;

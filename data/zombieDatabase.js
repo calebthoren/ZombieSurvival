@@ -73,8 +73,8 @@ const ZOMBIES = {
         // HP bar visuals
         hpBar: { width: 18, height: 3, yOffsetFactor: 0.6 },
 
-        // Light emission - glows in the dark (player-like)
-        light: { radius: 120, intensity: 1, maskScale: 1.0, maskTileCount: 7, maskTileSize: 16 },
+        // Light emission - glows in the dark with player-like flicker
+        light: { radius: 120, intensity: 1, maskScale: 1.0, maskTileCount: 7, maskTileSize: 16, flickerAmplitude: 8, flickerSpeed: 2.25 },
 
         // Loot scaffolding (placeholder)
         loot: {

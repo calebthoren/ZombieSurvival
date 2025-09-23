@@ -310,15 +310,24 @@ export default function createLightingSystem(scene) {
       ? (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(Math.round(cfg.maskTileCount), 1, 32) : Math.min(Math.max(Math.round(cfg.maskTileCount), 1), 32))
       : null;
 
+    // Optional flicker controls (player-like behavior)
+    const flickerAmplitude = Number.isFinite(cfg.flickerAmplitude) ? cfg.flickerAmplitude : 0;
+    const flickerSpeed = Number.isFinite(cfg.flickerSpeed) ? cfg.flickerSpeed : 0;
+
     const binding = {
       target,
       offsetX,
       offsetY,
       radius,
+      _baseRadius: radius,
       maskScale,
       intensity: (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1)),
       maskTileSize,
       maskTileCount,
+      flickerAmplitude: flickerAmplitude < 0 ? 0 : flickerAmplitude,
+      flickerSpeed: flickerSpeed < 0 ? 0 : flickerSpeed,
+      _flickerPhase: Math.random() * (Phaser?.Math?.PI2 || Math.PI * 2),
+      _flickerPhaseAlt: Math.random() * (Phaser?.Math?.PI2 || Math.PI * 2),
       active: intensity > 0 && radius > 0,
       x: (target.x || 0) + offsetX,
       y: (target.y || 0) + offsetY,
@@ -333,6 +342,7 @@ export default function createLightingSystem(scene) {
 
   function _updateAttachedLights() {
     if (!Array.isArray(scene._lightBindings) || scene._lightBindings.length === 0) return;
+    const Phaser = globalThis.Phaser || {};
     for (let i = scene._lightBindings.length - 1; i >= 0; i--) {
       const binding = scene._lightBindings[i];
       if (!binding) { scene._lightBindings.splice(i, 1); continue; }
@@ -345,6 +355,29 @@ export default function createLightingSystem(scene) {
       const y = (target.y || 0) + (binding.offsetY || 0);
       binding.x = x;
       binding.y = y;
+
+      // Player-like flicker for any light that opts in via flickerAmplitude/flickerSpeed
+      const amp = Number.isFinite(binding.flickerAmplitude) ? binding.flickerAmplitude : 0;
+      const spd = Number.isFinite(binding.flickerSpeed) ? binding.flickerSpeed : 0;
+      if (amp > 0 && spd > 0) {
+        const dt = Math.max(0, (scene.game?.loop?.delta || scene.time?.elapsedMS || 16)) / 1000;
+        binding._flickerPhase = (binding._flickerPhase || 0) + spd * dt;
+        binding._flickerPhaseAlt = (binding._flickerPhaseAlt || 0) + spd * 1.618 * dt;
+        if (Phaser?.Math?.Wrap) {
+          binding._flickerPhase = Phaser.Math.Wrap(binding._flickerPhase, 0, Phaser.Math.PI2);
+          binding._flickerPhaseAlt = Phaser.Math.Wrap(binding._flickerPhaseAlt, 0, Phaser.Math.PI2);
+        }
+        const waveA = Math.sin(binding._flickerPhase);
+        const waveB = Math.sin(binding._flickerPhaseAlt);
+        const mix = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp((waveA * 0.6 + waveB * 0.4) * 0.5, -1, 1) : Math.min(Math.max((waveA * 0.6 + waveB * 0.4) * 0.5, -1), 1));
+        const base = Number.isFinite(binding._baseRadius) ? binding._baseRadius : (Number.isFinite(binding.radius) ? binding.radius : 0);
+        const jitter = mix * amp;
+        const newRadius = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(base + jitter, Math.max(0, base - amp), base + amp) : Math.min(Math.max(base + jitter, Math.max(0, base - amp)), base + amp));
+        binding.radius = newRadius;
+        const intensityJitter = 1 + mix * 0.08;
+        const newIntensity = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp((binding.intensity || 0) * intensityJitter, 0, 1) : Math.min(Math.max((binding.intensity || 0) * intensityJitter, 0), 1));
+        binding.intensity = newIntensity;
+      }
     }
   }
 
