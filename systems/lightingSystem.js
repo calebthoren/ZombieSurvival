@@ -576,36 +576,6 @@ export default function createLightingSystem(scene) {
     _updateAttachedLights();
     _updatePlayerLightGlow(delta);
     _updateNightOverlayMask();
-    
-    // Temporary debug logging
-    if (scene.nightOverlay && scene.nightOverlay.alpha > 0.1) {
-      const lights = _collectActiveMaskLights();
-      if (scene._debugLogTimer == null || Date.now() - scene._debugLogTimer > 2000) {
-        scene._debugLogTimer = Date.now();
-        console.log('[LIGHTING] Debug - Overlay alpha:', scene.nightOverlay.alpha, 'Lights found:', lights.length);
-        if (scene.playerLight) {
-          console.log('[LIGHTING] Player light:', {
-            radius: scene.playerLight.radius,
-            intensity: scene.playerLight.intensity,
-            x: scene.playerLight.x,
-            y: scene.playerLight.y,
-            active: scene.playerLight.active
-          });
-        }
-        scene._lightBindings?.forEach((binding, i) => {
-          if (binding.target?.texture?.key === 'flamed_walker') {
-            console.log(`[LIGHTING] Flamed Walker light ${i}:`, {
-              radius: binding.radius,
-              intensity: binding.intensity,
-              x: binding.x,
-              y: binding.y,
-              active: binding.active,
-              targetActive: binding.target?.active
-            });
-          }
-        });
-      }
-    }
   }
 
   return {

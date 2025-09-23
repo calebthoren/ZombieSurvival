@@ -580,8 +580,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 64, height: 58, offsetX: 0, offsetY: -5, useScale: true },
+      transparent: { width: 64, height: 58, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 64,
@@ -619,8 +618,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 86, height: 76, offsetX: 0, offsetY: -19, useScale: true },
+      transparent: { width: 86, height: 76, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 86,
@@ -658,8 +656,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 100, height: 88, offsetX: 0, offsetY: -27, useScale: true },
+      transparent: { width: 100, height: 88, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 100,
@@ -697,8 +694,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 48, height: 38, offsetX: 0, offsetY: -18, useScale: true },
+      transparent: { width: 48, height: 38, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 48,
@@ -736,8 +732,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 78, height: 72, offsetX: 0, offsetY: -18, useScale: true },
+      transparent: { width: 78, height: 72, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 78,
@@ -775,8 +770,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 96, height: 84, offsetX: 0, offsetY: -18, useScale: true },
+      transparent: { width: 96, height: 84, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 96,
@@ -815,8 +809,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 62, height: 44, offsetX: 0, offsetY: 2, useScale: true },
+      transparent: { width: 62, height: 44, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 62,
@@ -854,8 +847,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 84, height: 70, offsetX: 0, offsetY: -9, useScale: true },
+      transparent: { width: 84, height: 70, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 84,
@@ -893,8 +885,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 96, height: 92, offsetX: 0, offsetY: -20, useScale: true },
+      transparent: { width: 96, height: 92, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 96,
@@ -933,8 +924,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 46, height: 36, offsetX: 0, offsetY: -18, useScale: true },
+      transparent: { width: 46, height: 36, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 46,
@@ -973,8 +963,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 78, height: 72, offsetX: 0, offsetY: -18, useScale: true },
+      transparent: { width: 78, height: 72, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 78,
@@ -1013,8 +1002,7 @@ export const RESOURCE_DB = {
         useScale: true,
         anchor: 'bottomCenter',
       },
-      // Sensor positioned at trunk top where canopy begins
-      transparent: { width: 88, height: 76, offsetX: 0, offsetY: -18, useScale: true },
+      transparent: { width: 88, height: 76, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
       width: 88,

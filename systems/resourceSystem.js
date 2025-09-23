@@ -341,24 +341,45 @@ function createLayeredResource(scene, def, x, y) {
     const rawCropX = hasCropX ? overlayCfg.cropX : baseX + offsetX;
     const rawCropY = hasCropY ? overlayCfg.cropY : baseY + offsetY;
     const cropX = clamp(rawCropX, 0, Math.max(0, frameW - 1));
-    let cropY = clamp(rawCropY, 0, Math.max(0, frameH));
-    const desiredHeight = Number.isFinite(heightCfg)
-        ? heightCfg
-        : Math.max(0, frameH - cropY);
-    let canopyHeight = desiredHeight;
+    // We'll compute cropY/cropHeight after we determine the trunk-top split line
+    let cropY = 0;
+    let canopyHeight = Number.isFinite(heightCfg) ? Math.floor(heightCfg) : Math.max(0, frameH);
     const cropWidthLimit = Number.isFinite(widthCfg) ? widthCfg : Math.max(0, frameW - cropX);
     const cropWidth = Math.max(1, Math.min(frameW - cropX, cropWidthLimit));
-    let cropHeight = Math.max(0, Math.min(frameH - cropY, canopyHeight));
-    cropHeight = Math.floor(cropHeight);
+    let cropHeight = 0;
 
+    // Determine split line at trunk top in frame coordinates (0 at top of sprite)
+    let splitYFrame = null;
+    if (trunk && trunk.body && Number.isFinite(trunk.body.top)) {
+        const topWorldY = y - (trunk.displayHeight * (originY || 0));
+        const scaleY = trunk.scaleY || 1;
+        const trunkTopWorld = Math.ceil(Number.isFinite(trunk.body.top) ? trunk.body.top : trunk.body.y);
+        splitYFrame = clamp((trunkTopWorld - topWorldY) / scaleY, 0, frameH);
+        splitYFrame = Math.floor(splitYFrame);
+    }
+
+    if (splitYFrame != null) {
+        // Canopy is everything ABOVE the trunk line: from top (0) down to splitYFrame
+        cropY = 0;
+        canopyHeight = Math.max(0, Math.min(frameH, splitYFrame));
+        cropHeight = canopyHeight;
+    } else {
+        // Fallback to DB-defined overlay height starting from top
+        cropY = 0;
+        cropHeight = Math.max(0, Math.min(frameH, canopyHeight));
+    }
+
+    // Compute trunk region (bottom part) and ensure minimum trunk height
     let trunkHeight = Math.max(0, frameH - (cropY + cropHeight));
     const minTrunk = getMinimumTrunkHeight(def, trunk, frameH);
     if (minTrunk > 0 && trunkHeight < minTrunk) {
         const needed = minTrunk - trunkHeight;
         if (cropHeight > needed) {
             cropHeight -= needed;
+            canopyHeight = cropHeight;
         } else {
             cropHeight = 0;
+            canopyHeight = 0;
         }
         trunkHeight = Math.max(0, frameH - (cropY + cropHeight));
     }
@@ -368,36 +389,7 @@ function createLayeredResource(scene, def, x, y) {
         return ctx;
     }
 
-    canopyHeight = cropHeight;
-
-    // Enhanced trunk-top calculation for precise tree splitting
-    const trunkBody = trunk && trunk.body;
-    if (trunkBody && Number.isFinite(trunkBody.top)) {
-        const topWorldY = y - (trunk.displayHeight * (originY || 0));
-        const scaleY = trunk.scaleY || 1;
-        
-        // Calculate the exact trunk top position
-        const trunkTop = Math.ceil(Number.isFinite(trunkBody.top) ? trunkBody.top : trunkBody.y);
-        const trunkBottom = Math.floor(Number.isFinite(trunkBody.bottom) ? trunkBody.bottom : trunkBody.y + trunkBody.height);
-        
-        // Convert trunk top from world space to frame space for cropping
-        const trunkTopFrame = (trunkTop - topWorldY) / scaleY;
-        
-        // Ensure the crop starts exactly where the trunk ends
-        const preciseCropY = Math.max(0, Math.min(frameH - 1, Math.floor(trunkTopFrame)));
-        
-        // Recalculate crop height to start from trunk top
-        if (preciseCropY !== cropY) {
-            cropY = preciseCropY;
-            cropHeight = Math.max(0, Math.min(frameH - cropY, canopyHeight));
-            trunkHeight = Math.max(0, frameH - (cropY + cropHeight));
-            
-            if (DevTools?.cheats?.resourceDetails) {
-                console.log(`[${resourceId}] Trunk-aligned crop: cropY=${cropY}, cropHeight=${cropHeight}, trunkHeight=${trunkHeight}`);
-            }
-        }
-    }
-
+    // Note: canopy (overlaySprite) is the TOP portion (0..split), trunk is BOTTOM (split..end)
     trunk.setCrop(0, cropY + cropHeight, frameW, trunkHeight);
 
     const overlayDepth = (scene.player?.depth ?? 900) + 2 + (hashResourceId(resourceId) % 10);
@@ -418,7 +410,8 @@ function createLayeredResource(scene, def, x, y) {
         const useScale = !!overlayCfg.useScale;
 
         const rectW = (overlayCfg.width || 0) * (useScale ? sx : 1);
-        const rectH = Math.max(0, heightCfg * sy);
+        // Sensor height should match the canopy crop height (top portion)
+        const rectH = Math.max(0, (cropHeight || 0) * sy);
         const offX = (overlayCfg.offsetX || 0) * (useScale ? sx : 1);
         const offY = (overlayCfg.offsetY || 0) * (useScale ? sy : 1);
 
@@ -441,7 +434,8 @@ function createLayeredResource(scene, def, x, y) {
             const sx = trunk.scaleX || 1;
             const sy = trunk.scaleY || 1;
             const w = useScale ? tCfg.width * sx : tCfg.width;
-            const h = useScale ? tCfg.height * sy : tCfg.height;
+            // If we computed canopy cropHeight above, prefer that height; otherwise use tCfg.height
+            const h = Math.max(0, (cropHeight ? cropHeight * sy : tCfg.height * sy));
             const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
             const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
             // Place sensor so its bottom sits at trunk top (extends upward over canopy)
