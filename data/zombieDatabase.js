@@ -1,6 +1,18 @@
 // data/zombieDatabase.js
 // Central place to tune zombie types/stats.
 
+// Standard enemy metrics (Walker as reference)
+const ENEMY_METRICS = {
+    WALKER: {
+        scale: 0.1,
+        // Physics body size (will be applied after scaling)
+        bodyWidth: null,   // Let Phaser auto-calculate from scaled sprite
+        bodyHeight: null,  // Let Phaser auto-calculate from scaled sprite
+        bodyOffsetX: 0,
+        bodyOffsetY: 0
+    }
+};
+
 const ZOMBIES = {
     // Basic walker
     walker: {
@@ -49,7 +61,7 @@ const ZOMBIES = {
         texture: 'flamed_walker',   // fallback for older code
         textureKey: 'flamed_walker',
         // Use same scale as walker for consistent hitbox
-        scale: 0.1,
+        scale: ENEMY_METRICS.WALKER.scale,
         depth: 900,
 
         // Core stats - same as walker but night-only
@@ -84,4 +96,5 @@ const ZOMBIES = {
 
 };
 
+export { ENEMY_METRICS };
 export default ZOMBIES;

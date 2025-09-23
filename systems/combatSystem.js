@@ -1,7 +1,7 @@
 // systems/combatSystem.js
 // Encapsulates combat logic to keep MainScene focused on orchestration.
 import { ITEM_DB } from '../data/itemDatabase.js';
-import ZOMBIES from '../data/zombieDatabase.js';
+import ZOMBIES, { ENEMY_METRICS } from '../data/zombieDatabase.js';
 import DevTools from './DevTools.js';
 
 export default function createCombatSystem(scene) {
@@ -518,8 +518,13 @@ export default function createCombatSystem(scene) {
         if (!zombie.body) scene.physics.add.existing(zombie);
         zombie.body.setAllowGravity(false);
         zombie.setOrigin(0.5, 0.5);
-        zombie.setScale(def.scale ?? 0.1);
+        zombie.setScale(def.scale ?? ENEMY_METRICS.WALKER.scale);
         zombie.setDepth(def.depth ?? 2);
+        
+        // Ensure consistent physics body size for all enemy types
+        // This normalizes hitboxes regardless of sprite asset differences
+        _applyStandardEnemyBody(zombie, def);
+        
         zombie._speedMult = 1;
         zombie._inBush = false;
         zombie.lastHitTime = 0;
@@ -550,6 +555,28 @@ export default function createCombatSystem(scene) {
         }
         
         return zombie;
+    }
+    
+    // Applies standard enemy physics body to ensure consistent hitboxes
+    function _applyStandardEnemyBody(zombie, def) {
+        if (!zombie.body) return;
+        
+        // For now, let Phaser auto-calculate body size from scaled sprite
+        // This ensures all enemies with the same scale have identical hitboxes
+        
+        // If specific body sizing is needed in future:
+        // const metrics = ENEMY_METRICS.WALKER;
+        // if (metrics.bodyWidth && metrics.bodyHeight) {
+        //     zombie.body.setSize(metrics.bodyWidth, metrics.bodyHeight);
+        // }
+        // if (metrics.bodyOffsetX || metrics.bodyOffsetY) {
+        //     zombie.body.setOffset(metrics.bodyOffsetX, metrics.bodyOffsetY);
+        // }
+        
+        // Ensure body is refreshed after any scale changes
+        if (typeof zombie.body.refreshBody === 'function') {
+            zombie.body.refreshBody();
+        }
     }
 
     // ----- Zombie HP Bars -----

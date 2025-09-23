@@ -341,45 +341,24 @@ function createLayeredResource(scene, def, x, y) {
     const rawCropX = hasCropX ? overlayCfg.cropX : baseX + offsetX;
     const rawCropY = hasCropY ? overlayCfg.cropY : baseY + offsetY;
     const cropX = clamp(rawCropX, 0, Math.max(0, frameW - 1));
-    // We'll compute cropY/cropHeight after we determine the trunk-top split line
-    let cropY = 0;
-    let canopyHeight = Number.isFinite(heightCfg) ? Math.floor(heightCfg) : Math.max(0, frameH);
+    let cropY = clamp(rawCropY, 0, Math.max(0, frameH));
+    const desiredHeight = Number.isFinite(heightCfg)
+        ? heightCfg
+        : Math.max(0, frameH - cropY);
+    let canopyHeight = desiredHeight;
     const cropWidthLimit = Number.isFinite(widthCfg) ? widthCfg : Math.max(0, frameW - cropX);
     const cropWidth = Math.max(1, Math.min(frameW - cropX, cropWidthLimit));
-    let cropHeight = 0;
+    let cropHeight = Math.max(0, Math.min(frameH - cropY, canopyHeight));
+    cropHeight = Math.floor(cropHeight);
 
-    // Determine split line at trunk top in frame coordinates (0 at top of sprite)
-    let splitYFrame = null;
-    if (trunk && trunk.body && Number.isFinite(trunk.body.top)) {
-        const topWorldY = y - (trunk.displayHeight * (originY || 0));
-        const scaleY = trunk.scaleY || 1;
-        const trunkTopWorld = Math.ceil(Number.isFinite(trunk.body.top) ? trunk.body.top : trunk.body.y);
-        splitYFrame = clamp((trunkTopWorld - topWorldY) / scaleY, 0, frameH);
-        splitYFrame = Math.floor(splitYFrame);
-    }
-
-    if (splitYFrame != null) {
-        // Canopy is everything ABOVE the trunk line: from top (0) down to splitYFrame
-        cropY = 0;
-        canopyHeight = Math.max(0, Math.min(frameH, splitYFrame));
-        cropHeight = canopyHeight;
-    } else {
-        // Fallback to DB-defined overlay height starting from top
-        cropY = 0;
-        cropHeight = Math.max(0, Math.min(frameH, canopyHeight));
-    }
-
-    // Compute trunk region (bottom part) and ensure minimum trunk height
     let trunkHeight = Math.max(0, frameH - (cropY + cropHeight));
     const minTrunk = getMinimumTrunkHeight(def, trunk, frameH);
     if (minTrunk > 0 && trunkHeight < minTrunk) {
         const needed = minTrunk - trunkHeight;
         if (cropHeight > needed) {
             cropHeight -= needed;
-            canopyHeight = cropHeight;
         } else {
             cropHeight = 0;
-            canopyHeight = 0;
         }
         trunkHeight = Math.max(0, frameH - (cropY + cropHeight));
     }
@@ -388,6 +367,8 @@ function createLayeredResource(scene, def, x, y) {
         if (typeof trunk.clearCrop === 'function') trunk.clearCrop();
         return ctx;
     }
+
+    canopyHeight = cropHeight;
 
     // Note: canopy (overlaySprite) is the TOP portion (0..split), trunk is BOTTOM (split..end)
     trunk.setCrop(0, cropY + cropHeight, frameW, trunkHeight);
@@ -410,8 +391,7 @@ function createLayeredResource(scene, def, x, y) {
         const useScale = !!overlayCfg.useScale;
 
         const rectW = (overlayCfg.width || 0) * (useScale ? sx : 1);
-        // Sensor height should match the canopy crop height (top portion)
-        const rectH = Math.max(0, (cropHeight || 0) * sy);
+        const rectH = Math.max(0, heightCfg * sy);
         const offX = (overlayCfg.offsetX || 0) * (useScale ? sx : 1);
         const offY = (overlayCfg.offsetY || 0) * (useScale ? sy : 1);
 
@@ -434,8 +414,7 @@ function createLayeredResource(scene, def, x, y) {
             const sx = trunk.scaleX || 1;
             const sy = trunk.scaleY || 1;
             const w = useScale ? tCfg.width * sx : tCfg.width;
-            // If we computed canopy cropHeight above, prefer that height; otherwise use tCfg.height
-            const h = Math.max(0, (cropHeight ? cropHeight * sy : tCfg.height * sy));
+            const h = useScale ? tCfg.height * sy : tCfg.height;
             const offX = useScale ? (tCfg.offsetX || 0) * sx : (tCfg.offsetX || 0);
             const offY = useScale ? (tCfg.offsetY || 0) * sy : (tCfg.offsetY || 0);
             // Place sensor so its bottom sits at trunk top (extends upward over canopy)
