@@ -229,7 +229,8 @@ export default function createLightingSystem(scene) {
       break;
     }
 
-    const shouldEnable = hasDrawableLight && (overlay.alpha || 0) > 0.001;
+    // Enable the geometry mask whenever the overlay is visible at all; lights may appear/disappear frame-to-frame.
+    const shouldEnable = (overlay.alpha || 0) > 0.001;
 
     if (!shouldEnable) {
       if (scene._nightOverlayMaskEnabled && typeof overlay.clearMask === 'function') {
