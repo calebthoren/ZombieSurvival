@@ -393,6 +393,17 @@ function createLayeredResource(scene, def, x, y) {
                     `transparent.offsetY=${desiredOffY} (was ${curTransOffY}); ` +
                     `canopyBottomFrame=${canopyBottomFrame}, bodyTopWorld=${bodyTopWorld}`,
                 );
+                // Collect suggestions on scene for consolidation
+                const sc = trunk.scene;
+                if (sc) {
+                    sc._canopyCalib = sc._canopyCalib || new Map();
+                    sc._canopyCalib.set(resourceId, {
+                        suggestedOffsetY: desiredOffY,
+                        currentOverlayOffsetY: curOverlayOffY,
+                        currentTransparentOffsetY: curTransOffY,
+                        canopyBottomFrame,
+                    });
+                }
             }
         }
     } catch {}

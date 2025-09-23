@@ -103,11 +103,20 @@ export default function createLightingSystem(scene) {
     return definition;
   }
 
-  function _ensureNightOverlayMask() {
-    const overlay = scene.nightOverlay;
-    if (!overlay) return null;
+  // Ensure a full-screen RenderTexture we draw darkness directly into (no masks)
+  function _ensureDarknessRT() {
+    const w = scene.sys?.game?.config?.width ?? scene.scale?.width ?? 800;
+    const h = scene.sys?.game?.config?.height ?? scene.scale?.height ?? 600;
 
-    // Ensure a Graphics we can draw circles into
+    // Display RT (visible) that holds the composed darkness with punched holes
+    let rt = scene.nightOverlayRT;
+    if (!rt || !rt.scene || rt.width !== w || rt.height !== h) {
+      try { scene.nightOverlayRT?.destroy?.(); } catch {}
+      rt = scene.add.renderTexture(0, 0, w, h).setOrigin(0, 0).setScrollFactor(0).setDepth(10000);
+      scene.nightOverlayRT = rt;
+    }
+
+    // Vector graphics used to draw circles that we erase with
     let gfx = scene.nightOverlayMaskGraphics;
     if (!gfx || !gfx.scene) {
       try { gfx?.destroy?.(); } catch {}
@@ -115,40 +124,35 @@ export default function createLightingSystem(scene) {
       scene.nightOverlayMaskGraphics = gfx;
     }
 
-    // Ensure a screen-sized RenderTexture we'll use as a BitmapMask source
-    const w = scene.sys?.game?.config?.width ?? scene.scale?.width ?? 800;
-    const h = scene.sys?.game?.config?.height ?? scene.scale?.height ?? 600;
-    let rt = scene.nightOverlayMaskRT;
-    if (!rt || !rt.scene || rt.width !== w || rt.height !== h) {
-      try { scene.nightOverlayMask?.destroy?.(); } catch {}
-      try { scene.nightOverlayMaskRT?.destroy?.(); } catch {}
-      rt = scene.make.renderTexture({ x: 0, y: 0, width: w, height: h, add: false });
-      scene.nightOverlayMaskRT = rt;
-      const bm = new Phaser.Display.Masks.BitmapMask(scene, rt);
-      bm.invertAlpha = true; // punch holes where we draw white
-      scene.nightOverlayMask = bm;
-      scene._nightOverlayMaskEnabled = false;
-      return bm;
-    }
-
-    return scene.nightOverlayMask;
+    return rt;
   }
 
-  function _drawNightOverlayMask(lights) {
+  // Compose darkness directly into RT: fill black with overlay alpha, then erase circles for lights
+  function _drawDarknessComposite(lights) {
     const Phaser = globalThis.Phaser || {};
+    const rt = _ensureDarknessRT();
     const gfx = scene.nightOverlayMaskGraphics;
-    const rt = scene.nightOverlayMaskRT;
-    if (!gfx || !rt || !lights) return;
+    if (!rt || !gfx) return;
 
-    // Clear the RT and the vector gfx
+    const w = rt.width;
+    const h = rt.height;
+
+    // Clear RT and paint the darkness based on overlay alpha
     rt.clear();
-    gfx.clear();
+    const overlayAlpha = Number.isFinite(scene.nightOverlay?.alpha) ? (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(scene.nightOverlay.alpha, 0, 1) : Math.min(Math.max(scene.nightOverlay.alpha, 0), 1)) : 0;
+    if (overlayAlpha <= 0) return; // no darkness to draw
+    rt.fill(0x000000, overlayAlpha, 0, 0, w, h);
+
+    // If no lights, we're done (solid darkness)
     if (!Array.isArray(lights) || lights.length === 0) return;
 
-    // The overlay is screen-space (scrollFactor 0); draw in screen coords
+    // The RT is screen-space
     const cam = scene.cameras?.main;
     const scrollX = (cam?.scrollX || 0);
     const scrollY = (cam?.scrollY || 0);
+
+    // Prepare Graphics once
+    gfx.clear();
 
     for (let i = 0; i < lights.length; i++) {
       const b = lights[i];
@@ -169,78 +173,53 @@ export default function createLightingSystem(scene) {
       const sy = worldY - scrollY;
       if (!Number.isFinite(sx) || !Number.isFinite(sy)) continue;
 
-      // Draw soft disc: edge (largest, faint), mid, core (smallest, strongest)
+      // Soft erase: draw three circles with increasing strength and decreasing radius
       const coreR = effectiveR * 0.6;
       const midR  = effectiveR * 0.85;
       const edgeR = effectiveR;
 
-      // Edge
-      gfx.fillStyle(0xffffff, 0.22);
+      // Edge (lightest erase)
+      gfx.fillStyle(0xffffff, 0.3);
       gfx.fillCircle(sx, sy, edgeR);
+      rt.erase(gfx, 0, 0);
+      gfx.clear();
+
       // Mid
-      gfx.fillStyle(0xffffff, 0.5);
+      gfx.fillStyle(0xffffff, 0.6);
       gfx.fillCircle(sx, sy, midR);
-      // Core
+      rt.erase(gfx, 0, 0);
+      gfx.clear();
+
+      // Core (strongest erase)
       gfx.fillStyle(0xffffff, 1.0);
       gfx.fillCircle(sx, sy, coreR);
+      rt.erase(gfx, 0, 0);
+      gfx.clear();
     }
+  }
 
-    // Stamp the vector graphics into the render texture
-    rt.draw(gfx, 0, 0);
+  // Back-compat helpers expected by tests
+  function _ensureNightOverlayMask() {
+    return _ensureDarknessRT();
+  }
+
+  function _drawNightOverlayMask() {
+    const lights = _collectActiveMaskLights();
+    _drawDarknessComposite(lights);
   }
 
   function _updateNightOverlayMask() {
-    const Phaser = globalThis.Phaser || {};
     const overlay = scene.nightOverlay;
-    if (!overlay || typeof overlay.setMask !== 'function') return;
+    if (!overlay) return;
 
     const lights = _collectActiveMaskLights();
-
-    let hasDrawableLight = false;
-    for (let i = 0; i < lights.length; i++) {
-      const binding = lights[i];
-      if (!binding) continue;
-      const rawRadius = Number.isFinite(binding.radius) ? binding.radius : 0;
-      if (!(rawRadius > 0)) continue;
-      const maskScale = Number.isFinite(binding.maskScale) ? binding.maskScale : 1;
-      const scaledRadius = rawRadius * maskScale;
-      if (!(scaledRadius > 0)) continue;
-      const intensity = Number.isFinite(binding.intensity)
-        ? (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(binding.intensity, 0, 1) : Math.min(Math.max(binding.intensity, 0), 1))
-        : 0;
-      if (intensity <= 0.001) continue;
-      hasDrawableLight = true;
-      break;
-    }
-
-    // Always ensure mask is applied; overlay alpha controls visibility itself
-    const mask = _ensureNightOverlayMask();
-    if (!mask) return;
-
-    if (!scene._nightOverlayMaskEnabled) {
-      overlay.setMask(mask);
-      scene._nightOverlayMaskEnabled = true;
-    } else {
-      overlay.setMask(mask);
-    }
-
-    _drawNightOverlayMask(lights);
+    _drawDarknessComposite(lights);
   }
 
   function _teardownNightOverlayMask() {
-    const overlay = scene.nightOverlay;
-    if (overlay && typeof overlay.clearMask === 'function' && scene._nightOverlayMaskEnabled) {
-      overlay.clearMask(false);
-    }
-    scene._nightOverlayMaskEnabled = false;
-
-    const mask = scene.nightOverlayMask;
-    if (mask && typeof mask.destroy === 'function') mask.destroy();
-    scene.nightOverlayMask = null;
-
-    const rt = scene.nightOverlayMaskRT;
+    const rt = scene.nightOverlayRT;
     if (rt && typeof rt.destroy === 'function') rt.destroy();
-    scene.nightOverlayMaskRT = null;
+    scene.nightOverlayRT = null;
 
     const gfx = scene.nightOverlayMaskGraphics;
     if (gfx && typeof gfx.destroy === 'function') gfx.destroy();
@@ -524,11 +503,12 @@ export default function createLightingSystem(scene) {
         .setOrigin(0, 0)
         .setScrollFactor(0)
         .setDepth(10000)
-        .setAlpha(0);
+        .setAlpha(0)
+        .setVisible(false);
     }
 
-    // Ensure mask exists now; enablement is dynamic in _updateNightOverlayMask
-    _ensureNightOverlayMask();
+    // Ensure RT is created once here
+    _ensureDarknessRT();
 
     if (!scene._boundNightMaskTeardown) {
       scene._boundNightMaskTeardown = () => {
@@ -543,6 +523,19 @@ export default function createLightingSystem(scene) {
       scene.events?.once?.(Phaser?.Scenes?.Events?.SHUTDOWN, scene._boundNightMaskTeardown);
       scene.events?.once?.(Phaser?.Scenes?.Events?.DESTROY, scene._boundNightMaskTeardown);
     }
+
+    // Recreate RT on resize to match view size
+    const onResize = (gameSize) => {
+      const w2 = gameSize?.width ?? scene.scale?.width ?? 800;
+      const h2 = gameSize?.height ?? scene.scale?.height ?? 600;
+      if (!scene.nightOverlayRT || scene.nightOverlayRT.width !== w2 || scene.nightOverlayRT.height !== h2) {
+        _ensureDarknessRT();
+      }
+    };
+    scene.scale?.on?.('resize', onResize);
+    scene.events?.once?.(Phaser?.Scenes?.Events?.SHUTDOWN, () => scene.scale?.off?.('resize', onResize));
+    scene.events?.once?.(Phaser?.Scenes?.Events?.DESTROY, () => scene.scale?.off?.('resize', onResize));
+
     return scene.nightOverlay;
   }
 
