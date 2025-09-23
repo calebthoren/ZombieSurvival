@@ -373,6 +373,30 @@ function createLayeredResource(scene, def, x, y) {
     // Note: canopy (overlaySprite) is the TOP portion (0..split), trunk is BOTTOM (split..end)
     trunk.setCrop(0, cropY + cropHeight, frameW, trunkHeight);
 
+    // Debug: suggest overlay/transparent offsetY so canopy sensor bottom matches split line
+    try {
+        if (DevTools?.cheats?.resourceDetails || DevTools?.cheats?.chunkDetails) {
+            const sy = trunk.scaleY || 1;
+            const topWorldY = y - (trunk.displayHeight * (originY || 0));
+            const canopyBottomFrame = cropY + cropHeight; // 0..frameH
+            const canopyBottomWorld = topWorldY + canopyBottomFrame * sy;
+            const bodyTopWorld = Math.ceil(Number.isFinite(trunk.body?.top) ? trunk.body.top : trunk.body?.y ?? y);
+            const desiredOffYWorld = canopyBottomWorld - bodyTopWorld;
+            const desiredOffY = Math.round(desiredOffYWorld / sy);
+            const curOverlayOffY = def?.overlay?.offsetY || 0;
+            const curTransOffY = def?.world?.transparent?.offsetY || 0;
+            // Only log if there is a meaningful delta
+            if (Math.abs(desiredOffY - curOverlayOffY) >= 1 || Math.abs(desiredOffY - curTransOffY) >= 1) {
+                console.log(
+                    `[resourceSystem] canopy offset suggestion for ${resourceId}: ` +
+                    `overlay.offsetY=${desiredOffY} (was ${curOverlayOffY}), ` +
+                    `transparent.offsetY=${desiredOffY} (was ${curTransOffY}); ` +
+                    `canopyBottomFrame=${canopyBottomFrame}, bodyTopWorld=${bodyTopWorld}`,
+                );
+            }
+        }
+    } catch {}
+
     const overlayDepth = (scene.player?.depth ?? 900) + 2 + (hashResourceId(resourceId) % 10);
     const overlaySprite = scene.add
         .image(x, y, texKey)

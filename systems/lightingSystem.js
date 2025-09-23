@@ -107,28 +107,41 @@ export default function createLightingSystem(scene) {
     const overlay = scene.nightOverlay;
     if (!overlay) return null;
 
+    // Ensure a Graphics we can draw circles into
     let gfx = scene.nightOverlayMaskGraphics;
     if (!gfx || !gfx.scene) {
       try { gfx?.destroy?.(); } catch {}
       gfx = scene.make.graphics({ x: 0, y: 0, add: false });
       scene.nightOverlayMaskGraphics = gfx;
-
-      const mask = gfx.createGeometryMask();
-      if (typeof mask.setInvertAlpha === 'function') mask.setInvertAlpha(true);
-      else mask.inverse = true;
-      if (typeof mask.setPosition === 'function') mask.setPosition(0, 0);
-      scene.nightOverlayMask = mask;
-      scene._nightOverlayMaskEnabled = false;
-      return mask;
     }
+
+    // Ensure a screen-sized RenderTexture we'll use as a BitmapMask source
+    const w = scene.sys?.game?.config?.width ?? scene.scale?.width ?? 800;
+    const h = scene.sys?.game?.config?.height ?? scene.scale?.height ?? 600;
+    let rt = scene.nightOverlayMaskRT;
+    if (!rt || !rt.scene || rt.width !== w || rt.height !== h) {
+      try { scene.nightOverlayMask?.destroy?.(); } catch {}
+      try { scene.nightOverlayMaskRT?.destroy?.(); } catch {}
+      rt = scene.make.renderTexture({ x: 0, y: 0, width: w, height: h, add: false });
+      scene.nightOverlayMaskRT = rt;
+      const bm = new Phaser.Display.Masks.BitmapMask(scene, rt);
+      bm.invertAlpha = true; // punch holes where we draw white
+      scene.nightOverlayMask = bm;
+      scene._nightOverlayMaskEnabled = false;
+      return bm;
+    }
+
     return scene.nightOverlayMask;
   }
 
   function _drawNightOverlayMask(lights) {
     const Phaser = globalThis.Phaser || {};
     const gfx = scene.nightOverlayMaskGraphics;
-    if (!gfx || !lights) return;
+    const rt = scene.nightOverlayMaskRT;
+    if (!gfx || !rt || !lights) return;
 
+    // Clear the RT and the vector gfx
+    rt.clear();
     gfx.clear();
     if (!Array.isArray(lights) || lights.length === 0) return;
 
@@ -171,6 +184,9 @@ export default function createLightingSystem(scene) {
       gfx.fillStyle(0xffffff, 1.0);
       gfx.fillCircle(sx, sy, coreR);
     }
+
+    // Stamp the vector graphics into the render texture
+    rt.draw(gfx, 0, 0);
   }
 
   function _updateNightOverlayMask() {
@@ -197,24 +213,15 @@ export default function createLightingSystem(scene) {
       break;
     }
 
-    // Enable the geometry mask whenever the overlay is visible at all; lights may appear/disappear frame-to-frame.
-    const shouldEnable = (overlay.alpha || 0) > 0.001;
-
-    if (!shouldEnable) {
-      if (scene._nightOverlayMaskEnabled && typeof overlay.clearMask === 'function') {
-        overlay.clearMask(false);
-      }
-      scene._nightOverlayMaskEnabled = false;
-      if (scene.nightOverlayMaskGraphics) scene.nightOverlayMaskGraphics.clear();
-      return;
-    }
-
+    // Always ensure mask is applied; overlay alpha controls visibility itself
     const mask = _ensureNightOverlayMask();
     if (!mask) return;
 
     if (!scene._nightOverlayMaskEnabled) {
       overlay.setMask(mask);
       scene._nightOverlayMaskEnabled = true;
+    } else {
+      overlay.setMask(mask);
     }
 
     _drawNightOverlayMask(lights);
@@ -230,6 +237,10 @@ export default function createLightingSystem(scene) {
     const mask = scene.nightOverlayMask;
     if (mask && typeof mask.destroy === 'function') mask.destroy();
     scene.nightOverlayMask = null;
+
+    const rt = scene.nightOverlayMaskRT;
+    if (rt && typeof rt.destroy === 'function') rt.destroy();
+    scene.nightOverlayMaskRT = null;
 
     const gfx = scene.nightOverlayMaskGraphics;
     if (gfx && typeof gfx.destroy === 'function') gfx.destroy();

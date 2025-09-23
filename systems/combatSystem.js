@@ -518,11 +518,26 @@ export default function createCombatSystem(scene) {
         if (!zombie.body) scene.physics.add.existing(zombie);
         zombie.body.setAllowGravity(false);
         zombie.setOrigin(0.5, 0.5);
-        zombie.setScale(def.scale ?? ENEMY_METRICS.WALKER.scale);
+        
+        // Compute final on-screen scale. For flamed_walker, normalize to match Walker's
+        let finalScale = (def.scale ?? ENEMY_METRICS.WALKER.scale);
+        try {
+            if (typeKey === 'flamed_walker') {
+                const walkerKey = (ZOMBIES.walker?.textureKey || ZOMBIES.walker?.texture || 'zombie');
+                const walkerTex = scene.textures && scene.textures.get(walkerKey);
+                const flamedTex = scene.textures && scene.textures.get(tex);
+                const ww = walkerTex?.getSourceImage?.().width || walkerTex?.frames?.__BASE?.width || 0;
+                const fw = flamedTex?.getSourceImage?.().width || flamedTex?.frames?.__BASE?.width || 0;
+                if (ww > 0 && fw > 0) {
+                    const walkerScale = (ZOMBIES.walker?.scale ?? ENEMY_METRICS.WALKER.scale);
+                    finalScale = walkerScale * (ww / fw);
+                }
+            }
+        } catch {}
+        zombie.setScale(finalScale);
         zombie.setDepth(def.depth ?? 2);
         
-        // Ensure consistent physics body size for all enemy types
-        // This normalizes hitboxes regardless of sprite asset differences
+        // Ensure body matches the visual after scaling so hitbox alignment is preserved
         _applyStandardEnemyBody(zombie, def);
         
         zombie._speedMult = 1;
