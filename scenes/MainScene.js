@@ -71,7 +71,7 @@ export default class MainScene extends Phaser.Scene {
                 flickerAmplitude: 8,
                 flickerSpeed: 2.25,
                 upgradeMultiplier: 1,
-                maskScale: 0.8,
+                maskScale: 0.25,
             },
         };
         this._playerLightNightRadius = this.lightSettings.player.nightRadius;
