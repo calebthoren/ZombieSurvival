@@ -132,81 +132,44 @@ export default function createLightingSystem(scene) {
     gfx.clear();
     if (!Array.isArray(lights) || lights.length === 0) return;
 
-    if (gfx.x !== 0) gfx.x = 0;
-    if (gfx.y !== 0) gfx.y = 0;
-
+    // The overlay is screen-space (scrollFactor 0); draw in screen coords
     const cam = scene.cameras?.main;
     const scrollX = (cam?.scrollX || 0);
     const scrollY = (cam?.scrollY || 0);
 
     for (let i = 0; i < lights.length; i++) {
-      const binding = lights[i];
-      if (!binding) continue;
+      const b = lights[i];
+      if (!b) continue;
 
-      const rawRadius = Number.isFinite(binding.radius) ? binding.radius : 0;
-      if (rawRadius <= 0) continue;
+      const rawR = Number.isFinite(b.radius) ? b.radius : 0;
+      if (rawR <= 0) continue;
 
-      const maskScale = Number.isFinite(binding.maskScale) ? binding.maskScale : 1;
-      const scaledRadius = rawRadius * maskScale;
-      if (!Number.isFinite(scaledRadius) || scaledRadius <= 0) continue;
+      const scale = Number.isFinite(b.maskScale) ? b.maskScale : 1;
+      const intensity = Number.isFinite(b.intensity) ? b.intensity : 1;
+      const effectiveR = rawR * scale * (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1));
+      if (!(effectiveR > 0)) continue;
 
-      const intensity = Number.isFinite(binding.intensity) ? binding.intensity : 1;
-      if (intensity <= 0) continue;
+      // World -> screen coords
+      const worldX = Number.isFinite(b.x) ? b.x : ((b.target?.x || 0) + (b.offsetX || 0));
+      const worldY = Number.isFinite(b.y) ? b.y : ((b.target?.y || 0) + (b.offsetY || 0));
+      const sx = worldX - scrollX;
+      const sy = worldY - scrollY;
+      if (!Number.isFinite(sx) || !Number.isFinite(sy)) continue;
 
-      const x = Number.isFinite(binding.x)
-        ? binding.x
-        : (binding.target?.x || 0) + (binding.offsetX || 0);
-      const y = Number.isFinite(binding.y)
-        ? binding.y
-        : (binding.target?.y || 0) + (binding.offsetY || 0);
+      // Draw soft disc: edge (largest, faint), mid, core (smallest, strongest)
+      const coreR = effectiveR * 0.6;
+      const midR  = effectiveR * 0.85;
+      const edgeR = effectiveR;
 
-      const screenX = x - scrollX;
-      const screenY = y - scrollY;
-      if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) continue;
-
-      const finalRadius = scaledRadius * (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1));
-      if (finalRadius <= 0) continue;
-
-      const gradient = _getLightMaskGradientDefinition(binding);
-      if (!gradient) continue;
-
-      const gradientRadius = Number.isFinite(gradient.baseRadius) ? gradient.baseRadius : 0;
-      const layers = gradient.layers;
-      if (!Array.isArray(layers) || layers.length === 0) continue;
-
-      const scale = gradientRadius > 0 ? finalRadius / gradientRadius : 1;
-      const baseTileSize = Number.isFinite(gradient.tileSize) ? gradient.tileSize : 0;
-      const tileSize = baseTileSize > 0 ? baseTileSize * scale : 0;
-      const halfTile = tileSize * 0.5;
-
-      for (let layerIndex = layers.length - 1; layerIndex >= 0; layerIndex--) {
-        const layer = layers[layerIndex];
-        if (!layer) continue;
-        const layerAlpha = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(layer.alpha || 0, 0, 1) : Math.min(Math.max(layer.alpha || 0, 0), 1));
-        if (!(layerAlpha > 0)) continue;
-
-        const radiusNormalized = Number.isFinite(layer.radiusNormalized) ? layer.radiusNormalized : null;
-        if (radiusNormalized !== null) {
-          const ringRadius = finalRadius * radiusNormalized;
-          if (!(ringRadius > 0)) continue;
-          gfx.fillStyle(0xffffff, layerAlpha);
-          gfx.fillCircle(screenX, screenY, ringRadius);
-          continue;
-        }
-
-        const offsets = layer.offsets;
-        if (!Array.isArray(offsets) || offsets.length === 0) continue;
-        if (!(tileSize > 0)) continue;
-
-        gfx.fillStyle(0xffffff, layerAlpha);
-        for (let j = 0; j < offsets.length; j += 2) {
-          const offsetX = offsets[j] * tileSize;
-          const offsetY = offsets[j + 1] * tileSize;
-          const rectX = screenX + offsetX - halfTile;
-          const rectY = screenY + offsetY - halfTile;
-          gfx.fillRect(rectX, rectY, tileSize, tileSize);
-        }
-      }
+      // Edge
+      gfx.fillStyle(0xffffff, 0.22);
+      gfx.fillCircle(sx, sy, edgeR);
+      // Mid
+      gfx.fillStyle(0xffffff, 0.5);
+      gfx.fillCircle(sx, sy, midR);
+      // Core
+      gfx.fillStyle(0xffffff, 1.0);
+      gfx.fillCircle(sx, sy, coreR);
     }
   }
 
