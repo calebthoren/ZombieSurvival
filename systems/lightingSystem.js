@@ -211,6 +211,10 @@ export default function createLightingSystem(scene) {
     if (!overlay || typeof overlay.setMask !== 'function') return;
 
     const lights = _collectActiveMaskLights();
+    // Fallback: always consider the player light if present, even if not marked active yet.
+    if (lights.length === 0 && scene.playerLight) {
+      lights.push(scene.playerLight);
+    }
 
     let hasDrawableLight = false;
     for (let i = 0; i < lights.length; i++) {
