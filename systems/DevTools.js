@@ -802,4 +802,9 @@ const DevTools = {
 // They reset to defaults on page refresh/reload and respawn events.
 // This prevents settings from carrying over between game sessions.
 
+// Expose DevTools globally in browser so console can call helpers
+if (typeof window !== 'undefined') {
+  try { window.DevTools = DevTools; } catch {}
+}
+
 export default DevTools;

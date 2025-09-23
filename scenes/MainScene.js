@@ -1177,8 +1177,8 @@ export default class MainScene extends Phaser.Scene {
 
     _updateAttachedLights() { return this.lighting._updateAttachedLights(); }
     _updatePlayerLightGlow(delta = 0) { return this.lighting._updatePlayerLightGlow(delta); }
-    _ensureNightOverlayMask() { return this.lighting._ensureNightOverlayMask(); }
-    _drawNightOverlayMask(lights) { return this.lighting._drawNightOverlayMask(lights); }
+    _ensureNightOverlayMask() { return this.lighting._ensureDarknessRT(); }
+    _drawNightOverlayMask(lights) { return this.lighting._drawDarknessComposite(lights); }
     _updateNightOverlayMask() { return this.lighting._updateNightOverlayMask(); }
     _teardownNightOverlayMask() { return this.lighting._teardownNightOverlayMask(); }
     _teardownLights() { return this.lighting._teardownLights(); }

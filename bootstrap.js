@@ -58,6 +58,8 @@ if (IS_NODE) {
     };
 
     const game = new Phaser.Game(config);
+    // Expose game globally for debugging convenience
+    try { window.game = game; } catch {}
 
     // Auto pixel-perfect integer zoom that fits the window
     function applyPixelPerfectZoom() {
