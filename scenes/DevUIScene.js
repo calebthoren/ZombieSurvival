@@ -93,23 +93,60 @@ export default class DevUIScene extends Phaser.Scene {
             count: startItemCount,
         };
 
-        this._gameSpeed = { scale: String(DevTools.cheats.timeScale || 1) };
+        // Day/Segment navigation (replaces GAMESPEED)
+        // Get current day/segment from active gameplay scene if available
+        const main = this.scene?.get?.('MainScene');
+        const testWorld = this.scene?.get?.('TestWorldScene');
+        const currentScene = (testWorld && (this.scene?.isActive?.('TestWorldScene') || this.scene?.isPaused?.('TestWorldScene'))) ? testWorld :
+                            (main && (this.scene?.isActive?.('MainScene') || this.scene?.isPaused?.('MainScene'))) ? main : null;
+        
+        const currentDay = currentScene?.dayIndex || 1;
+        let currentSegment = 1;
+        if (currentScene) {
+            const isNight = currentScene.phase === 'night';
+            const segmentIndex = currentScene.phaseSegmentIndex || 0;
+            currentSegment = isNight ? (segmentIndex + 4) : (segmentIndex + 1); // Convert to 1-6 range
+        }
+        
+        this._daySegment = {
+            day: String(currentDay),
+            segment: String(currentSegment)
+        };
     }
 
     create() {
         const camW = this.scale.width, camH = this.scale.height;
 
-        // Dimmed full-screen backdrop
-        this.add.rectangle(0, 0, camW, camH, UI.bgColor, UI.bgAlpha)
+        // Fully transparent backdrop to allow complete world visibility (for immediate visual feedback)
+        // Add a subtle tint only to areas not covered by UI elements
+        this._backdrop = this.add.rectangle(0, 0, camW, camH, UI.bgColor, 0.1)
             .setOrigin(0, 0)
             .setScrollFactor(0)
             .setDepth(0);
 
+        // --- Ensure gameplay scenes are paused like PauseScene does ---
+        const main = this.scene.get('MainScene');
+        const testWorld = this.scene.get('TestWorldScene');
+        
+        // Delay pausing to let DevUIScene fully initialize first (same as PauseScene)
+        this.time.delayedCall(10, () => {
+            if (main && this.scene.isActive('MainScene') && !this.scene.isPaused('MainScene')) {
+                this.scene.pause('MainScene');
+            }
+            if (testWorld && this.scene.isActive('TestWorldScene') && !this.scene.isPaused('TestWorldScene')) {
+                this.scene.pause('TestWorldScene');
+            }
+            
+            // Force DevUIScene to render on top
+            this.scene.bringToTop();
+            this.scene.setActive(true);
+            this.scene.setVisible(true);
+        });
+
         // --- Lock inputs in underlying scenes while DevUI is open ---
         this._lockedScenes = [];
-        const main = this.scene.get('MainScene');
         const ui = this.scene.get('UIScene');
-        for (const s of [main, ui]) {
+        for (const s of [main, ui, testWorld]) {
             if (s && s.input) {
                 this._lockedScenes.push({
                     scene: s,
@@ -160,8 +197,9 @@ export default class DevUIScene extends Phaser.Scene {
         y = this._rowToggle('Infinite Health',() => DevTools.cheats.invincible,   v => {
             DevTools.cheats.invincible = v;
             if (v) {
+                // Only apply health changes in MainScene (TestWorldScene doesn't have health/UI)
                 const mainScene = this.scene.get('MainScene');
-                if (mainScene) {
+                if (mainScene && (this.scene.isActive('MainScene') || this.scene.isPaused('MainScene'))) {
                     const max = (typeof mainScene.maxHealth === 'number' && mainScene.maxHealth > 0) ? mainScene.maxHealth : 100;
                     mainScene.health = max;
                     mainScene.uiScene?.updateHealth?.(mainScene.health);
@@ -171,8 +209,9 @@ export default class DevUIScene extends Phaser.Scene {
         y = this._rowToggle('Infinite Stamina',() => DevTools.cheats.noStamina,    v => {
             DevTools.cheats.noStamina = v;
             if (v) {
+                // Only apply stamina changes in MainScene (TestWorldScene doesn't have stamina/UI)
                 const mainScene = this.scene.get('MainScene');
-                if (mainScene) {
+                if (mainScene && (this.scene.isActive('MainScene') || this.scene.isPaused('MainScene'))) {
                     mainScene.stamina = mainScene.staminaMax;
                     mainScene.uiScene?.updateStamina?.(mainScene.stamina);
                 }
@@ -180,16 +219,42 @@ export default class DevUIScene extends Phaser.Scene {
         }, y);
         y = this._rowToggle('No Cooldown',     () => DevTools.cheats.noCooldown,   v => DevTools.cheats.noCooldown = v, y);
         y = this._rowToggle('Infinite Ammo',   () => DevTools.cheats.noAmmo,       v => DevTools.cheats.noAmmo = v, y);
-        y = this._rowToggle('Chunk Details',   () => DevTools.cheats.chunkDetails, v => DevTools.setChunkDetails(v, main), y);
-        y = this._rowToggle('Performance HUD', () => DevTools.cheats.performanceHud, v => DevTools.setPerformanceHud(v, main), y);
-        y = this._rowToggle('No Darkness',     () => DevTools.cheats.noDarkness,   v => DevTools.setNoDarkness(v, main), y);
+        const currentForToggles = (testWorld && (this.scene.isActive('TestWorldScene') || this.scene.isPaused('TestWorldScene'))) ? testWorld : (main || testWorld);
+        y = this._rowToggle('Chunk Details',   () => DevTools.cheats.chunkDetails, v => DevTools.setChunkDetails(v, currentForToggles), y);
+        y = this._rowToggle('Performance HUD', () => DevTools.cheats.performanceHud, v => DevTools.setPerformanceHud(v, currentForToggles), y);
+        y = this._rowToggle('No Darkness',     () => DevTools.cheats.noDarkness,   v => {
+            DevTools.setNoDarkness(v, currentForToggles);
+            
+            // Visual feedback: briefly flash the backdrop to indicate change
+            if (this._backdrop) {
+                this._backdrop.setAlpha(0.3); // Make it more visible briefly
+                this.time.delayedCall(200, () => {
+                    this._backdrop.setAlpha(0.1); // Return to transparent
+                });
+            }
+            
+            // Force immediate visual update so darkness changes are visible through dev UI backdrop
+            this._forceVisualUpdate(currentForToggles, () => {
+                try {
+                    if (typeof currentForToggles.updateNightOverlay === 'function') {
+                        currentForToggles.updateNightOverlay();
+                    } else if (currentForToggles.dayNight && typeof currentForToggles.dayNight.updateNightOverlay === 'function') {
+                        currentForToggles.dayNight.updateNightOverlay();
+                    }
+                    if (currentForToggles.lightingSystem && typeof currentForToggles.lightingSystem.updateGlobalLighting === 'function') {
+                        currentForToggles.lightingSystem.updateGlobalLighting();
+                    }
+                    currentForToggles.sys.queueDepthSort();
+                } catch {}
+            });
+        }, y);
 
         y = this._sectionTitle('Spawners', y);
         y = this._enemySpawnerRow(y);
         y = this._itemSpawnerRow(y);
 
         y = this._sectionTitle('Control', y);
-        y = this._gameSpeedRow(y);
+        y = this._daySegmentRow(y);
 
         this._contentHeight = y; // record total content height for scrolling
         this._createScrollbar();
@@ -210,12 +275,14 @@ export default class DevUIScene extends Phaser.Scene {
             if (!consumed) this._scrollBy(dy); // otherwise scroll the whole panel
         });
 
-        // Make sure overlays and game speed react immediately
-        DevTools.applyHitboxCheat(main);
-        DevTools.setChunkDetails(DevTools.cheats.chunkDetails, main);
-        DevTools.setPerformanceHud(DevTools.cheats.performanceHud, main);
-        DevTools.setNoDarkness(DevTools.cheats.noDarkness, main);
-        DevTools.applyTimeScale(this);
+        // Make sure overlays react immediately
+        const currentScene = (testWorld && (this.scene.isActive('TestWorldScene') || this.scene.isPaused('TestWorldScene'))) ? testWorld :
+                              (main && (this.scene.isActive('MainScene') || this.scene.isPaused('MainScene'))) ? main :
+                              (testWorld || main);
+        DevTools.applyHitboxCheat(currentScene);
+        DevTools.setChunkDetails(DevTools.cheats.chunkDetails, currentScene);
+        DevTools.setPerformanceHud(DevTools.cheats.performanceHud, currentScene);
+        DevTools.setNoDarkness(DevTools.cheats.noDarkness, currentScene);
     }
 
     // ---------- Section builders ----------
@@ -305,18 +372,44 @@ export default class DevUIScene extends Phaser.Scene {
         return y + UI.rowH;
     }
 
-    _gameSpeedRow(y) {
+    _daySegmentRow(y) {
         const card = this._card(y);
-        const label = this.add.text(UI.pad + 6, y + 12, 'Game Speed', UI.font).setDepth(2);
+        const label = this.add.text(UI.pad + 6, y + 12, 'Go to Day', UI.font).setDepth(2);
 
-        const minusX = this._spawnMinusX ?? (this.scale.width - 220);
-        const minus = this._makeButton(minusX, y + 9, 26, 26, '–', () => this._bumpGameSpeed(-0.1), 2);
-        this._gameSpeedText = this._makeEditableNumber(minusX + 30, y + 9, 60, 26, () => this._gameSpeed.scale, (s) => { this._gameSpeed.scale = s; this._commitGameSpeed(); });
-        const plus = this._makeButton(minusX + 94, y + 9, 26, 26, '+', () => this._bumpGameSpeed(0.1), 2);
-        const setX = this._spawnBtnX ?? (this.scale.width - 140);
-        const set = this._makeButton(setX, y + 7, 120, 30, 'Set', () => this._commitGameSpeed(), 2, UI.okColor);
+        // Layout: "Go to Day [  ] Segment [  ] [Go]" 
+        // Day input
+        const dayLabelX = UI.pad + 6 + 90; // After "Go to Day "
+        this._dayText = this._makeEditableNumber(dayLabelX, y + 9, 50, 26, () => this._daySegment.day, (s) => {
+            let val = s.trim() === '' ? '1' : s;
+            let num = parseInt(val, 10);
+            if (!Number.isFinite(num) || num < 1) num = 1;
+            if (num > 999) num = 999; // Clamp to max 999 days
+            this._daySegment.day = String(num);
+            return this._daySegment.day;
+        });
 
-        this.content.add([card, label, minus, this._gameSpeedText.box, plus, set]);
+        // Segment label and input
+        const segmentLabelX = dayLabelX + 50 + 8;
+        const segmentLbl = this.add.text(segmentLabelX, y + 12, 'Segment', UI.font).setDepth(2);
+        const segmentInputX = segmentLabelX + segmentLbl.displayWidth + 8;
+        this._segmentText = this._makeEditableNumber(segmentInputX, y + 9, 40, 26, () => this._daySegment.segment, (s) => {
+            let val = s.trim() === '' ? '1' : s;
+            let num = parseInt(val, 10);
+            if (!Number.isFinite(num) || num < 1) num = 1;
+            if (num > 6) num = 6; // Clamp to max 6 segments
+            this._daySegment.segment = String(num);
+            return this._daySegment.segment;
+        });
+
+        // Go button
+        const goX = this.scale.width - 140;
+        const go = this._makeButton(goX, y + 7, 120, 30, 'Go', () => this._jumpToDay(), 2, UI.okColor);
+
+        // Help text (1-3 = day segments, 4-6 = night segments)
+        const helpX = segmentInputX + 40 + 10;
+        const help = this.add.text(helpX, y + 12, '(1-3 day, 4-6 night)', UI.dim).setDepth(2);
+
+        this.content.add([card, label, this._dayText.box, segmentLbl, this._segmentText.box, go, help]);
         return y + UI.rowH;
     }
 
@@ -695,9 +788,14 @@ export default class DevUIScene extends Phaser.Scene {
                 const max = t.text.includes('.') ? 4 : 3;
                 if (t.text.length < max) {
                     const candidate = t.text + ev.key;
-                    if (this._editing === this._gameSpeedText) {
-                        const num = parseFloat(candidate);
-                        t.setText(num > 10 ? '10' : candidate);
+                    if (this._editing === this._dayText) {
+                        // Day field: max 999
+                        const num = parseInt(candidate, 10);
+                        t.setText(num > 999 ? '999' : candidate);
+                    } else if (this._editing === this._segmentText) {
+                        // Segment field: max 6
+                        const num = parseInt(candidate, 10);
+                        t.setText(num > 6 ? '6' : candidate);
                     } else if (this._editing === this._itemCountText) {
                         const maxStack = this._item?.maxStack || 1;
                         const num = parseInt(candidate, 10);
@@ -1155,9 +1253,16 @@ export default class DevUIScene extends Phaser.Scene {
 
         const typeKey = this._enemy.selectedKey;
         const main = this.scene.get('MainScene');
-        if (!main) return;
+        const testWorld = this.scene.get('TestWorldScene');
+        
+        // Use whichever gameplay scene is active
+        // Choose TestWorld if it exists and is either active or paused; otherwise fall back to MainScene if present
+        const targetScene = (testWorld && (this.scene.isActive('TestWorldScene') || this.scene.isPaused('TestWorldScene'))) ? testWorld :
+                            (main && (this.scene.isActive('MainScene') || this.scene.isPaused('MainScene'))) ? main :
+                            null;
+        if (!targetScene) return;
 
-        DevTools.spawnEnemiesAtScreenEdge(main, typeKey, count);
+        DevTools.spawnEnemiesAtScreenEdge(targetScene, typeKey, count);
     }
 
     _spawnItems() {
@@ -1174,9 +1279,15 @@ export default class DevUIScene extends Phaser.Scene {
 
         const itemKey = this._item.selectedKey;
         const main = this.scene.get('MainScene');
-        if (!main) return;
+        const testWorld = this.scene.get('TestWorldScene');
+        
+        // Use whichever gameplay scene is active
+        const targetScene = (testWorld && (this.scene.isActive('TestWorldScene') || this.scene.isPaused('TestWorldScene'))) ? testWorld :
+                            (main && (this.scene.isActive('MainScene') || this.scene.isPaused('MainScene'))) ? main :
+                            null;
+        if (!targetScene) return;
 
-        DevTools.spawnItemsSmart(main, itemKey, qty);
+        DevTools.spawnItemsSmart(targetScene, itemKey, qty);
         DevTools._setItemSpawnPrefs && DevTools._setItemSpawnPrefs({
             key: itemKey,
             name: this._item.selectedName,
@@ -1184,36 +1295,105 @@ export default class DevUIScene extends Phaser.Scene {
         });
     }
 
-    // ---------- Game speed logic ----------
-
-    _commitGameSpeed() {
-        let raw = this._gameSpeedText?.get?.() ?? String(this._gameSpeed.scale || '').trim();
-        if (raw === '') raw = '0';
-        let val = parseFloat(raw);
-        if (!Number.isFinite(val)) val = 0;
-        val = Math.round(val * 10) / 10;
-        val = Phaser.Math.Clamp(val, 0, 10);
-        this._gameSpeed.scale = val.toFixed(1).replace(/\.0$/, '');
-        if (this._gameSpeedText?.txt) this._gameSpeedText.txt.setText(this._gameSpeed.scale);
-        this._gameSpeedText?.stopEdit?.(false);
-        DevTools.setTimeScale(val, this.game);
+    // ---------- Helper functions for immediate visual updates ----------
+    
+    _forceVisualUpdate(targetScene, callback) {
+        if (!targetScene) return;
+        
+        // First try to update visuals without unpausing (for performance)
+        if (callback) callback();
+        
+        // If the scene is paused, temporarily unpause for a very brief moment to allow rendering
+        const wasPaused = this.scene.isPaused(targetScene.scene.key);
+        if (wasPaused) {
+            // Unpause briefly to allow the visual changes to render
+            this.scene.resume(targetScene.scene.key);
+            
+            // Re-pause after a minimal delay to allow just one render frame
+            this.time.delayedCall(1, () => {
+                // Execute visual updates again while unpaused
+                if (callback) callback();
+                
+                // Re-pause after another minimal delay
+                this.time.delayedCall(1, () => {
+                    this.scene.pause(targetScene.scene.key);
+                });
+            });
+        }
     }
 
+    // ---------- Day/Segment navigation logic ----------
 
-    _bumpGameSpeed(delta) {
-        let val = parseFloat(this._gameSpeed.scale) || 0;
-        val = Math.round((val + delta) * 10) / 10;
-        val = Phaser.Math.Clamp(val, 0, 10);
-        this._gameSpeed.scale = val.toFixed(1).replace(/\.0$/, '');
-        if (this._gameSpeedText?.txt) this._gameSpeedText.txt.setText(this._gameSpeed.scale);
-        this._gameSpeedText?.stopEdit?.(false);
-        DevTools.setTimeScale(val, this.game);
+    _jumpToDay() {
+        // Commit any active edits first
+        if (this._editing && this._editing.stopEdit) this._editing.stopEdit(true);
+
+        // Parse day and segment values
+        let dayRaw = this._dayText?.get?.() ?? String(this._daySegment.day || '').trim();
+        if (dayRaw === '') dayRaw = '1';
+        let day = parseInt(dayRaw, 10);
+        if (!Number.isFinite(day) || day < 1) day = 1;
+        
+        let segmentRaw = this._segmentText?.get?.() ?? String(this._daySegment.segment || '').trim();
+        if (segmentRaw === '') segmentRaw = '1';
+        let segment = parseInt(segmentRaw, 10);
+        if (!Number.isFinite(segment) || segment < 1) segment = 1;
+        if (segment > 6) segment = 6;
+        
+        // Update internal state
+        this._daySegment.day = String(day);
+        this._daySegment.segment = String(segment);
+        
+        // Update UI to show the clamped values
+        if (this._dayText?.txt) this._dayText.txt.setText(this._daySegment.day);
+        if (this._segmentText?.txt) this._segmentText.txt.setText(this._daySegment.segment);
+        
+        // Call DevTools to actually perform the jump
+        DevTools.jumpToDay(day, segment, this.game);
+        
+        // Force immediate visual updates so changes are visible through the dev UI backdrop
+        const main = this.scene.get('MainScene');
+        const testWorld = this.scene.get('TestWorldScene');
+        const targetScene = (testWorld && (this.scene.isActive('TestWorldScene') || this.scene.isPaused('TestWorldScene'))) ? testWorld :
+                            (main && (this.scene.isActive('MainScene') || this.scene.isPaused('MainScene'))) ? main : null;
+        
+        // Visual feedback: briefly flash the Go button to indicate action
+        const go = this.content.getAll().find(obj => obj.list && obj.list.some && obj.list.some(child => child.text === 'Go'));
+        if (go && go._rect) {
+            go._rect.setFillStyle(UI.okColor * 1.5, 1); // Brighten button
+            this.time.delayedCall(100, () => {
+                go._rect.setFillStyle(UI.okColor, 1); // Return to normal
+            });
+        }
+        
+        // Use helper function to temporarily unpause scene for visual updates
+        this._forceVisualUpdate(targetScene, () => {
+            try {
+                // Force night overlay update for immediate darkness/brightness changes
+                if (typeof targetScene.updateNightOverlay === 'function') {
+                    targetScene.updateNightOverlay();
+                } else if (targetScene.dayNight && typeof targetScene.dayNight.updateNightOverlay === 'function') {
+                    targetScene.dayNight.updateNightOverlay();
+                }
+                
+                // Force lighting system update
+                if (targetScene.lightingSystem && typeof targetScene.lightingSystem.updateGlobalLighting === 'function') {
+                    targetScene.lightingSystem.updateGlobalLighting();
+                }
+                
+                // Force render update to make changes visible immediately
+                targetScene.sys.queueDepthSort();
+            } catch {}
+        });
     }
 
     _goBack() {
         this._unlockScenes();
+        
+        // Always return to PauseScene instead of directly resuming gameplay
+        // This preserves the original flow: DevUIScene -> PauseScene -> Gameplay
         if (!this.scene.isActive('PauseScene')) {
-            this.scene.launch('PauseScene', { from: 'DevUI' });
+            this.scene.launch('PauseScene');
         }
         this.scene.stop();
     }

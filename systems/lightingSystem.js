@@ -163,7 +163,8 @@ export default function createLightingSystem(scene) {
 
       const scale = Number.isFinite(b.maskScale) ? b.maskScale : 1;
       const intensity = Number.isFinite(b.intensity) ? b.intensity : 1;
-      const effectiveR = rawR * scale * (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1));
+      const lvl = Number.isFinite(b.lightLevel) ? b.lightLevel : 1;
+      const effectiveR = rawR * scale * (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1)) * Math.max(0, lvl);
       if (!(effectiveR > 0)) continue;
 
       // World -> screen coords
@@ -273,6 +274,9 @@ export default function createLightingSystem(scene) {
     const flickerAmplitude = Number.isFinite(cfg.flickerAmplitude) ? cfg.flickerAmplitude : 0;
     const flickerSpeed = Number.isFinite(cfg.flickerSpeed) ? cfg.flickerSpeed : 0;
 
+    // Light strength multiplier (applies to effective radius in compositor)
+    const lightLevel = Number.isFinite(cfg.light_level) ? cfg.light_level : (Number.isFinite(cfg.lightLevel) ? cfg.lightLevel : 1);
+
     const binding = {
       target,
       offsetX,
@@ -281,12 +285,14 @@ export default function createLightingSystem(scene) {
       _baseRadius: radius,
       maskScale,
       intensity: (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1)),
+      _baseIntensity: (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1)),
       maskTileSize,
       maskTileCount,
       flickerAmplitude: flickerAmplitude < 0 ? 0 : flickerAmplitude,
       flickerSpeed: flickerSpeed < 0 ? 0 : flickerSpeed,
       _flickerPhase: Math.random() * (Phaser?.Math?.PI2 || Math.PI * 2),
       _flickerPhaseAlt: Math.random() * (Phaser?.Math?.PI2 || Math.PI * 2),
+      lightLevel: Number.isFinite(lightLevel) ? Math.max(0, lightLevel) : 1,
       active: intensity > 0 && radius > 0,
       x: (target.x || 0) + offsetX,
       y: (target.y || 0) + offsetY,
@@ -335,7 +341,8 @@ export default function createLightingSystem(scene) {
         const newRadius = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(base + jitter, Math.max(0, base - amp), base + amp) : Math.min(Math.max(base + jitter, Math.max(0, base - amp)), base + amp));
         binding.radius = newRadius;
         const intensityJitter = 1 + mix * 0.08;
-        const newIntensity = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp((binding.intensity || 0) * intensityJitter, 0, 1) : Math.min(Math.max((binding.intensity || 0) * intensityJitter, 0), 1));
+        const baseI = Number.isFinite(binding._baseIntensity) ? binding._baseIntensity : (Number.isFinite(binding.intensity) ? binding.intensity : 1);
+        const newIntensity = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(baseI * intensityJitter, 0, 1) : Math.min(Math.max(baseI * intensityJitter, 0), 1));
         binding.intensity = newIntensity;
       }
     }
@@ -419,6 +426,9 @@ export default function createLightingSystem(scene) {
     if (light.radius !== radius) light.radius = radius;
     if (light.maskScale !== maskScale) light.maskScale = maskScale;
     if (light.intensity !== flickerIntensity) light.intensity = flickerIntensity;
+    // Apply player light level multiplier for compositor
+    const lvl = Number.isFinite(scene._playerLightLevel) ? Math.max(0, scene._playerLightLevel) : 1;
+    if (light.lightLevel !== lvl) light.lightLevel = lvl;
 
     const shouldBeActive = shouldGlow && hasRadius && flickerIntensity > 0.001;
     const stateChanged = shouldBeActive !== scene._playerLightNightActive;
@@ -488,6 +498,7 @@ export default function createLightingSystem(scene) {
       if (!Number.isFinite(playerSettings.flickerSpeed)) playerSettings.flickerSpeed = 0; else if (playerSettings.flickerSpeed < 0) playerSettings.flickerSpeed = 0;
       if (!Number.isFinite(playerSettings.upgradeMultiplier)) playerSettings.upgradeMultiplier = 1; else if (playerSettings.upgradeMultiplier < 0) playerSettings.upgradeMultiplier = 0;
       scene._playerLightUpgradeMultiplier = playerSettings.upgradeMultiplier;
+      if (!Number.isFinite(scene._playerLightLevel)) scene._playerLightLevel = 1;
     } else {
       scene._playerLightUpgradeMultiplier = 1;
     }
@@ -545,6 +556,10 @@ export default function createLightingSystem(scene) {
     _updateNightOverlayMask();
   }
 
+  function getPlayerLightLevel() { return Number.isFinite(scene._playerLightLevel) ? scene._playerLightLevel : 1; }
+  function setPlayerLightLevel(level = 1) { scene._playerLightLevel = Math.max(0, Number(level) || 0); return scene._playerLightLevel; }
+  function bumpPlayerLightLevel(mult = 1) { if (!Number.isFinite(mult)) return getPlayerLightLevel(); scene._playerLightLevel = Math.max(0, (scene._playerLightLevel || 1) * mult); return scene._playerLightLevel; }
+
   return {
     // lifecycle
     initLighting,
@@ -575,5 +590,10 @@ export default function createLightingSystem(scene) {
     bumpPlayerLightUpgradeMultiplier,
     resetPlayerLightUpgradeMultiplier,
     updateNightAmbient,
+
+    // player light level API
+    getPlayerLightLevel,
+    setPlayerLightLevel,
+    bumpPlayerLightLevel,
   };
 }

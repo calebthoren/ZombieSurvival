@@ -345,11 +345,40 @@ function createLayeredResource(scene, def, x, y) {
     const desiredHeight = Number.isFinite(heightCfg)
         ? heightCfg
         : Math.max(0, frameH - cropY);
+
+    // Allow auto-alignment to force a full top overlay (from frame top down to split)
+    let forceCropHeight = null;
+
+    // Auto-align canopy bottom to the top of the hitbox when requested via overlay.autoAlign = 'hitboxTop'
+    // Originally this applied to stumps only; broadened to support any resource that opts in.
+    try {
+        if (
+            overlayCfg.autoAlign === 'hitboxTop' &&
+            trunk?.body &&
+            Number.isFinite(trunk.body.top)
+        ) {
+            const sy = trunk.scaleY || 1;
+            const topWorldY = y - (trunk.displayHeight * (originY || 0));
+            const bodyTopWorld = Math.ceil(trunk.body.top);
+            const canopyBottomFrame = clamp(
+                Math.round((bodyTopWorld - topWorldY) / sy),
+                0,
+                frameH,
+            );
+            // Render the entire top (0..split) so the top pixels are never cut off.
+            cropY = 0;
+            forceCropHeight = canopyBottomFrame;
+        }
+    } catch {}
+
     let canopyHeight = desiredHeight;
     const cropWidthLimit = Number.isFinite(widthCfg) ? widthCfg : Math.max(0, frameW - cropX);
     const cropWidth = Math.max(1, Math.min(frameW - cropX, cropWidthLimit));
     let cropHeight = Math.max(0, Math.min(frameH - cropY, canopyHeight));
     cropHeight = Math.floor(cropHeight);
+    if (forceCropHeight != null) {
+        cropHeight = Math.floor(clamp(forceCropHeight, 0, frameH - cropY));
+    }
 
     let trunkHeight = Math.max(0, frameH - (cropY + cropHeight));
     const minTrunk = getMinimumTrunkHeight(def, trunk, frameH);
@@ -496,28 +525,54 @@ function createLayeredResource(scene, def, x, y) {
     trunk.setData('overlayCleanup', cleanup);
 
     if (!scene._treeLeavesUpdate) {
-        const playerRect = new Phaser.Geom.Rectangle();
+        const entityRect = new Phaser.Geom.Rectangle();
         scene._treeLeavesUpdate = () => {
-            const p = scene.player;
-            if (!p) return;
-            if (p.body) {
-                const pb = p.body;
-                playerRect.x = pb.x;
-                playerRect.y = pb.y;
-                playerRect.width = pb.width;
-                playerRect.height = pb.height;
-            } else if (typeof p.getBounds === 'function') {
-                const b = p.getBounds();
-                playerRect.x = b.x;
-                playerRect.y = b.y;
-                playerRect.width = b.width;
-                playerRect.height = b.height;
-            } else {
-                return;
-            }
+            // Check all tree canopies for any entity overlap
             for (const d of scene._treeLeaves) {
-                const overlap = Phaser.Geom.Intersects.RectangleToRectangle(playerRect, d.rect);
-                d.leaves.setAlpha(overlap ? 0.25 : 1);
+                let hasOverlap = false;
+                
+                // Check player overlap
+                const p = scene.player;
+                if (p) {
+                    if (p.body) {
+                        entityRect.x = p.body.x;
+                        entityRect.y = p.body.y;
+                        entityRect.width = p.body.width;
+                        entityRect.height = p.body.height;
+                    } else if (typeof p.getBounds === 'function') {
+                        const b = p.getBounds();
+                        entityRect.x = b.x;
+                        entityRect.y = b.y;
+                        entityRect.width = b.width;
+                        entityRect.height = b.height;
+                    } else {
+                        entityRect.width = 0; // Skip if no valid bounds
+                    }
+                    
+                    if (entityRect.width > 0) {
+                        hasOverlap = Phaser.Geom.Intersects.RectangleToRectangle(entityRect, d.rect);
+                    }
+                }
+                
+                // Check zombie overlaps if no player overlap yet
+                if (!hasOverlap && scene.zombies && scene.zombies.getChildren) {
+                    const zombies = scene.zombies.getChildren();
+                    for (let i = 0; i < zombies.length && !hasOverlap; i++) {
+                        const zombie = zombies[i];
+                        if (!zombie || !zombie.active || !zombie.body) continue;
+                        
+                        const zb = zombie.body;
+                        entityRect.x = zb.x;
+                        entityRect.y = zb.y;
+                        entityRect.width = zb.width;
+                        entityRect.height = zb.height;
+                        
+                        hasOverlap = Phaser.Geom.Intersects.RectangleToRectangle(entityRect, d.rect);
+                    }
+                }
+                
+                // Set transparency based on any entity overlap
+                d.leaves.setAlpha(hasOverlap ? 0.25 : 1);
             }
         };
         scene._treeLeavesTimer = scene.time.addEvent({
@@ -859,6 +914,9 @@ function createResourceSystem(scene) {
             : null;
         if (!variants || variants.length === 0) return;
 
+        const ignoreProximity = !!opts.ignoreProximity;
+        const forceAtPosition = !!opts.forceAtPosition;
+
         const maxActive =
             opts.count ??
             groupCfg.maxActive ??
@@ -887,6 +945,7 @@ function createResourceSystem(scene) {
         const biomeFn = opts.getBiome || getBiome;
 
         const tooClose = (x, y, w, h) => {
+            if (ignoreProximity) return false;
             // Prefer proximity-limited list (e.g., the current chunk's group) to avoid global N^2 scans
             const proxGroup = opts.proximityGroup;
             let children = [];
@@ -920,7 +979,9 @@ function createResourceSystem(scene) {
             let total = 0;
             for (let i = 0; i < variants.length; i++) {
                 const v = variants[i];
-                if (baseKey && !v.id.startsWith(baseKey)) continue;
+                const id = typeof v?.id === 'string' ? v.id : null;
+                if (!id) continue; // skip invalid entries
+                if (baseKey && !id.startsWith(baseKey)) continue;
                 const bs = v.biomes;
                 if (bs && bs.indexOf && bs.indexOf(biome) === -1) continue;
                 total += v.weight || 0;
@@ -929,11 +990,13 @@ function createResourceSystem(scene) {
             let r = Math.random() * total;
             for (let i = 0; i < variants.length; i++) {
                 const v = variants[i];
-                if (baseKey && !v.id.startsWith(baseKey)) continue;
+                const id = typeof v?.id === 'string' ? v.id : null;
+                if (!id) continue; // skip invalid entries
+                if (baseKey && !id.startsWith(baseKey)) continue;
                 const bs = v.biomes;
                 if (bs && bs.indexOf && bs.indexOf(biome) === -1) continue;
                 r -= v.weight || 0;
-                if (r <= 0) return v.id;
+                if (r <= 0) return id;
             }
             return null;
         };
@@ -1023,6 +1086,18 @@ function createResourceSystem(scene) {
                 baseHeight = 0,
                 tries = 30,
                 density = 0;
+
+            if (forceAtPosition) {
+                x = Math.round(Phaser.Math.Between(minX, maxX));
+                y = Math.round(Phaser.Math.Between(minY, maxY));
+                biome = biomeFn((x / chunkSize) | 0, (y / chunkSize) | 0);
+                baseId = pickVariantId(biome) || (variants[0] && variants[0].id);
+                baseDef = baseId ? RESOURCE_DB[baseId] : null;
+                if (!baseDef) return 0;
+                createResourceAt(baseId, baseDef, x, y);
+                return 1;
+            }
+
             do {
                 x = Math.round(Phaser.Math.Between(minX, maxX));
                 y = Math.round(Phaser.Math.Between(minY, maxY));
@@ -1139,6 +1214,8 @@ function createResourceSystem(scene) {
         spawnChunkResources,
         cancelChunkJob: _cancelChunkJob,
         __testSpawnResourceGroup: _spawnResourceGroup,
+        // Expose collider/overlap setup so dev scenes can initialize identical behavior without global spawns
+        ensureColliders,
     };
 
     return scene.resourceSystem;

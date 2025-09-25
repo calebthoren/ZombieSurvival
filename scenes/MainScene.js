@@ -10,6 +10,7 @@ import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
 import ChunkManager from '../systems/world_gen/chunks/ChunkManager.js';
 import { clear } from '../systems/world_gen/chunks/chunkStore.js';
+import { __clearTexturePool } from '../systems/world_gen/chunks/Chunk.js';
 import createZombiePool from '../systems/pools/zombiePool.js';
 import createResourcePool from '../systems/pools/resourcePool.js';
 import { setBiomeSeed } from '../systems/world_gen/biomes/biomeMap.js';
@@ -94,6 +95,9 @@ export default class MainScene extends Phaser.Scene {
         this._playerLightFlickerPhase = Math.random() * Phaser.Math.PI2;
         this._playerLightFlickerPhaseAlt = Math.random() * Phaser.Math.PI2;
 
+        // Player light level (multiplier for glow size)
+        this._playerLightLevel = 1;
+
         // Lighting system
         this.lighting = createLightingSystem(this);
         this.lighting.initLighting();
@@ -147,6 +151,8 @@ export default class MainScene extends Phaser.Scene {
 
         // Reset any previous chunk metadata and UI state
         clear();
+        // Drop any pooled RenderTextures from prior Scene instances to avoid cross-Scene reuse
+        try { __clearTexturePool(); } catch {}
         setBiomeSeed(WORLD_GEN.seed);
         // Ensure fresh UI on respawn
         this.scene.stop('UIScene');
@@ -164,6 +170,8 @@ export default class MainScene extends Phaser.Scene {
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
             this.events.off('chunk:load');
             this.events.off('chunk:unload');
+            // Ensure any pooled chunk textures are cleared when this Scene shuts down
+            try { __clearTexturePool(); } catch {}
         });
         this.inputSystem = createInputSystem(this);
 
@@ -185,6 +193,7 @@ export default class MainScene extends Phaser.Scene {
                 playerLightSettings.baseRadius ?? playerLightSettings.nightRadius,
             intensity: 0,
             maskScale: playerLightSettings.maskScale,
+            lightLevel: this._playerLightLevel,
         });
         if (this.playerLight) {
             this.playerLight.active = false;
@@ -345,6 +354,8 @@ export default class MainScene extends Phaser.Scene {
             };
             this.events.once(Phaser.Scenes.Events.SHUTDOWN, _teardown);
             this.events.once(Phaser.Scenes.Events.DESTROY, _teardown);
+            // Also clear pooled chunk textures on full destroy
+            this.events.once(Phaser.Scenes.Events.DESTROY, () => { try { __clearTexturePool(); } catch {} });
         }
 
         // Chunk-based resources: loaded per nearby chunk via ChunkManager
@@ -791,6 +802,12 @@ export default class MainScene extends Phaser.Scene {
 
         const w = WORLD_GEN.world.width;
         const h = WORLD_GEN.world.height;
+        
+        // Safety check: ensure player exists before world wrapping
+        if (!this.player) {
+            return;
+        }
+        
         let x = this.player.x;
         let y = this.player.y;
         let wrapped = false;
@@ -836,6 +853,12 @@ export default class MainScene extends Phaser.Scene {
         // Movement + sprinting
         const walkSpeed = 75;
         const sprintMult = 1.5;
+        
+        // Safety check: ensure player and player body exist
+        if (!this.player || !this.player.body) {
+            return;
+        }
+        
         const p = this.player.body.velocity;
         p.set(0);
 
@@ -854,10 +877,12 @@ export default class MainScene extends Phaser.Scene {
             (this._isSprinting ? sprintMult : 1) *
             (this.player._speedMult || 1);
 
-        if (up) p.y = -speed;
-        else if (down) p.y = speed;
-        if (left) p.x = -speed;
-        else if (right) p.x = speed;
+        // Calculate axis values - opposite keys cancel each other out
+        const verticalAxis = (up ? -1 : 0) + (down ? 1 : 0); // W/↑ = -1, S/↓ = +1
+        const horizontalAxis = (left ? -1 : 0) + (right ? 1 : 0); // A/← = -1, D/→ = +1
+
+        p.y = verticalAxis * speed;
+        p.x = horizontalAxis * speed;
         if (p.x !== 0 && p.y !== 0) {
             p.x *= Math.SQRT1_2;
             p.y *= Math.SQRT1_2;
@@ -1170,6 +1195,10 @@ export default class MainScene extends Phaser.Scene {
     setPlayerLightUpgradeMultiplier(multiplier = 1) { return this.lighting.setPlayerLightUpgradeMultiplier(multiplier); }
     bumpPlayerLightUpgradeMultiplier(multiplier = 1) { return this.lighting.bumpPlayerLightUpgradeMultiplier(multiplier); }
     resetPlayerLightUpgradeMultiplier() { return this.lighting.resetPlayerLightUpgradeMultiplier(); }
+
+    getPlayerLightLevel() { return this.lighting.getPlayerLightLevel(); }
+    setPlayerLightLevel(level = 1) { return this.lighting.setPlayerLightLevel(level); }
+    bumpPlayerLightLevel(mult = 1) { return this.lighting.bumpPlayerLightLevel(mult); }
 
     applyLightPipeline(gameObject, options = null) { return this.lighting.applyLightPipeline(gameObject, options); }
     attachLightToObject(target, cfg = {}) { return this.lighting.attachLightToObject(target, cfg); }

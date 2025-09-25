@@ -15,29 +15,44 @@ export default class PauseScene extends Phaser.Scene {
   }
 
   create() {
-    // Safety guard: if MainScene doesn't exist (e.g., boot ordering issue), just close.
-    // Do NOT start/restart MainScene here — resuming is handled by user input (ESC / button).
+    // Safety guard: if no gameplay scenes exist, just close.
     const main = this.scene.get('MainScene');
-    if (!main) {
+    const testWorld = this.scene.get('TestWorldScene');
+    if (!main && !testWorld) {
       this.scene.stop(); // nothing to overlay
       return;
     }
 
     // Ensure gameplay is actually paused whenever this overlay is open.
     // This is idempotent and covers ALL entry points (ESC, other scenes, etc.).
-    if (this.scene.isActive('MainScene')) {
-      this.scene.pause('MainScene');
-    }
-
-    DevTools.applyTimeScale(this);
-
+    
+    // Delay pausing to let PauseScene fully initialize first
+    this.time.delayedCall(10, () => {
+      if (this.scene.isActive('MainScene')) {
+        this.scene.pause('MainScene');
+      } else if (this.scene.isActive('TestWorldScene')) {
+        this.scene.pause('TestWorldScene');
+      }
+      
+      // Force PauseScene to render on top
+      this.scene.bringToTop();
+      this.scene.setActive(true);
+      this.scene.setVisible(true);
+    });
     const { width: W, height: H } = this.scale;
+    
+    // Ensure PauseScene camera is properly set up
+    this.cameras.main.removeBounds();
+    this.cameras.main.setScroll(0, 0);
+    this.cameras.main.setZoom(1);
+    this.cameras.main.setPosition(0, 0);
+    this.cameras.main.setSize(this.scale.width, this.scale.height);
 
-    // Block input to scenes underneath
+    // Block input to scenes underneath (use much higher depth)
     const blocker = this.add.rectangle(0, 0, W, H, 0x000000, 0.55)
       .setOrigin(0, 0)
       .setScrollFactor(0)
-      .setDepth(10)
+      .setDepth(10000) // Increased from 10 to 10000
       .setInteractive({ useHandCursor: false });
 
     // Title (optional subtle text)
@@ -47,13 +62,13 @@ export default class PauseScene extends Phaser.Scene {
       color: '#ffffff',
       stroke: '#000000',
       strokeThickness: 4
-    }).setOrigin(0.5).setDepth(11);
+    }).setOrigin(0.5).setDepth(10001); // Increased from 11 to 10001
 
     // Helpers
     const makeButton = (x, y, w, h, label, onClick, opts = {}) => {
       const bg = this.add.rectangle(x, y, w, h, opts.fillColor ?? 0x1f2937, 1)
         .setOrigin(0.5)
-        .setDepth(11)
+        .setDepth(10002) // Increased from 11 to 10002
         .setStrokeStyle(2, opts.strokeColor ?? 0x93c5fd)
         .setInteractive({ useHandCursor: true });
 
@@ -62,7 +77,7 @@ export default class PauseScene extends Phaser.Scene {
         fontSize: opts.fontSize ?? '18px',
         color: '#ffffff',
         align: 'center'
-      }).setOrigin(0.5).setDepth(12);
+      }).setOrigin(0.5).setDepth(10003); // Increased from 12 to 10003
 
       // Hover
       bg.on('pointerover', () => { bg.setFillStyle(opts.hoverFill ?? 0x374151, 1); });
@@ -98,16 +113,22 @@ export default class PauseScene extends Phaser.Scene {
 
     // Row 1: Settings (top-left) + Dev Mode (top-right)
     makeButton(rowXLeft,  row1Y, smallW, smallH, 'Settings', () => {
-      this.sound.play?.('sfx_click', { volume: 0.5 });
       // Placeholder: open settings scene in the future
     }, { fillColor: 0x1f2937, strokeColor: 0xf59e0b, hoverFill: 0x374151 });
 
-    // Open Dev UI and close Pause behind it (keep MainScene paused)
+    // Open Dev UI and close Pause behind it (keep MainScene/TestWorldScene paused)
   makeButton(rowXRight, row1Y, smallW, smallH, 'Dev Mode', () => {
-      // Only play if the audio is actually loaded
-      if (this.cache?.audio?.exists('sfx_click')) {
-          this.sound.play('sfx_click', { volume: 0.5 });
+      // Ensure the current gameplay scene is paused before opening DevUIScene
+      const main = this.scene.get('MainScene');
+      const testWorld = this.scene.get('TestWorldScene');
+      
+      if (main && this.scene.isActive('MainScene') && !this.scene.isPaused('MainScene')) {
+          this.scene.pause('MainScene');
       }
+      if (testWorld && this.scene.isActive('TestWorldScene') && !this.scene.isPaused('TestWorldScene')) {
+          this.scene.pause('TestWorldScene');
+      }
+      
       if (!this.scene.isActive('DevUIScene')) {
           this.scene.launch('DevUIScene');
       }
@@ -115,19 +136,20 @@ export default class PauseScene extends Phaser.Scene {
       this.scene.stop(); // <- important
   }, { fillColor: 0x1f2937, strokeColor: 0x10b981, hoverFill: 0x374151 });
 
-    // Row 2: placeholders (small buttons)
+    // Row 2: Coming Soon + World switcher
     makeButton(rowXLeft,  row2Y, smallW, smallH, 'Coming Soon', () => {
-      this.sound.play?.('sfx_click', { volume: 0.5 });
+      // Placeholder button
     }, { fillColor: 0x1f2937, strokeColor: 0x64748b, hoverFill: 0x374151 });
 
-    makeButton(rowXRight, row2Y, smallW, smallH, 'Coming Soon', () => {
-      this.sound.play?.('sfx_click', { volume: 0.5 });
-    }, { fillColor: 0x1f2937, strokeColor: 0x64748b, hoverFill: 0x374151 });
+    const isInTestWorld = this.scene.isActive('TestWorldScene');
+    const worldButtonText = isInTestWorld ? 'Return to Main World' : 'Go to Test World';
+    makeButton(rowXRight, row2Y, smallW, smallH, worldButtonText, () => {
+      this._switchWorld();
+    }, { fillColor: 0x1f2937, strokeColor: 0x9333ea, hoverFill: 0x374151 });
 
     // Bottom big: Return to Menu (no-op for now)
     const bottomY = row2Y + smallH + pad * 1.25;
     makeButton(W / 2, bottomY, bigW, bigH, 'Return to Menu', () => {
-      this.sound.play?.('sfx_click', { volume: 0.5 });
       // Intentionally not yet implemented.
       // In the future: this.scene.stop('UIScene'); this.scene.start('MainMenuScene');
     }, { fillColor: 0x0f172a, strokeColor: 0xef4444, hoverFill: 0x1e293b, fontSize: '20px' });
@@ -142,13 +164,26 @@ export default class PauseScene extends Phaser.Scene {
   _resume() {
     // Resume the gameplay scene; stop this overlay
     const main = this.scene.get('MainScene');
-    // Unpause only if the scene exists
-    if (main) {
-      this.scene.stop('PauseScene');
+    const testWorld = this.scene.get('TestWorldScene');
+    
+    // Stop the pause scene first
+    this.scene.stop('PauseScene');
+    
+    // Resume whichever scene is active (but paused)
+    if (main && this.scene.isPaused('MainScene')) {
       this.scene.resume('MainScene');
-    } else {
-      // Fallback: just stop ourselves
-      this.scene.stop('PauseScene');
+      // Re-enable input if it was disabled
+      if (main.input) {
+        main.input.enabled = true;
+        if (main.input.keyboard) main.input.keyboard.enabled = true;
+      }
+    } else if (testWorld && this.scene.isPaused('TestWorldScene')) {
+      this.scene.resume('TestWorldScene');
+      // Re-enable input if it was disabled
+      if (testWorld.input) {
+        testWorld.input.enabled = true;
+        if (testWorld.input.keyboard) testWorld.input.keyboard.enabled = true;
+      }
     }
   }
 
@@ -159,5 +194,21 @@ export default class PauseScene extends Phaser.Scene {
       if (!this.scene.isActive('DevUIScene')) {
           this.scene.launch('DevUIScene');
       }
+  }
+  
+  _switchWorld() {
+    // Close pause scene and switch between MainScene and TestWorldScene
+    this.scene.stop('PauseScene');
+    
+    if (this.scene.isActive('TestWorldScene') || this.scene.isPaused('TestWorldScene')) {
+      // Switch from TestWorld to MainScene
+      this.scene.stop('TestWorldScene');
+      this.scene.start('MainScene'); // Fresh start is better than resume for world switching
+    } else {
+      // Switch from MainScene to TestWorld
+      this.scene.stop('MainScene');
+      this.scene.stop('UIScene');
+      this.scene.start('TestWorldScene'); // Fresh start
+    }
   }
 }

@@ -52,7 +52,10 @@ const ZOMBIES = {
         // With an empty table, MainScene._maybeDropLoot() will drop nothing.
         loot: {
             table: []
-        }
+        },
+
+        // Light level: non-glowing by default
+        light_level: 0,
     },
 
     // Fire zombie with light emission
@@ -87,6 +90,8 @@ const ZOMBIES = {
 
         // Light emission - glows in the dark with player-like flicker
         light: { radius: 120, intensity: 1, maskScale: 0.3333333, maskTileCount: 7, maskTileSize: 16, flickerAmplitude: 8, flickerSpeed: 2.25 },
+        // Light level multiplier for glow strength
+        light_level: 1,
 
         // Loot scaffolding (placeholder)
         loot: {

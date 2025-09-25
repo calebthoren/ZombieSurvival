@@ -164,8 +164,6 @@ export const WORLD_GEN = {
             { id: RESOURCE_IDS.BUSH4C, weight: 5,  biomes: [BIOME_IDS.PLAINS, BIOME_IDS.FOREST] },
             { id: RESOURCE_IDS.DEAD_BUSH1, weight: 40, biomes: [BIOME_IDS.DESERT] },
             { id: RESOURCE_IDS.DEAD_BUSH2, weight: 20, biomes: [BIOME_IDS.DESERT] },
-            { id: RESOURCE_IDS.DEAD_BUSH3, weight: 10, biomes: [BIOME_IDS.DESERT] },
-            { id: RESOURCE_IDS.DEAD_BUSH4, weight: 5,  biomes: [BIOME_IDS.DESERT] },
             { id: RESOURCE_IDS.BERRY_BUSHA1, weight: 10, biomes: [BIOME_IDS.PLAINS] },
             { id: RESOURCE_IDS.BERRY_BUSHA2, weight: 3,  biomes: [BIOME_IDS.PLAINS] },
             { id: RESOURCE_IDS.BERRY_BUSHA3, weight: 1,  biomes: [BIOME_IDS.PLAINS] },
@@ -216,11 +214,18 @@ export const WORLD_GEN = {
       },
 
       // NIGHT: Waves
+      // New linear scaling system: targetCount = baseCount + (nightNumber - 1) * perNight + segmentIndex * perSegment
+      // This ensures all waves within a night scale consistently based on night# and segment position.
+      // Example results with default values:
+      //   Night 1: Dusk=3, Midnight=4, Dawn=5
+      //   Night 2: Dusk=5, Midnight=6, Dawn=7  
+      //   Night 3: Dusk=7, Midnight=8, Dawn=9
       nightWaves: {
-        waveIntervalMs: 30_000, // time between waves
-        baseCount: 3,           // zombies in wave 1
-        perWave: 2,             // +N per subsequent wave
-        perDay: 2,              // +2 zombies added per day
+        waveIntervalMs: 30_000, // time between waves (unused - waves are segment-based)
+        baseCount: 1,           // zombies in first wave of first night
+        perWave: 2,             // DEPRECATED - no longer used (was +N per subsequent wave)
+        perNight: 1,            // +N zombies per night (was perDay)
+        perSegment: 1,          // +N zombies per segment within night (Dusk=+0, Midnight=+1, Dawn=+2)
         maxCount: 25,           // clamp
         burstIntervalMs: 200,   // gap between individuals within a wave
       },

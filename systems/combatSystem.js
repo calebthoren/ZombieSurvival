@@ -566,7 +566,37 @@ export default function createCombatSystem(scene) {
         
         // Attach light if configured
         if (def.light && typeof scene.attachLightToObject === 'function') {
-            scene.attachLightToObject(zombie, def.light);
+            const cfg = Object.assign({}, def.light);
+            const lvl = Number.isFinite(def.light_level) ? def.light_level : undefined;
+            if (lvl !== undefined) cfg.lightLevel = lvl;
+
+            // If this is a Flamed Walker, mirror the player's glow size and light level.
+            if (typeKey === 'flamed_walker') {
+                const pset = scene.lightSettings?.player || {};
+                // Base radius mirrors player's base (after upgrades)
+                let baseR = Number.isFinite(pset.baseRadius) ? pset.baseRadius : pset.nightRadius;
+                if (!Number.isFinite(baseR)) baseR = 48;
+                const upgrade = typeof scene.getPlayerLightUpgradeMultiplier === 'function'
+                    ? scene.getPlayerLightUpgradeMultiplier()
+                    : (Number.isFinite(scene._playerLightUpgradeMultiplier) ? scene._playerLightUpgradeMultiplier : 1);
+                cfg.radius = baseR * (Number.isFinite(upgrade) ? Math.max(0, upgrade) : 1);
+
+                // Mirror player's maskScale
+                const pScale = Number.isFinite(pset.maskScale) ? pset.maskScale : 1;
+                cfg.maskScale = pScale;
+
+                // Mirror player's light level (multiplies effective size)
+                const pLevel = typeof scene.getPlayerLightLevel === 'function'
+                    ? scene.getPlayerLightLevel()
+                    : (Number.isFinite(scene._playerLightLevel) ? scene._playerLightLevel : 1);
+                cfg.lightLevel = pLevel;
+
+                // Mirror player's flicker behavior for subtle consistency
+                if (Number.isFinite(pset.flickerAmplitude)) cfg.flickerAmplitude = pset.flickerAmplitude;
+                if (Number.isFinite(pset.flickerSpeed)) cfg.flickerSpeed = pset.flickerSpeed;
+            }
+
+            scene.attachLightToObject(zombie, cfg);
         }
         
         return zombie;

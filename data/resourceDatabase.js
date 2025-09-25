@@ -63,8 +63,6 @@ export const RESOURCE_IDS = {
   BUSH4C: 'bush4C',
   DEAD_BUSH1: 'dead_bush1',
   DEAD_BUSH2: 'dead_bush2',
-  DEAD_BUSH3: 'dead_bush3',
-  DEAD_BUSH4: 'dead_bush4',
   BERRY_BUSHA1: 'berry_bushA1',
   BERRY_BUSHA2: 'berry_bushA2',
   BERRY_BUSHA3: 'berry_bushA3',
@@ -77,8 +75,9 @@ export const RESOURCE_IDS = {
 };
 
 export const RESOURCE_DB = {
-  //rocks
-  //-----
+  // ======================================================================
+  //                              ROCKS
+  // ======================================================================
   [RESOURCE_IDS.ROCK1A]: {
     id: RESOURCE_IDS.ROCK1A,
     name: 'Small Rock',
@@ -86,9 +85,12 @@ export const RESOURCE_DB = {
     stackable: false,
     maxStack: 1,
     icon:  { textureKey: 'rock1A', scale: 1.0, ox: 0, oy: 0 },
-    world: { textureKey: 'rock1A', scale: .65 },
-    collectible: true,          // custom flag for pickup
-    blocking: false,            // walk-through
+    world: { 
+      textureKey: 'rock1A', 
+      scale: .65
+    },
+    collectible: true,
+    blocking: false,
     givesItem: ITEM_IDS.ROCK1A,
     giveAmount: 1,
     depth: 1,
@@ -184,9 +186,12 @@ export const RESOURCE_DB = {
     stackable: false,
     maxStack: 1,
     icon:  { textureKey: 'rock2A', scale: 1.0, ox: 0, oy: 0 },
-    world: { textureKey: 'rock2A', scale: .65 },
-    collectible: true,          // custom flag for pickup
-    blocking: false,            // walk-through
+    world: { 
+      textureKey: 'rock2A', 
+      scale: .65
+    },
+    collectible: true,
+    blocking: false,
     givesItem: ITEM_IDS.ROCK2A,
     giveAmount: 1,
     depth: 1,
@@ -559,10 +564,12 @@ export const RESOURCE_DB = {
     meta: { rarity: 'legendary' },
   },
 
-  // Trees
+  // ======================================================================
+  //                              TREES
+  // ======================================================================
   [RESOURCE_IDS.TREE1A]: {
     id: RESOURCE_IDS.TREE1A,
-    name: 'Tree 1A',
+    name: 'Small Oak Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -576,7 +583,7 @@ export const RESOURCE_DB = {
         width: 16,
         height: 6,
         offsetX: 1,
-        offsetY: -5,
+        offsetY: -8,
         useScale: true,
         anchor: 'bottomCenter',
       },
@@ -584,10 +591,10 @@ export const RESOURCE_DB = {
     },
     overlay: {
       width: 64,
-      height: 58,
+      height: 56,
       cropY: 0,
       offsetX: 0,
-      offsetY: 22,
+      offsetY: 21,
       useScale: true,
       anchor: 'topCenter',
     },
@@ -600,7 +607,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.TREE1B]: {
     id: RESOURCE_IDS.TREE1B,
-    name: 'Tree 1B',
+    name: 'Medium Oak Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -611,10 +618,10 @@ export const RESOURCE_DB = {
       origin: { x: 0.5, y: 1 },
       body: {
         kind: 'rect',
-        width: 16,
-        height: 6,
-        offsetX: 1,
-        offsetY: -19,
+        width: 18,
+        height: 12,
+        offsetX: 4,
+        offsetY: -13,
         useScale: true,
         anchor: 'bottomCenter',
       },
@@ -622,10 +629,10 @@ export const RESOURCE_DB = {
     },
     overlay: {
       width: 86,
-      height: 80,
+      height: 78,
       cropY: 0,
       offsetX: 0,
-      offsetY: 0,
+      offsetY: 28,
       useScale: true,
       anchor: 'topCenter',
     },
@@ -638,7 +645,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.TREE1C]: {
     id: RESOURCE_IDS.TREE1C,
-    name: 'Tree 1C',
+    name: 'Large Oak Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -649,10 +656,10 @@ export const RESOURCE_DB = {
       origin: { x: 0.5, y: 1 },
       body: {
         kind: 'rect',
-        width: 16,
-        height: 6,
-        offsetX: -1,
-        offsetY: -27,
+        width: 18,
+        height: 18,
+        offsetX: 2,
+        offsetY: -15,
         useScale: true,
         anchor: 'bottomCenter',
       },
@@ -660,10 +667,10 @@ export const RESOURCE_DB = {
     },
     overlay: {
       width: 100,
-      height: 94,
+      height: 92,
       cropY: 0,
       offsetX: 0,
-      offsetY: 0,
+      offsetY: 29,
       useScale: true,
       anchor: 'topCenter',
     },
@@ -676,7 +683,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.TREE2A]: {
     id: RESOURCE_IDS.TREE2A,
-    name: 'Tree 2A',
+    name: 'Small Apple Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -687,10 +694,10 @@ export const RESOURCE_DB = {
       origin: { x: 0.5, y: 1 },
       body: {
         kind: 'rect',
-        width: 16,
-        height: 6,
-        offsetX: 0,
-        offsetY: -18,
+        width: 14,
+        height: 8,
+        offsetX: 1,
+        offsetY: -11,
         useScale: true,
         anchor: 'bottomCenter',
       },
@@ -699,9 +706,9 @@ export const RESOURCE_DB = {
     overlay: {
       width: 48,
       height: 42,
-      cropY: 0,
+      cropY: 3,
       offsetX: 0,
-      offsetY: 0,
+      offsetY: 14,
       useScale: true,
       anchor: 'topCenter',
     },
@@ -714,7 +721,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.TREE2B]: {
     id: RESOURCE_IDS.TREE2B,
-    name: 'Tree 2B',
+    name: 'Medium Apple Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -726,9 +733,9 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 6,
-        offsetX: 0,
-        offsetY: -18,
+        height: 14,
+        offsetX: 4,
+        offsetY: -11,
         useScale: true,
         anchor: 'bottomCenter',
       },
@@ -736,10 +743,10 @@ export const RESOURCE_DB = {
     },
     overlay: {
       width: 78,
-      height: 72,
+      height: 74,
       cropY: 0,
       offsetX: 0,
-      offsetY: 21,
+      offsetY: 25,
       useScale: true,
       anchor: 'topCenter',
     },
@@ -752,7 +759,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.TREE2C]: {
     id: RESOURCE_IDS.TREE2C,
-    name: 'Tree 2C',
+    name: 'Large Apple Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -763,10 +770,10 @@ export const RESOURCE_DB = {
       origin: { x: 0.5, y: 1 },
       body: {
         kind: 'rect',
-        width: 16,
-        height: 6,
+        width: 20,
+        height: 16,
         offsetX: 0,
-        offsetY: -18,
+        offsetY: -9,
         useScale: true,
         anchor: 'bottomCenter',
       },
@@ -791,7 +798,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.TREE3A]: {
     id: RESOURCE_IDS.TREE3A,
-    name: 'Tree 3A',
+    name: 'Small Pine Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -803,20 +810,20 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 6,
-        offsetX: 0,
-        offsetY: 2,
+        height: 9,
+        offsetX: 1,
+        offsetY: -11,
         useScale: true,
         anchor: 'bottomCenter',
       },
       transparent: { width: 62, height: 56, offsetX: 0, offsetY: 18, useScale: true },
     },
     overlay: {
-      width: 62,
-      height: 56,
+      width: 44,
+      height: 32,
       cropY: 0,
       offsetX: 0,
-      offsetY: 18,
+      offsetY: 7,
       useScale: true,
       anchor: 'topCenter',
     },
@@ -829,7 +836,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.TREE3B]: {
     id: RESOURCE_IDS.TREE3B,
-    name: 'Tree 3B',
+    name: 'Medium Pine Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -841,20 +848,20 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 6,
-        offsetX: 0,
-        offsetY: -9,
+        height: 12,
+        offsetX: 1,
+        offsetY: -10,
         useScale: true,
         anchor: 'bottomCenter',
       },
       transparent: { width: 84, height: 78, offsetX: 0, offsetY: 0, useScale: true },
     },
     overlay: {
-      width: 84,
-      height: 78,
+      width: 78,
+      height: 68,
       cropY: 0,
       offsetX: 0,
-      offsetY: 0,
+      offsetY: 22,
       useScale: true,
       anchor: 'topCenter',
     },
@@ -867,7 +874,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.TREE3C]: {
     id: RESOURCE_IDS.TREE3C,
-    name: 'Tree 3C',
+    name: 'Large Pine Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -878,20 +885,20 @@ export const RESOURCE_DB = {
       origin: { x: 0.5, y: 1 },
       body: {
         kind: 'rect',
-        width: 16,
-        height: 6,
-        offsetX: 0,
-        offsetY: -20,
+        width: 18,
+        height: 18,
+        offsetX: -1,
+        offsetY: -16,
         useScale: true,
         anchor: 'bottomCenter',
       },
       transparent: { width: 96, height: 92, offsetX: 0, offsetY: 29, useScale: true },
     },
     overlay: {
-      width: 96,
+      width: 100,
       height: 92,
       cropY: 0,
-      offsetX: 0,
+      offsetX: -1,
       offsetY: 29,
       useScale: true,
       anchor: 'topCenter',
@@ -906,7 +913,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.TREE10A]: {
     id: RESOURCE_IDS.TREE10A,
-    name: 'Tree 10A',
+    name: 'Small Dead Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -918,9 +925,9 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 6,
-        offsetX: 1,
-        offsetY: -18,
+        height: 10,
+        offsetX: 3,
+        offsetY: -11,
         useScale: true,
         anchor: 'bottomCenter',
       },
@@ -928,10 +935,10 @@ export const RESOURCE_DB = {
     },
     overlay: {
       width: 46,
-      height: 40,
+      height: 42,
       cropY: 0,
-      offsetX: 0,
-      offsetY: 7,
+      offsetX: 2,
+      offsetY: 10,
       useScale: true,
       anchor: 'topCenter',
     },
@@ -945,7 +952,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.TREE10B]: {
     id: RESOURCE_IDS.TREE10B,
-    name: 'Tree 10B',
+    name: 'Medium Dead Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -957,9 +964,9 @@ export const RESOURCE_DB = {
       body: {
         kind: 'rect',
         width: 16,
-        height: 6,
+        height: 12,
         offsetX: -1,
-        offsetY: -18,
+        offsetY: -12,
         useScale: true,
         anchor: 'bottomCenter',
       },
@@ -968,9 +975,9 @@ export const RESOURCE_DB = {
     overlay: {
       width: 78,
       height: 72,
-      cropY: 0,
+      cropY: 6,
       offsetX: 0,
-      offsetY: 0,
+      offsetY: 26,
       useScale: true,
       anchor: 'topCenter',
     },
@@ -984,7 +991,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.TREE10C]: {
     id: RESOURCE_IDS.TREE10C,
-    name: 'Tree 10C',
+    name: 'Large Dead Tree',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -995,10 +1002,10 @@ export const RESOURCE_DB = {
       origin: { x: 0.5, y: 1 },
       body: {
         kind: 'rect',
-        width: 16,
-        height: 6,
-        offsetX: 0,
-        offsetY: -18,
+        width: 18,
+        height: 12,
+        offsetX: -4,
+        offsetY: -12,
         useScale: true,
         anchor: 'bottomCenter',
       },
@@ -1009,7 +1016,7 @@ export const RESOURCE_DB = {
       height: 82,
       cropY: 0,
       offsetX: 0,
-      offsetY: 0,
+      offsetY: 28,
       useScale: true,
       anchor: 'topCenter',
     },
@@ -1023,7 +1030,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.LOG1]: {
     id: RESOURCE_IDS.LOG1,
-    name: 'Log 1',
+    name: 'Small Log',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1035,9 +1042,9 @@ export const RESOURCE_DB = {
         body: {
             kind: 'rect',
             width: 32,
-            height: 6,
+            height: 12,
             offsetX: 0,
-            offsetY: -24,
+            offsetY: -18,
             useScale: true,
             anchor: 'bottomCenter',
           },
@@ -1050,7 +1057,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.LOG2]: {
     id: RESOURCE_IDS.LOG2,
-    name: 'Log 2',
+    name: 'Big Log',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1061,10 +1068,10 @@ export const RESOURCE_DB = {
       origin: { x: 0.5, y: 1 },
       body: {
         kind: 'rect',
-          width: 52,
-          height: 8,
-          offsetX: -8,
-          offsetY: -24,
+          width: 60,
+          height: 19,
+          offsetX: -4,
+          offsetY: -15,
           useScale: true,
           anchor: 'bottomCenter',
         },
@@ -1077,7 +1084,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.STUMP1]: {
     id: RESOURCE_IDS.STUMP1,
-    name: 'Stump 1',
+    name: 'Small Tall Stump',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1088,8 +1095,8 @@ export const RESOURCE_DB = {
       origin: { x: 0.5, y: 1 },
       body: { kind: 'circle', radius: 6, offsetX: 2, offsetY: -8, useScale: true, anchor: 'bottomCenter' },
     },
-    // Ensure canopy overlay matches full sprite width to avoid top-row gaps
-    overlay: { width: 28, height: 16, anchor: 'topLeft' },
+    // Move horizontal split line higher to prevent player head clipping
+    overlay: { width: 28, height: 8, anchor: 'topLeft', cropY: 0 },
     collectible: false,
     blocking: true,
     threeD: true,
@@ -1098,7 +1105,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.STUMP2]: {
     id: RESOURCE_IDS.STUMP2,
-    name: 'Stump 2',
+    name: 'Medium Tall Stump',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1120,7 +1127,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.STUMP3]: {
     id: RESOURCE_IDS.STUMP3,
-    name: 'Stump 3',
+    name: 'Small Wide Stump',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1142,7 +1149,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.STUMP4]: {
     id: RESOURCE_IDS.STUMP4,
-    name: 'Stump 4',
+    name: 'Large Wide Stump',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1161,7 +1168,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.STUMP5]: {
     id: RESOURCE_IDS.STUMP5,
-    name: 'Stump 5',
+    name: 'Large Tall Stump',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1173,7 +1180,7 @@ export const RESOURCE_DB = {
       body: { kind: 'circle', radius: 9, offsetX: 0, offsetY: -6, useScale: true, anchor: 'bottomCenter' },
     },
     // Use full texture width to cover cropped top band
-    overlay: { width: 42, height: 16, anchor: 'topLeft' },
+    overlay: { width: 42, height: 16, anchor: 'topLeft', autoAlign: 'hitboxTop' },
     collectible: false,
     blocking: true,
     threeD: true,
@@ -1182,10 +1189,12 @@ export const RESOURCE_DB = {
     meta: { rarity: 'common' },
   },
 
-  // Bushes
+  // ======================================================================
+  //                              BUSHES
+  // ======================================================================
   [RESOURCE_IDS.BUSH1A]: {
     id: RESOURCE_IDS.BUSH1A,
-    name: 'Bush 1A',
+    name: 'Small Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1199,7 +1208,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BUSH1B]: {
     id: RESOURCE_IDS.BUSH1B,
-    name: 'Bush 1B',
+    name: 'Medium Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1213,7 +1222,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BUSH1C]: {
     id: RESOURCE_IDS.BUSH1C,
-    name: 'Bush 1C',
+    name: 'Large Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1228,7 +1237,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.BUSH2A]: {
     id: RESOURCE_IDS.BUSH2A,
-    name: 'Bush 2A',
+    name: 'Small Shrub',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1242,7 +1251,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BUSH2B]: {
     id: RESOURCE_IDS.BUSH2B,
-    name: 'Bush 2B',
+    name: 'Medium Shrub',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1256,7 +1265,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BUSH2C]: {
     id: RESOURCE_IDS.BUSH2C,
-    name: 'Bush 2C',
+    name: 'Large Shrub',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1270,7 +1279,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BUSH3A]: {
     id: RESOURCE_IDS.BUSH3A,
-    name: 'Bush 3A',
+    name: 'Small Dense Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1284,7 +1293,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BUSH3B]: {
     id: RESOURCE_IDS.BUSH3B,
-    name: 'Bush 3B',
+    name: 'Medium Dense Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1298,7 +1307,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BUSH3C]: {
     id: RESOURCE_IDS.BUSH3C,
-    name: 'Bush 3C',
+    name: 'Large Dense Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1313,7 +1322,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.BUSH4A]: {
     id: RESOURCE_IDS.BUSH4A,
-    name: 'Bush 4A',
+    name: 'Small Fern',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1327,7 +1336,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BUSH4B]: {
     id: RESOURCE_IDS.BUSH4B,
-    name: 'Bush 4B',
+    name: 'Medium Fern',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1341,7 +1350,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BUSH4C]: {
     id: RESOURCE_IDS.BUSH4C,
-    name: 'Bush 4C',
+    name: 'Large Fern',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1356,7 +1365,7 @@ export const RESOURCE_DB = {
 
   [RESOURCE_IDS.DEAD_BUSH1]: {
     id: RESOURCE_IDS.DEAD_BUSH1,
-    name: 'Dead Bush 1',
+    name: 'Small Dead Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1370,7 +1379,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.DEAD_BUSH2]: {
     id: RESOURCE_IDS.DEAD_BUSH2,
-    name: 'Dead Bush 2',
+    name: 'Medium Dead Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1382,39 +1391,11 @@ export const RESOURCE_DB = {
     tags: ['resource', 'bush', 'dead'],
     meta: { rarity: 'common' },
   },
-  [RESOURCE_IDS.DEAD_BUSH3]: {
-    id: RESOURCE_IDS.DEAD_BUSH3,
-    name: 'Dead Bush 3',
-    type: ITEM_TYPES.RESOURCE,
-    stackable: false,
-    maxStack: 1,
-    icon: { textureKey: 'dead_bush3', scale: 1.0, ox: 0, oy: 0 },
-    world: { textureKey: 'dead_bush3', scale: 1.0, origin: { x: 0.5, y: 1 } },
-    collectible: false,
-    blocking: false,
-    depth: 1,
-    tags: ['resource', 'bush', 'dead'],
-    meta: { rarity: 'common' },
-  },
-  [RESOURCE_IDS.DEAD_BUSH4]: {
-    id: RESOURCE_IDS.DEAD_BUSH4,
-    name: 'Dead Bush 4',
-    type: ITEM_TYPES.RESOURCE,
-    stackable: false,
-    maxStack: 1,
-    icon: { textureKey: 'dead_bush4', scale: 1.0, ox: 0, oy: 0 },
-    world: { textureKey: 'dead_bush4', scale: 1.0, origin: { x: 0.5, y: 1 } },
-    collectible: false,
-    blocking: false,
-    depth: 1,
-    tags: ['resource', 'bush', 'dead'],
-    meta: { rarity: 'common' },
-  },
 
   // Berry bushes
   [RESOURCE_IDS.BERRY_BUSHA1]: {
     id: RESOURCE_IDS.BERRY_BUSHA1,
-    name: 'Berry Bush A1',
+    name: 'Small Yellow Berry Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1428,7 +1409,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BERRY_BUSHA2]: {
     id: RESOURCE_IDS.BERRY_BUSHA2,
-    name: 'Berry Bush A2',
+    name: 'Medium Yellow Berry Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1442,7 +1423,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BERRY_BUSHA3]: {
     id: RESOURCE_IDS.BERRY_BUSHA3,
-    name: 'Berry Bush A3',
+    name: 'Large Yellow Berry Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1456,7 +1437,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BERRY_BUSHB1]: {
     id: RESOURCE_IDS.BERRY_BUSHB1,
-    name: 'Berry Bush B1',
+    name: 'Small Blue Berry Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1470,7 +1451,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BERRY_BUSHB2]: {
     id: RESOURCE_IDS.BERRY_BUSHB2,
-    name: 'Berry Bush B2',
+    name: 'Medium Blue Berry Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1484,7 +1465,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.BERRY_BUSHB3]: {
     id: RESOURCE_IDS.BERRY_BUSHB3,
-    name: 'Berry Bush B3',
+    name: 'Large Blue Berry Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1500,7 +1481,7 @@ export const RESOURCE_DB = {
   // Cotton bushes
   [RESOURCE_IDS.COTTON_BUSH1]: {
     id: RESOURCE_IDS.COTTON_BUSH1,
-    name: 'Cotton Bush 1',
+    name: 'Small Cotton Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1514,7 +1495,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.COTTON_BUSH2]: {
     id: RESOURCE_IDS.COTTON_BUSH2,
-    name: 'Cotton Bush 2',
+    name: 'Medium Cotton Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
@@ -1528,7 +1509,7 @@ export const RESOURCE_DB = {
   },
   [RESOURCE_IDS.COTTON_BUSH3]: {
     id: RESOURCE_IDS.COTTON_BUSH3,
-    name: 'Cotton Bush 3',
+    name: 'Large Cotton Bush',
     type: ITEM_TYPES.RESOURCE,
     stackable: false,
     maxStack: 1,
