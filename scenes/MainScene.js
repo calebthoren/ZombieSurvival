@@ -10,6 +10,7 @@ import createResourceSystem from '../systems/resourceSystem.js';
 import createInputSystem from '../systems/inputSystem.js';
 import ChunkManager from '../systems/world_gen/chunks/ChunkManager.js';
 import { clear } from '../systems/world_gen/chunks/chunkStore.js';
+import { __clearTexturePool } from '../systems/world_gen/chunks/Chunk.js';
 import createZombiePool from '../systems/pools/zombiePool.js';
 import createResourcePool from '../systems/pools/resourcePool.js';
 import { setBiomeSeed } from '../systems/world_gen/biomes/biomeMap.js';
@@ -71,7 +72,7 @@ export default class MainScene extends Phaser.Scene {
                 flickerAmplitude: 8,
                 flickerSpeed: 2.25,
                 upgradeMultiplier: 1,
-                maskScale: 0.8,
+                maskScale: 0.25,
             },
         };
         this._playerLightNightRadius = this.lightSettings.player.nightRadius;
@@ -94,6 +95,9 @@ export default class MainScene extends Phaser.Scene {
         this._playerLightFlickerPhase = Math.random() * Phaser.Math.PI2;
         this._playerLightFlickerPhaseAlt = Math.random() * Phaser.Math.PI2;
 
+        // Player light level (multiplier for glow size)
+        this._playerLightLevel = 1;
+
         // Lighting system
         this.lighting = createLightingSystem(this);
         this.lighting.initLighting();
@@ -107,6 +111,7 @@ export default class MainScene extends Phaser.Scene {
         );
         // zombies
         this.load.image('zombie', 'assets/enemies/zombie.png');
+        this.load.image('flamed_walker', 'assets/enemies/flamed_walker.png');
         // weapons & ammo
         this.load.image('bullet', 'assets/weapons/bullet.png');
         this.load.image('slingshot', 'assets/weapons/slingshot.png');
@@ -146,6 +151,8 @@ export default class MainScene extends Phaser.Scene {
 
         // Reset any previous chunk metadata and UI state
         clear();
+        // Drop any pooled RenderTextures from prior Scene instances to avoid cross-Scene reuse
+        try { __clearTexturePool(); } catch {}
         setBiomeSeed(WORLD_GEN.seed);
         // Ensure fresh UI on respawn
         this.scene.stop('UIScene');
@@ -163,6 +170,8 @@ export default class MainScene extends Phaser.Scene {
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
             this.events.off('chunk:load');
             this.events.off('chunk:unload');
+            // Ensure any pooled chunk textures are cleared when this Scene shuts down
+            try { __clearTexturePool(); } catch {}
         });
         this.inputSystem = createInputSystem(this);
 
@@ -184,6 +193,7 @@ export default class MainScene extends Phaser.Scene {
                 playerLightSettings.baseRadius ?? playerLightSettings.nightRadius,
             intensity: 0,
             maskScale: playerLightSettings.maskScale,
+            lightLevel: this._playerLightLevel,
         });
         if (this.playerLight) {
             this.playerLight.active = false;
@@ -344,6 +354,8 @@ export default class MainScene extends Phaser.Scene {
             };
             this.events.once(Phaser.Scenes.Events.SHUTDOWN, _teardown);
             this.events.once(Phaser.Scenes.Events.DESTROY, _teardown);
+            // Also clear pooled chunk textures on full destroy
+            this.events.once(Phaser.Scenes.Events.DESTROY, () => { try { __clearTexturePool(); } catch {} });
         }
 
         // Chunk-based resources: loaded per nearby chunk via ChunkManager
@@ -426,52 +438,6 @@ export default class MainScene extends Phaser.Scene {
         const h = this.sys.game.config.height;
         this.lighting.createOverlayIfNeeded();
 
-        // Simple radial BitmapMask light (ported from main) — overrides lightingSystem when active
-        try {
-            const texKey = 'light_radial_mask_v17';
-            const size = 192; // square texture (px)
-            if (!this.textures.exists(texKey)) {
-                const c = this.textures.createCanvas(texKey, size, size);
-                const ctx = c.getContext();
-                const cx = size / 2;
-                const cy = size / 2;
-                const r = size / 2;
-                const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-                // center fully white (alpha 1), edge transparent (alpha 0)
-                grad.addColorStop(0.0, 'rgba(255,255,255,1)');
-                grad.addColorStop(0.7, 'rgba(255,255,255,0.5)');
-                grad.addColorStop(1.0, 'rgba(255,255,255,0)');
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, size, size);
-                c.refresh();
-            }
-            this._lightMaskSprite = this.add.image(0, 0, texKey)
-                .setOrigin(0.5, 0.5)
-                .setScrollFactor(0)
-                .setDepth(10001)
-                .setVisible(false);
-            this._lightMaskBM = new Phaser.Display.Masks.BitmapMask(this, this._lightMaskSprite);
-            this._lightMaskBM.invertAlpha = true; // punch a hole in darkness
-
-            // Tunables
-            this._lightTexSize = 192;
-            this._lightBaseRadiusMult = 1.1;  // matches main (twice the earlier 0.55)
-            this._lightFlickerPct = 0.06;
-            this._lightFlickerHz = 6.3;
-            this._lightFlickerHz2 = 9.7;
-
-            // Cleanup on shutdown/destroy
-            const onTearDown = () => {
-                try { if (this.nightOverlay && this.nightOverlay.mask === this._lightMaskBM) this.nightOverlay.clearMask(true); } catch {}
-                try { this._lightMaskSprite?.destroy(); } catch {}
-                this._lightMaskSprite = null;
-                this._lightMaskBM = null;
-            };
-            this.events.once(Phaser.Scenes.Events.SHUTDOWN, onTearDown);
-            this.events.once(Phaser.Scenes.Events.DESTROY, onTearDown);
-        } catch (e) {
-            console?.warn?.('V1.7 simple light mask init failed', e);
-        }
 
         // --- DevTools integration ---
         // Apply current hitbox cheat right away (responds to future toggles too)
@@ -580,6 +546,8 @@ export default class MainScene extends Phaser.Scene {
         item.on('pointerdown', (pointer) => {
             if (!pointer.rightButtonDown()) return;
             if (this.isCharging) return;
+            // If the player starts holding RMB with this same click, enable auto-pickup immediately
+            try { this._scheduleAutoPickup(); } catch {}
             this._pickupItem(item);
         });
 
@@ -615,7 +583,7 @@ export default class MainScene extends Phaser.Scene {
 
     _scheduleAutoPickup() {
         this._cancelAutoPickup();
-        this._autoPickupTimer = this.time.delayedCall(500, () => {
+        this._autoPickupTimer = this.time.delayedCall(1000, () => {
             if (this.isCharging || !this.input.activePointer.rightButtonDown())
                 return;
             this._autoPickupActive = true;
@@ -645,17 +613,14 @@ export default class MainScene extends Phaser.Scene {
             this._cancelAutoPickup();
             return;
         }
-        const ptr = this.input.activePointer;
-        const px = ptr.worldX;
-        const py = ptr.worldY;
         const pickupRange = 40;
         const pickupRangeSq = pickupRange * pickupRange;
+
+        // Scan dropped items within range of the player (ignores pointer position)
         const items = this.droppedItems.getChildren();
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
             if (!item.active) continue;
-            if (!Phaser.Geom.Rectangle.Contains(item.getBounds(), px, py))
-                continue;
             const dx = this.player.x - item.x;
             const dy = this.player.y - item.y;
             const d2 = dx * dx + dy * dy;
@@ -663,6 +628,7 @@ export default class MainScene extends Phaser.Scene {
             if (this._pickupItem(item)) break;
         }
 
+        // Scan simple resources within range of the player (ignores pointer position)
         const scanGroups = [this.resources, this.resourcesDecor];
         for (const grp of scanGroups) {
             if (!grp || !grp.getChildren) continue;
@@ -670,8 +636,6 @@ export default class MainScene extends Phaser.Scene {
             for (let i = 0; i < resources.length; i++) {
                 const res = resources[i];
                 if (!res.active) continue;
-                if (!Phaser.Geom.Rectangle.Contains(res.getBounds(), px, py))
-                    continue;
                 const dx = this.player.x - res.x;
                 const dy = this.player.y - res.y;
                 const d2 = dx * dx + dy * dy;
@@ -831,48 +795,19 @@ export default class MainScene extends Phaser.Scene {
         this.updateNightOverlay();
         this.lighting.update(delta);
 
-        // Override lightingSystem mask with simple BitmapMask when darkness is visible
-        try {
-            const overlay = this.nightOverlay;
-            const hasDarkness = !!(overlay && (overlay.alpha || 0) > 0.01);
-            if (!hasDarkness) {
-                if (overlay && overlay.mask === this._lightMaskBM) overlay.clearMask(true);
-            } else if (overlay && this._lightMaskBM) {
-                // Position mask at player (screen space)
-                const cam = this.cameras?.main;
-                const p = this.player;
-                if (cam && p && this._lightMaskSprite) {
-                    const sx = p.x - cam.scrollX;
-                    const sy = p.y - cam.scrollY;
-                    this._lightMaskSprite.setPosition(sx, sy);
-
-                    // Base radius from player collider/display
-                    let baseDiam = 24;
-                    const b = p.body;
-                    if (b && b.width && b.height) baseDiam = Math.max(b.width, b.height);
-                    else baseDiam = Math.max(p.displayWidth || 24, p.displayHeight || 24);
-
-                    const baseRadius = Math.max(8, baseDiam * (this._lightBaseRadiusMult || 1.1));
-
-                    // Edge flicker
-                    const tsec = (this.time?.now || 0) * 0.001;
-                    const f1 = Math.sin(2 * Math.PI * (this._lightFlickerHz || 6.3) * tsec);
-                    const f2 = Math.sin(2 * Math.PI * (this._lightFlickerHz2 || 9.7) * tsec + 1.234);
-                    const flicker = 1 + (this._lightFlickerPct || 0.06) * (0.5 * f1 + 0.5 * f2);
-
-                    const diameter = baseRadius * 2 * flicker;
-                    const texSize = this._lightTexSize || 192;
-                    const scale = diameter / texSize;
-                    this._lightMaskSprite.setScale(scale);
-
-                    // Force overlay to use our mask (after lightingSystem)
-                    overlay.setMask(this._lightMaskBM);
-                }
-            }
-        } catch {}
+        // NOTE: Do not override overlay masks here. The lighting system now handles
+        // all hole-in-darkness rendering (player + enemies) via its geometry mask.
+        // This avoids conflicts that hid non-player lights like Flamed Walker.
+        // Intentionally left empty.
 
         const w = WORLD_GEN.world.width;
         const h = WORLD_GEN.world.height;
+        
+        // Safety check: ensure player exists before world wrapping
+        if (!this.player) {
+            return;
+        }
+        
         let x = this.player.x;
         let y = this.player.y;
         let wrapped = false;
@@ -918,6 +853,12 @@ export default class MainScene extends Phaser.Scene {
         // Movement + sprinting
         const walkSpeed = 75;
         const sprintMult = 1.5;
+        
+        // Safety check: ensure player and player body exist
+        if (!this.player || !this.player.body) {
+            return;
+        }
+        
         const p = this.player.body.velocity;
         p.set(0);
 
@@ -936,10 +877,12 @@ export default class MainScene extends Phaser.Scene {
             (this._isSprinting ? sprintMult : 1) *
             (this.player._speedMult || 1);
 
-        if (up) p.y = -speed;
-        else if (down) p.y = speed;
-        if (left) p.x = -speed;
-        else if (right) p.x = speed;
+        // Calculate axis values - opposite keys cancel each other out
+        const verticalAxis = (up ? -1 : 0) + (down ? 1 : 0); // W/↑ = -1, S/↓ = +1
+        const horizontalAxis = (left ? -1 : 0) + (right ? 1 : 0); // A/← = -1, D/→ = +1
+
+        p.y = verticalAxis * speed;
+        p.x = horizontalAxis * speed;
         if (p.x !== 0 && p.y !== 0) {
             p.x *= Math.SQRT1_2;
             p.y *= Math.SQRT1_2;
@@ -1253,14 +1196,18 @@ export default class MainScene extends Phaser.Scene {
     bumpPlayerLightUpgradeMultiplier(multiplier = 1) { return this.lighting.bumpPlayerLightUpgradeMultiplier(multiplier); }
     resetPlayerLightUpgradeMultiplier() { return this.lighting.resetPlayerLightUpgradeMultiplier(); }
 
+    getPlayerLightLevel() { return this.lighting.getPlayerLightLevel(); }
+    setPlayerLightLevel(level = 1) { return this.lighting.setPlayerLightLevel(level); }
+    bumpPlayerLightLevel(mult = 1) { return this.lighting.bumpPlayerLightLevel(mult); }
+
     applyLightPipeline(gameObject, options = null) { return this.lighting.applyLightPipeline(gameObject, options); }
     attachLightToObject(target, cfg = {}) { return this.lighting.attachLightToObject(target, cfg); }
     releaseWorldLight(light) { return this.lighting.releaseWorldLight(light); }
 
     _updateAttachedLights() { return this.lighting._updateAttachedLights(); }
     _updatePlayerLightGlow(delta = 0) { return this.lighting._updatePlayerLightGlow(delta); }
-    _ensureNightOverlayMask() { return this.lighting._ensureNightOverlayMask(); }
-    _drawNightOverlayMask(lights) { return this.lighting._drawNightOverlayMask(lights); }
+    _ensureNightOverlayMask() { return this.lighting._ensureDarknessRT(); }
+    _drawNightOverlayMask(lights) { return this.lighting._drawDarknessComposite(lights); }
     _updateNightOverlayMask() { return this.lighting._updateNightOverlayMask(); }
     _teardownNightOverlayMask() { return this.lighting._teardownNightOverlayMask(); }
     _teardownLights() { return this.lighting._teardownLights(); }

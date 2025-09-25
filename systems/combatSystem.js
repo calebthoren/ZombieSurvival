@@ -1,7 +1,7 @@
 // systems/combatSystem.js
 // Encapsulates combat logic to keep MainScene focused on orchestration.
 import { ITEM_DB } from '../data/itemDatabase.js';
-import ZOMBIES from '../data/zombieDatabase.js';
+import ZOMBIES, { ENEMY_METRICS } from '../data/zombieDatabase.js';
 import DevTools from './DevTools.js';
 
 export default function createCombatSystem(scene) {
@@ -152,15 +152,18 @@ export default function createCombatSystem(scene) {
             pointer.worldX,
             pointer.worldY,
         );
+        const spawnOffset = 12; // push spawn point forward to avoid immediate self/terrain collision
+        const sx = scene.player.x + Math.cos(angle) * spawnOffset;
+        const sy = scene.player.y + Math.sin(angle) * spawnOffset;
         const bullet =
             scene.bullets.get(
-                scene.player.x,
-                scene.player.y,
+                sx,
+                sy,
                 textureKey,
             ) ||
             scene.physics.add.image(
-                scene.player.x,
-                scene.player.y,
+                sx,
+                sy,
                 textureKey,
             );
         if (!bullet) return;
@@ -176,9 +179,11 @@ export default function createCombatSystem(scene) {
         const v = scene.physics.velocityFromRotation(angle, speed * scale);
         bullet.setVelocity(v.x, v.y);
         bullet.setRotation(angle);
+        // Lifetime scales by 1/scale so that, combined with timer timeScale (1/scale),
+        // real-world projectile travel remains consistent across speeds.
         const lifetimeMs = Math.max(
             1,
-            Math.floor((travel / Math.max(1, speed)) * 1000 / scale),
+            Math.floor((travel / Math.max(1, speed)) * 1000 / Math.max(0.0001, scale)),
         );
         scene.time.delayedCall(lifetimeMs, () => {
             if (bullet.active && bullet.destroy) bullet.destroy();
@@ -357,6 +362,8 @@ export default function createCombatSystem(scene) {
             lowStamina && st ? (st.cooldownMultiplier ?? 6) : 1;
         const scale = DevTools.cheats.timeScale || 1;
         const applied = scale <= 0 ? 0 : 1 / scale;
+        // Shorten swing duration at higher speeds (match gameplay pace)
+        swingDurationMs = Math.max(1, Math.floor(swingDurationMs * applied));
         scene._nextSwingCooldownMs = Math.floor(
             baseCooldownMs * cooldownMult * applied,
         );
@@ -478,7 +485,7 @@ export default function createCombatSystem(scene) {
     // ----- Zombie Spawning -----
     function spawnZombie(typeKey = 'walker', pos = null) {
         const def = ZOMBIES[typeKey] || ZOMBIES.walker || {};
-        const tex = def.texture || 'zombie';
+        const tex = def.texture || def.textureKey || 'zombie';
         let x, y;
         if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
             x = pos.x;
@@ -511,8 +518,28 @@ export default function createCombatSystem(scene) {
         if (!zombie.body) scene.physics.add.existing(zombie);
         zombie.body.setAllowGravity(false);
         zombie.setOrigin(0.5, 0.5);
-        zombie.setScale(def.scale ?? 0.1);
+        
+        // Compute final on-screen scale. For flamed_walker, normalize to match Walker's
+        let finalScale = (def.scale ?? ENEMY_METRICS.WALKER.scale);
+        try {
+            if (typeKey === 'flamed_walker') {
+                const walkerKey = (ZOMBIES.walker?.textureKey || ZOMBIES.walker?.texture || 'zombie');
+                const walkerTex = scene.textures && scene.textures.get(walkerKey);
+                const flamedTex = scene.textures && scene.textures.get(tex);
+                const ww = walkerTex?.getSourceImage?.().width || walkerTex?.frames?.__BASE?.width || 0;
+                const fw = flamedTex?.getSourceImage?.().width || flamedTex?.frames?.__BASE?.width || 0;
+                if (ww > 0 && fw > 0) {
+                    const walkerScale = (ZOMBIES.walker?.scale ?? ENEMY_METRICS.WALKER.scale);
+                    finalScale = walkerScale * (ww / fw);
+                }
+            }
+        } catch {}
+        zombie.setScale(finalScale);
         zombie.setDepth(def.depth ?? 2);
+        
+        // Ensure body matches the visual after scaling so hitbox alignment is preserved
+        _applyStandardEnemyBody(zombie, def);
+        
         zombie._speedMult = 1;
         zombie._inBush = false;
         zombie.lastHitTime = 0;
@@ -536,7 +563,65 @@ export default function createCombatSystem(scene) {
         zombie.hpBarW = def.hpBarW ?? zombie.hpBarW;
         zombie.hpBarH = def.hpBarH ?? zombie.hpBarH;
         zombie.hpYOffset = def.hpYOffset ?? zombie.hpYOffset;
+        
+        // Attach light if configured
+        if (def.light && typeof scene.attachLightToObject === 'function') {
+            const cfg = Object.assign({}, def.light);
+            const lvl = Number.isFinite(def.light_level) ? def.light_level : undefined;
+            if (lvl !== undefined) cfg.lightLevel = lvl;
+
+            // If this is a Flamed Walker, mirror the player's glow size and light level.
+            if (typeKey === 'flamed_walker') {
+                const pset = scene.lightSettings?.player || {};
+                // Base radius mirrors player's base (after upgrades)
+                let baseR = Number.isFinite(pset.baseRadius) ? pset.baseRadius : pset.nightRadius;
+                if (!Number.isFinite(baseR)) baseR = 48;
+                const upgrade = typeof scene.getPlayerLightUpgradeMultiplier === 'function'
+                    ? scene.getPlayerLightUpgradeMultiplier()
+                    : (Number.isFinite(scene._playerLightUpgradeMultiplier) ? scene._playerLightUpgradeMultiplier : 1);
+                cfg.radius = baseR * (Number.isFinite(upgrade) ? Math.max(0, upgrade) : 1);
+
+                // Mirror player's maskScale
+                const pScale = Number.isFinite(pset.maskScale) ? pset.maskScale : 1;
+                cfg.maskScale = pScale;
+
+                // Mirror player's light level (multiplies effective size)
+                const pLevel = typeof scene.getPlayerLightLevel === 'function'
+                    ? scene.getPlayerLightLevel()
+                    : (Number.isFinite(scene._playerLightLevel) ? scene._playerLightLevel : 1);
+                cfg.lightLevel = pLevel;
+
+                // Mirror player's flicker behavior for subtle consistency
+                if (Number.isFinite(pset.flickerAmplitude)) cfg.flickerAmplitude = pset.flickerAmplitude;
+                if (Number.isFinite(pset.flickerSpeed)) cfg.flickerSpeed = pset.flickerSpeed;
+            }
+
+            scene.attachLightToObject(zombie, cfg);
+        }
+        
         return zombie;
+    }
+    
+    // Applies standard enemy physics body to ensure consistent hitboxes
+    function _applyStandardEnemyBody(zombie, def) {
+        if (!zombie.body) return;
+        
+        // For now, let Phaser auto-calculate body size from scaled sprite
+        // This ensures all enemies with the same scale have identical hitboxes
+        
+        // If specific body sizing is needed in future:
+        // const metrics = ENEMY_METRICS.WALKER;
+        // if (metrics.bodyWidth && metrics.bodyHeight) {
+        //     zombie.body.setSize(metrics.bodyWidth, metrics.bodyHeight);
+        // }
+        // if (metrics.bodyOffsetX || metrics.bodyOffsetY) {
+        //     zombie.body.setOffset(metrics.bodyOffsetX, metrics.bodyOffsetY);
+        // }
+        
+        // Ensure body is refreshed after any scale changes
+        if (typeof zombie.body.refreshBody === 'function') {
+            zombie.body.refreshBody();
+        }
     }
 
     // ----- Zombie HP Bars -----
@@ -602,7 +687,9 @@ export default function createCombatSystem(scene) {
         const dx = zombie.x - srcX,
             dy = zombie.y - srcY;
         const len = Math.max(1e-3, Math.hypot(dx, dy));
-        const impulse = effKb * 18;
+        const scale = DevTools?.cheats?.timeScale || 1;
+        const applied = scale <= 0 ? 0 : 1 / scale;
+        const impulse = effKb * 18 * applied;
         const vx = (dx / len) * impulse;
         const vy = (dy / len) * impulse;
         zombie.setVelocity(vx, vy);

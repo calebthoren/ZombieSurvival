@@ -24,8 +24,13 @@ export default function createLightingSystem(scene) {
     for (let i = 0; i < scene._lightBindings.length; i++) {
       const binding = scene._lightBindings[i];
       if (!binding) continue;
-      if (!binding.active) continue;
+      // Check if light should be drawable based on radius, intensity, and target validity
       if (!Number.isFinite(binding.radius) || binding.radius <= 0) continue;
+      const intensity = Number.isFinite(binding.intensity) ? binding.intensity : 0;
+      if (intensity <= 0.001) continue;
+      // Check if target is still valid
+      const target = binding.target;
+      if (target && (target.active === false || target.scene !== scene)) continue;
       lights.push(binding);
     }
     return lights;
@@ -98,169 +103,124 @@ export default function createLightingSystem(scene) {
     return definition;
   }
 
-  function _ensureNightOverlayMask() {
-    const overlay = scene.nightOverlay;
-    if (!overlay) return null;
+  // Ensure a full-screen RenderTexture we draw darkness directly into (no masks)
+  function _ensureDarknessRT() {
+    const w = scene.sys?.game?.config?.width ?? scene.scale?.width ?? 800;
+    const h = scene.sys?.game?.config?.height ?? scene.scale?.height ?? 600;
 
+    // Display RT (visible) that holds the composed darkness with punched holes
+    let rt = scene.nightOverlayRT;
+    if (!rt || !rt.scene || rt.width !== w || rt.height !== h) {
+      try { scene.nightOverlayRT?.destroy?.(); } catch {}
+      rt = scene.add.renderTexture(0, 0, w, h).setOrigin(0, 0).setScrollFactor(0).setDepth(10000);
+      scene.nightOverlayRT = rt;
+    }
+
+    // Vector graphics used to draw circles that we erase with
     let gfx = scene.nightOverlayMaskGraphics;
     if (!gfx || !gfx.scene) {
       try { gfx?.destroy?.(); } catch {}
       gfx = scene.make.graphics({ x: 0, y: 0, add: false });
       scene.nightOverlayMaskGraphics = gfx;
-
-      const mask = gfx.createGeometryMask();
-      if (typeof mask.setInvertAlpha === 'function') mask.setInvertAlpha(true);
-      else mask.inverse = true;
-      if (typeof mask.setPosition === 'function') mask.setPosition(0, 0);
-      scene.nightOverlayMask = mask;
-      scene._nightOverlayMaskEnabled = false;
-      return mask;
     }
-    return scene.nightOverlayMask;
+
+    return rt;
   }
 
-  function _drawNightOverlayMask(lights) {
+  // Compose darkness directly into RT: fill black with overlay alpha, then erase circles for lights
+  function _drawDarknessComposite(lights) {
     const Phaser = globalThis.Phaser || {};
+    const rt = _ensureDarknessRT();
     const gfx = scene.nightOverlayMaskGraphics;
-    if (!gfx || !lights) return;
+    if (!rt || !gfx) return;
 
-    gfx.clear();
+    const w = rt.width;
+    const h = rt.height;
+
+    // Clear RT and paint the darkness based on overlay alpha
+    rt.clear();
+    const overlayAlpha = Number.isFinite(scene.nightOverlay?.alpha) ? (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(scene.nightOverlay.alpha, 0, 1) : Math.min(Math.max(scene.nightOverlay.alpha, 0), 1)) : 0;
+    if (overlayAlpha <= 0) return; // no darkness to draw
+    rt.fill(0x000000, overlayAlpha, 0, 0, w, h);
+
+    // If no lights, we're done (solid darkness)
     if (!Array.isArray(lights) || lights.length === 0) return;
 
-    if (gfx.x !== 0) gfx.x = 0;
-    if (gfx.y !== 0) gfx.y = 0;
-
+    // The RT is screen-space
     const cam = scene.cameras?.main;
     const scrollX = (cam?.scrollX || 0);
     const scrollY = (cam?.scrollY || 0);
 
+    // Prepare Graphics once
+    gfx.clear();
+
     for (let i = 0; i < lights.length; i++) {
-      const binding = lights[i];
-      if (!binding) continue;
+      const b = lights[i];
+      if (!b) continue;
 
-      const rawRadius = Number.isFinite(binding.radius) ? binding.radius : 0;
-      if (rawRadius <= 0) continue;
+      const rawR = Number.isFinite(b.radius) ? b.radius : 0;
+      if (rawR <= 0) continue;
 
-      const maskScale = Number.isFinite(binding.maskScale) ? binding.maskScale : 1;
-      const scaledRadius = rawRadius * maskScale;
-      if (!Number.isFinite(scaledRadius) || scaledRadius <= 0) continue;
+      const scale = Number.isFinite(b.maskScale) ? b.maskScale : 1;
+      const intensity = Number.isFinite(b.intensity) ? b.intensity : 1;
+      const lvl = Number.isFinite(b.lightLevel) ? b.lightLevel : 1;
+      const effectiveR = rawR * scale * (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1)) * Math.max(0, lvl);
+      if (!(effectiveR > 0)) continue;
 
-      const intensity = Number.isFinite(binding.intensity) ? binding.intensity : 1;
-      if (intensity <= 0) continue;
+      // World -> screen coords
+      const worldX = Number.isFinite(b.x) ? b.x : ((b.target?.x || 0) + (b.offsetX || 0));
+      const worldY = Number.isFinite(b.y) ? b.y : ((b.target?.y || 0) + (b.offsetY || 0));
+      const sx = worldX - scrollX;
+      const sy = worldY - scrollY;
+      if (!Number.isFinite(sx) || !Number.isFinite(sy)) continue;
 
-      const x = Number.isFinite(binding.x)
-        ? binding.x
-        : (binding.target?.x || 0) + (binding.offsetX || 0);
-      const y = Number.isFinite(binding.y)
-        ? binding.y
-        : (binding.target?.y || 0) + (binding.offsetY || 0);
+      // Soft erase: draw three circles with increasing strength and decreasing radius
+      const coreR = effectiveR * 0.6;
+      const midR  = effectiveR * 0.85;
+      const edgeR = effectiveR;
 
-      const screenX = x - scrollX;
-      const screenY = y - scrollY;
-      if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) continue;
+      // Edge (lightest erase)
+      gfx.fillStyle(0xffffff, 0.3);
+      gfx.fillCircle(sx, sy, edgeR);
+      rt.erase(gfx, 0, 0);
+      gfx.clear();
 
-      const finalRadius = scaledRadius * (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1));
-      if (finalRadius <= 0) continue;
+      // Mid
+      gfx.fillStyle(0xffffff, 0.6);
+      gfx.fillCircle(sx, sy, midR);
+      rt.erase(gfx, 0, 0);
+      gfx.clear();
 
-      const gradient = _getLightMaskGradientDefinition(binding);
-      if (!gradient) continue;
-
-      const gradientRadius = Number.isFinite(gradient.baseRadius) ? gradient.baseRadius : 0;
-      const layers = gradient.layers;
-      if (!Array.isArray(layers) || layers.length === 0) continue;
-
-      const scale = gradientRadius > 0 ? finalRadius / gradientRadius : 1;
-      const baseTileSize = Number.isFinite(gradient.tileSize) ? gradient.tileSize : 0;
-      const tileSize = baseTileSize > 0 ? baseTileSize * scale : 0;
-      const halfTile = tileSize * 0.5;
-
-      for (let layerIndex = layers.length - 1; layerIndex >= 0; layerIndex--) {
-        const layer = layers[layerIndex];
-        if (!layer) continue;
-        const layerAlpha = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(layer.alpha || 0, 0, 1) : Math.min(Math.max(layer.alpha || 0, 0), 1));
-        if (!(layerAlpha > 0)) continue;
-
-        const radiusNormalized = Number.isFinite(layer.radiusNormalized) ? layer.radiusNormalized : null;
-        if (radiusNormalized !== null) {
-          const ringRadius = finalRadius * radiusNormalized;
-          if (!(ringRadius > 0)) continue;
-          gfx.fillStyle(0xffffff, layerAlpha);
-          gfx.fillCircle(screenX, screenY, ringRadius);
-          continue;
-        }
-
-        const offsets = layer.offsets;
-        if (!Array.isArray(offsets) || offsets.length === 0) continue;
-        if (!(tileSize > 0)) continue;
-
-        gfx.fillStyle(0xffffff, layerAlpha);
-        for (let j = 0; j < offsets.length; j += 2) {
-          const offsetX = offsets[j] * tileSize;
-          const offsetY = offsets[j + 1] * tileSize;
-          const rectX = screenX + offsetX - halfTile;
-          const rectY = screenY + offsetY - halfTile;
-          gfx.fillRect(rectX, rectY, tileSize, tileSize);
-        }
-      }
+      // Core (strongest erase)
+      gfx.fillStyle(0xffffff, 1.0);
+      gfx.fillCircle(sx, sy, coreR);
+      rt.erase(gfx, 0, 0);
+      gfx.clear();
     }
+  }
+
+  // Back-compat helpers expected by tests
+  function _ensureNightOverlayMask() {
+    return _ensureDarknessRT();
+  }
+
+  function _drawNightOverlayMask() {
+    const lights = _collectActiveMaskLights();
+    _drawDarknessComposite(lights);
   }
 
   function _updateNightOverlayMask() {
-    const Phaser = globalThis.Phaser || {};
     const overlay = scene.nightOverlay;
-    if (!overlay || typeof overlay.setMask !== 'function') return;
+    if (!overlay) return;
 
     const lights = _collectActiveMaskLights();
-
-    let hasDrawableLight = false;
-    for (let i = 0; i < lights.length; i++) {
-      const binding = lights[i];
-      if (!binding) continue;
-      const rawRadius = Number.isFinite(binding.radius) ? binding.radius : 0;
-      if (!(rawRadius > 0)) continue;
-      const maskScale = Number.isFinite(binding.maskScale) ? binding.maskScale : 1;
-      const scaledRadius = rawRadius * maskScale;
-      if (!(scaledRadius > 0)) continue;
-      const intensity = Number.isFinite(binding.intensity)
-        ? (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(binding.intensity, 0, 1) : Math.min(Math.max(binding.intensity, 0), 1))
-        : 0;
-      if (intensity <= 0.001) continue;
-      hasDrawableLight = true;
-      break;
-    }
-
-    const shouldEnable = hasDrawableLight && (overlay.alpha || 0) > 0.001;
-
-    if (!shouldEnable) {
-      if (scene._nightOverlayMaskEnabled && typeof overlay.clearMask === 'function') {
-        overlay.clearMask(false);
-      }
-      scene._nightOverlayMaskEnabled = false;
-      if (scene.nightOverlayMaskGraphics) scene.nightOverlayMaskGraphics.clear();
-      return;
-    }
-
-    const mask = _ensureNightOverlayMask();
-    if (!mask) return;
-
-    if (!scene._nightOverlayMaskEnabled) {
-      overlay.setMask(mask);
-      scene._nightOverlayMaskEnabled = true;
-    }
-
-    _drawNightOverlayMask(lights);
+    _drawDarknessComposite(lights);
   }
 
   function _teardownNightOverlayMask() {
-    const overlay = scene.nightOverlay;
-    if (overlay && typeof overlay.clearMask === 'function' && scene._nightOverlayMaskEnabled) {
-      overlay.clearMask(false);
-    }
-    scene._nightOverlayMaskEnabled = false;
-
-    const mask = scene.nightOverlayMask;
-    if (mask && typeof mask.destroy === 'function') mask.destroy();
-    scene.nightOverlayMask = null;
+    const rt = scene.nightOverlayRT;
+    if (rt && typeof rt.destroy === 'function') rt.destroy();
+    scene.nightOverlayRT = null;
 
     const gfx = scene.nightOverlayMaskGraphics;
     if (gfx && typeof gfx.destroy === 'function') gfx.destroy();
@@ -310,15 +270,29 @@ export default function createLightingSystem(scene) {
       ? (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(Math.round(cfg.maskTileCount), 1, 32) : Math.min(Math.max(Math.round(cfg.maskTileCount), 1), 32))
       : null;
 
+    // Optional flicker controls (player-like behavior)
+    const flickerAmplitude = Number.isFinite(cfg.flickerAmplitude) ? cfg.flickerAmplitude : 0;
+    const flickerSpeed = Number.isFinite(cfg.flickerSpeed) ? cfg.flickerSpeed : 0;
+
+    // Light strength multiplier (applies to effective radius in compositor)
+    const lightLevel = Number.isFinite(cfg.light_level) ? cfg.light_level : (Number.isFinite(cfg.lightLevel) ? cfg.lightLevel : 1);
+
     const binding = {
       target,
       offsetX,
       offsetY,
       radius,
+      _baseRadius: radius,
       maskScale,
       intensity: (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1)),
+      _baseIntensity: (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(intensity, 0, 1) : Math.min(Math.max(intensity, 0), 1)),
       maskTileSize,
       maskTileCount,
+      flickerAmplitude: flickerAmplitude < 0 ? 0 : flickerAmplitude,
+      flickerSpeed: flickerSpeed < 0 ? 0 : flickerSpeed,
+      _flickerPhase: Math.random() * (Phaser?.Math?.PI2 || Math.PI * 2),
+      _flickerPhaseAlt: Math.random() * (Phaser?.Math?.PI2 || Math.PI * 2),
+      lightLevel: Number.isFinite(lightLevel) ? Math.max(0, lightLevel) : 1,
       active: intensity > 0 && radius > 0,
       x: (target.x || 0) + offsetX,
       y: (target.y || 0) + offsetY,
@@ -333,6 +307,7 @@ export default function createLightingSystem(scene) {
 
   function _updateAttachedLights() {
     if (!Array.isArray(scene._lightBindings) || scene._lightBindings.length === 0) return;
+    const Phaser = globalThis.Phaser || {};
     for (let i = scene._lightBindings.length - 1; i >= 0; i--) {
       const binding = scene._lightBindings[i];
       if (!binding) { scene._lightBindings.splice(i, 1); continue; }
@@ -341,10 +316,35 @@ export default function createLightingSystem(scene) {
         releaseWorldLight(binding);
         continue;
       }
-      const x = (target.x || 0) + (binding.offsetX || 0);
-      const y = (target.y || 0) + (binding.offsetY || 0);
-      binding.x = x;
-      binding.y = y;
+      // Always update position for valid targets
+      const x = Number.isFinite(target.x) ? target.x : 0;
+      const y = Number.isFinite(target.y) ? target.y : 0;
+      binding.x = x + (binding.offsetX || 0);
+      binding.y = y + (binding.offsetY || 0);
+
+      // Player-like flicker for any light that opts in via flickerAmplitude/flickerSpeed
+      const amp = Number.isFinite(binding.flickerAmplitude) ? binding.flickerAmplitude : 0;
+      const spd = Number.isFinite(binding.flickerSpeed) ? binding.flickerSpeed : 0;
+      if (amp > 0 && spd > 0) {
+        const dt = Math.max(0, (scene.game?.loop?.delta || scene.time?.elapsedMS || 16)) / 1000;
+        binding._flickerPhase = (binding._flickerPhase || 0) + spd * dt;
+        binding._flickerPhaseAlt = (binding._flickerPhaseAlt || 0) + spd * 1.618 * dt;
+        if (Phaser?.Math?.Wrap) {
+          binding._flickerPhase = Phaser.Math.Wrap(binding._flickerPhase, 0, Phaser.Math.PI2);
+          binding._flickerPhaseAlt = Phaser.Math.Wrap(binding._flickerPhaseAlt, 0, Phaser.Math.PI2);
+        }
+        const waveA = Math.sin(binding._flickerPhase);
+        const waveB = Math.sin(binding._flickerPhaseAlt);
+        const mix = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp((waveA * 0.6 + waveB * 0.4) * 0.5, -1, 1) : Math.min(Math.max((waveA * 0.6 + waveB * 0.4) * 0.5, -1), 1));
+        const base = Number.isFinite(binding._baseRadius) ? binding._baseRadius : (Number.isFinite(binding.radius) ? binding.radius : 0);
+        const jitter = mix * amp;
+        const newRadius = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(base + jitter, Math.max(0, base - amp), base + amp) : Math.min(Math.max(base + jitter, Math.max(0, base - amp)), base + amp));
+        binding.radius = newRadius;
+        const intensityJitter = 1 + mix * 0.08;
+        const baseI = Number.isFinite(binding._baseIntensity) ? binding._baseIntensity : (Number.isFinite(binding.intensity) ? binding.intensity : 1);
+        const newIntensity = (Phaser?.Math?.Clamp ? Phaser.Math.Clamp(baseI * intensityJitter, 0, 1) : Math.min(Math.max(baseI * intensityJitter, 0), 1));
+        binding.intensity = newIntensity;
+      }
     }
   }
 
@@ -426,6 +426,9 @@ export default function createLightingSystem(scene) {
     if (light.radius !== radius) light.radius = radius;
     if (light.maskScale !== maskScale) light.maskScale = maskScale;
     if (light.intensity !== flickerIntensity) light.intensity = flickerIntensity;
+    // Apply player light level multiplier for compositor
+    const lvl = Number.isFinite(scene._playerLightLevel) ? Math.max(0, scene._playerLightLevel) : 1;
+    if (light.lightLevel !== lvl) light.lightLevel = lvl;
 
     const shouldBeActive = shouldGlow && hasRadius && flickerIntensity > 0.001;
     const stateChanged = shouldBeActive !== scene._playerLightNightActive;
@@ -495,6 +498,7 @@ export default function createLightingSystem(scene) {
       if (!Number.isFinite(playerSettings.flickerSpeed)) playerSettings.flickerSpeed = 0; else if (playerSettings.flickerSpeed < 0) playerSettings.flickerSpeed = 0;
       if (!Number.isFinite(playerSettings.upgradeMultiplier)) playerSettings.upgradeMultiplier = 1; else if (playerSettings.upgradeMultiplier < 0) playerSettings.upgradeMultiplier = 0;
       scene._playerLightUpgradeMultiplier = playerSettings.upgradeMultiplier;
+      if (!Number.isFinite(scene._playerLightLevel)) scene._playerLightLevel = 1;
     } else {
       scene._playerLightUpgradeMultiplier = 1;
     }
@@ -510,11 +514,12 @@ export default function createLightingSystem(scene) {
         .setOrigin(0, 0)
         .setScrollFactor(0)
         .setDepth(10000)
-        .setAlpha(0);
+        .setAlpha(0)
+        .setVisible(false);
     }
 
-    // Ensure mask exists now; enablement is dynamic in _updateNightOverlayMask
-    _ensureNightOverlayMask();
+    // Ensure RT is created once here
+    _ensureDarknessRT();
 
     if (!scene._boundNightMaskTeardown) {
       scene._boundNightMaskTeardown = () => {
@@ -529,6 +534,19 @@ export default function createLightingSystem(scene) {
       scene.events?.once?.(Phaser?.Scenes?.Events?.SHUTDOWN, scene._boundNightMaskTeardown);
       scene.events?.once?.(Phaser?.Scenes?.Events?.DESTROY, scene._boundNightMaskTeardown);
     }
+
+    // Recreate RT on resize to match view size
+    const onResize = (gameSize) => {
+      const w2 = gameSize?.width ?? scene.scale?.width ?? 800;
+      const h2 = gameSize?.height ?? scene.scale?.height ?? 600;
+      if (!scene.nightOverlayRT || scene.nightOverlayRT.width !== w2 || scene.nightOverlayRT.height !== h2) {
+        _ensureDarknessRT();
+      }
+    };
+    scene.scale?.on?.('resize', onResize);
+    scene.events?.once?.(Phaser?.Scenes?.Events?.SHUTDOWN, () => scene.scale?.off?.('resize', onResize));
+    scene.events?.once?.(Phaser?.Scenes?.Events?.DESTROY, () => scene.scale?.off?.('resize', onResize));
+
     return scene.nightOverlay;
   }
 
@@ -537,6 +555,10 @@ export default function createLightingSystem(scene) {
     _updatePlayerLightGlow(delta);
     _updateNightOverlayMask();
   }
+
+  function getPlayerLightLevel() { return Number.isFinite(scene._playerLightLevel) ? scene._playerLightLevel : 1; }
+  function setPlayerLightLevel(level = 1) { scene._playerLightLevel = Math.max(0, Number(level) || 0); return scene._playerLightLevel; }
+  function bumpPlayerLightLevel(mult = 1) { if (!Number.isFinite(mult)) return getPlayerLightLevel(); scene._playerLightLevel = Math.max(0, (scene._playerLightLevel || 1) * mult); return scene._playerLightLevel; }
 
   return {
     // lifecycle
@@ -554,8 +576,8 @@ export default function createLightingSystem(scene) {
     _collectActiveMaskLights,
     _getLightMaskGradientDefinition,
     _buildLightMaskGradient,
-    _ensureNightOverlayMask,
-    _drawNightOverlayMask,
+    _ensureDarknessRT,
+    _drawDarknessComposite,
     _updateNightOverlayMask,
     _updateAttachedLights,
     _updatePlayerLightGlow,
@@ -568,5 +590,10 @@ export default function createLightingSystem(scene) {
     bumpPlayerLightUpgradeMultiplier,
     resetPlayerLightUpgradeMultiplier,
     updateNightAmbient,
+
+    // player light level API
+    getPlayerLightLevel,
+    setPlayerLightLevel,
+    bumpPlayerLightLevel,
   };
 }

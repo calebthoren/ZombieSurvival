@@ -1,6 +1,18 @@
 // data/zombieDatabase.js
 // Central place to tune zombie types/stats.
 
+// Standard enemy metrics (Walker as reference)
+const ENEMY_METRICS = {
+    WALKER: {
+        scale: 0.1,
+        // Physics body size (will be applied after scaling)
+        bodyWidth: null,   // Let Phaser auto-calculate from scaled sprite
+        bodyHeight: null,  // Let Phaser auto-calculate from scaled sprite
+        bodyOffsetX: 0,
+        bodyOffsetY: 0
+    }
+};
+
 const ZOMBIES = {
     // Basic walker
     walker: {
@@ -40,9 +52,54 @@ const ZOMBIES = {
         // With an empty table, MainScene._maybeDropLoot() will drop nothing.
         loot: {
             table: []
+        },
+
+        // Light level: non-glowing by default
+        light_level: 0,
+    },
+
+    // Fire zombie with light emission
+    flamed_walker: {
+        name: 'Flamed Walker',
+        texture: 'flamed_walker',   // fallback for older code
+        textureKey: 'flamed_walker',
+        // Use same scale as walker for consistent hitbox
+        scale: ENEMY_METRICS.WALKER.scale,
+        depth: 900,
+
+        // Core stats - same as walker but night-only
+        health: 25,
+        speed: 40,
+        damage: 5,
+        aggroRange: 200,
+        attackCooldownMs: 800,
+
+        // Spawning - night only, lower weight to keep special
+        spawnWeight: 4,
+        canSpawnDay: false,
+
+        // Resistances - same as walker
+        resist: { rangedMult: 1, meleeMult: 1, knockback: 0.0 },
+
+        // Stagger/Stun
+        staggerThreshold: 10,
+        stunDurationMs: 250,
+
+        // HP bar visuals
+        hpBar: { width: 18, height: 3, yOffsetFactor: 0.6 },
+
+        // Light emission - glows in the dark with player-like flicker
+        light: { radius: 120, intensity: 1, maskScale: 0.3333333, maskTileCount: 7, maskTileSize: 16, flickerAmplitude: 8, flickerSpeed: 2.25 },
+        // Light level multiplier for glow strength
+        light_level: 1,
+
+        // Loot scaffolding (placeholder)
+        loot: {
+            table: []
         }
     },
 
 };
 
+export { ENEMY_METRICS };
 export default ZOMBIES;

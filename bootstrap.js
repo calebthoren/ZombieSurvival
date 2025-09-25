@@ -2,7 +2,7 @@ const BASE_WIDTH = 800;   // base game width (designed pixel resolution)
 const BASE_HEIGHT = 600;  // base game height
 const IS_NODE = typeof window === 'undefined';
 
-let MainScene, UIScene, PauseScene, DevUIScene;
+let MainScene, UIScene, PauseScene, DevUIScene, TestWorldScene;
 
 if (IS_NODE) {
     globalThis.Phaser = { Scene: class {}, Math: { Clamp: () => 0, Linear: () => 0 } };
@@ -10,6 +10,7 @@ if (IS_NODE) {
     ({ default: UIScene } = await import('./scenes/UIScene.js'));
     ({ default: PauseScene } = await import('./scenes/PauseScene.js'));
     ({ default: DevUIScene } = await import('./scenes/DevUIScene.js'));
+    ({ default: TestWorldScene } = await import('./scenes/TestWorldScene.js'));
     await import('./systems/world_gen/dayNightSystem.js');
     console.log('Headless bootstrap: modules loaded');
     process.exit(0);
@@ -18,6 +19,7 @@ if (IS_NODE) {
     ({ default: UIScene } = await import('./scenes/UIScene.js'));
     ({ default: PauseScene } = await import('./scenes/PauseScene.js'));
     ({ default: DevUIScene } = await import('./scenes/DevUIScene.js'));
+    ({ default: TestWorldScene } = await import('./scenes/TestWorldScene.js'));
 
     // 🖼️ Explicit canvas with willReadFrequently to avoid readback warnings
     const canvas = document.createElement('canvas');
@@ -53,11 +55,14 @@ if (IS_NODE) {
                 debug: false,
             },
         },
+        
 
-        scene: [MainScene, UIScene, PauseScene, DevUIScene],
+        scene: [MainScene, UIScene, PauseScene, DevUIScene, TestWorldScene],
     };
 
     const game = new Phaser.Game(config);
+    // Expose game globally for debugging convenience
+    try { window.game = game; } catch {}
 
     // Auto pixel-perfect integer zoom that fits the window
     function applyPixelPerfectZoom() {

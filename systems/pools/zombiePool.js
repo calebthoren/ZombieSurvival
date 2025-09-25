@@ -1,6 +1,7 @@
 // systems/pools/zombiePool.js
 // Simple object pool for zombies to avoid create/destroy churn.
 
+
 export default function createZombiePool(scene) {
     const pool = [];
 
@@ -13,6 +14,7 @@ export default function createZombiePool(scene) {
                 .setActive(true)
                 .setVisible(true);
             zombie.body && (zombie.body.enable = true);
+
             if (typeof scene.applyLightPipeline === 'function') {
                 scene.applyLightPipeline(zombie);
             }
@@ -21,6 +23,7 @@ export default function createZombiePool(scene) {
         const z = scene.zombies.create(0, 0, texKey);
         if (!z.body) scene.physics.add.existing(z);
         z.body.setAllowGravity(false);
+
         if (typeof scene.applyLightPipeline === 'function') {
             scene.applyLightPipeline(z);
         }

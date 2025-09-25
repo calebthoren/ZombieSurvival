@@ -114,9 +114,18 @@ export default class Chunk {
         if (!this.rt) {
             const size = WORLD_GEN.chunk.size;
             let tex = texPool().pop();
+            // If a pooled RenderTexture came from a previous Scene instance, discard it
+            if (tex && (tex.scene !== scene || !tex.scene)) {
+                try { tex.destroy(true); } catch {}
+                tex = null;
+            }
             if (tex) {
-                tex.setPosition(this.cx * size, this.cy * size);
-                tex.setVisible(true).setActive(true).setDepth(-10000).clear();
+                tex.setPosition(this.cx * size, this.cy * size)
+                    .setOrigin(0, 0)
+                    .setVisible(true)
+                    .setActive(true)
+                    .setDepth(-10000)
+                    .clear();
             } else {
                 tex = scene.add.renderTexture(
                     this.cx * size,

@@ -7,6 +7,7 @@
 import { ITEM_DB } from '../data/itemDatabase.js';
 import { WORLD_GEN, BIOME_IDS } from './world_gen/worldGenConfig.js';
 import { getBiome } from './world_gen/biomes/biomeMap.js';
+import { RESOURCE_DB } from '../data/resourceDatabase.js';
 
 // Helper function to format time as M:SS
 function formatTime(ms) {
@@ -47,29 +48,32 @@ const BIOME_NAMES = {
     [BIOME_IDS.DESERT]: 'Desert',
 };
 
+// Default dev settings that should be restored on every fresh load or respawn
+const DEFAULT_DEV_SETTINGS = {
+    showHitboxes: false,
+    invisible:    false,
+    invincible:   false,
+    noAmmo:       false,
+    noStamina:    false,
+    noCooldown:   false,
+    noDarkness:   false,
+
+    // Debug overlays
+    chunkDetails:    false,
+    performanceHud:  false,
+
+    // NEW: how many slices to draw per fast tick (1 or 2)
+    meleeSliceBatch: 1,
+
+    // Global game speed (0..10, 1 = normal)
+    timeScale: 1
+};
+
 const DevTools = {
     // ─────────────────────────────────────────────────────────────
     // CHEATS (wired from Dev UI)
     // ─────────────────────────────────────────────────────────────
-    cheats: {
-        showHitboxes: false,
-        invisible:    false,
-        invincible:   false,
-        noAmmo:       false,
-        noStamina:    false,
-        noCooldown:   false,
-        noDarkness:   false,
-
-        // Debug overlays
-        chunkDetails:    false,
-        performanceHud:  false,
-
-        // NEW: how many slices to draw per fast tick (1 or 2)
-        meleeSliceBatch: 1,
-
-        // Global game speed (0..10, 1 = normal)
-        timeScale: 1
-    },
+    cheats: { ...DEFAULT_DEV_SETTINGS },
 
     _appliedTimeScale: 1,
     _resourcePoolDebug: false,
@@ -137,17 +141,7 @@ const DevTools = {
 
     // reset dev toggles to defaults (used on death)
     resetToDefaults(scene = null) {
-        this.cheats.showHitboxes   = false;
-        this.cheats.invincible     = false;
-        this.cheats.invisible      = false;
-        this.cheats.noAmmo         = false;
-        this.cheats.noStamina      = false;
-        this.cheats.noCooldown     = false;
-        this.cheats.noDarkness     = false;
-        this.cheats.chunkDetails   = false;
-        this.cheats.performanceHud = false;
-        this.cheats.meleeSliceBatch = 1;
-        this.cheats.timeScale       = 1;
+        Object.assign(this.cheats, DEFAULT_DEV_SETTINGS);
         this._enemySpawnPrefs = null;
         this._itemSpawnPrefs  = null;
         this._stopChunkDetails();
@@ -194,11 +188,112 @@ const DevTools = {
                 } catch {}
             }
             try { this._rescaleTimers(prev, applied, mgr.scenes); } catch {}
+            // Ask UI to refresh overlays (cooldowns) after re-scaling
+            try {
+                for (let i = 0; i < mgr.scenes.length; i++) {
+                    const sc = mgr.scenes[i];
+                    if (sc?.uiScene?.events?.emit) {
+                        sc.uiScene.events.emit('inv:changed');
+                        sc.uiScene.events.emit('ui:refreshCooldowns');
+                    }
+                }
+            } catch {}
         }
+    },
+
+    // Jump to a specific day and segment (replaces GAMESPEED functionality)
+    // dayNumber: 1, 2, 3, ... (which day)
+    // segment: 1-6 (1-3 = day segments: Morning/Afternoon/Evening, 4-6 = night segments: Dusk/Midnight/Dawn)
+    jumpToDay(dayNumber, segment, game = null) {
+        let day = Math.floor(dayNumber) || 1;
+        day = Math.max(1, Math.min(999, day)); // Clamp day to 1-999 range
+        const seg = Math.max(1, Math.min(6, Math.floor(segment) || 1));
+        
+        const mgr = game?.scene;
+        if (!mgr || !Array.isArray(mgr.scenes)) return;
+        
+        // Find the active gameplay scene (MainScene or TestWorldScene)
+        let targetScene = null;
+        for (let i = 0; i < mgr.scenes.length; i++) {
+            const sc = mgr.scenes[i];
+            if ((sc.scene.key === 'MainScene' || sc.scene.key === 'TestWorldScene') && 
+                (mgr.isActive(sc.scene.key) || mgr.isPaused(sc.scene.key))) {
+                targetScene = sc;
+                break;
+            }
+        }
+        
+        if (!targetScene) return;
+        
+        // Determine if this is day (1-3) or night (4-6) segment
+        const isNightSegment = seg >= 4;
+        const phase = isNightSegment ? 'night' : 'day';
+        const phaseSegmentIndex = isNightSegment ? (seg - 4) : (seg - 1); // Convert to 0-2 range
+        
+        // Get phase durations from config
+        const dayMs = WORLD_GEN.dayNight.dayMs;
+        const nightMs = WORLD_GEN.dayNight.nightMs;
+        const phaseDuration = isNightSegment ? nightMs : dayMs;
+        const segmentDuration = phaseDuration / 3; // Each phase has 3 segments
+        
+        // Calculate elapsed time to reach this segment (start at the very beginning)
+        const segmentElapsed = phaseSegmentIndex * segmentDuration; // Start at segment beginning
+        
+        // Set the scene state
+        targetScene.dayIndex = day;
+        targetScene.phase = phase;
+        targetScene.phaseStartTime = this.now(targetScene) - segmentElapsed;
+        targetScene._phaseElapsedMs = segmentElapsed;
+        targetScene.phaseSegmentIndex = phaseSegmentIndex;
+        
+        // Set segment label
+        if (isNightSegment) {
+            const nightLabels = WORLD_GEN.dayNight.segments?.night?.labels || ['Dusk', 'Midnight', 'Dawn'];
+            targetScene.phaseSegmentLabel = nightLabels[phaseSegmentIndex] || 'Dusk';
+        } else {
+            const dayLabels = WORLD_GEN.dayNight.segments?.day?.labels || ['Morning', 'Afternoon', 'Evening'];
+            targetScene.phaseSegmentLabel = dayLabels[phaseSegmentIndex] || 'Morning';
+        }
+        
+        // Clear existing timers and restart spawning for the new phase
+        if (targetScene.spawnZombieTimer?.remove) {
+            targetScene.spawnZombieTimer.remove(false);
+            targetScene.spawnZombieTimer = null;
+        }
+        
+        // Reset wave number
+        targetScene.waveNumber = 0;
+        
+        // Start appropriate spawning system
+        if (targetScene.dayNight) {
+            if (phase === 'night') {
+                targetScene.dayNight.scheduleNightWave();
+                targetScene.dayNight.scheduleNightTrickle();
+            } else {
+                targetScene.dayNight.scheduleDaySpawn();
+            }
+            // Update UI and force immediate visual updates
+            targetScene.dayNight.updateTimeUi();
+            targetScene.dayNight.updateNightOverlay();
+        }
+        
+        // Force immediate lighting and visual updates for instant feedback
+        try {
+            if (targetScene.lightingSystem && typeof targetScene.lightingSystem.updateGlobalLighting === 'function') {
+                targetScene.lightingSystem.updateGlobalLighting();
+            }
+            
+            // Force render update
+            targetScene.sys.queueDepthSort();
+        } catch {}
+        
+        console.log(`[DevTools] Jumped to Day ${day} ${targetScene.phaseSegmentLabel} (segment ${seg})`);
     },
 
     _rescaleTimers(prev, applied, scenes) {
         if (!Array.isArray(scenes)) return;
+        // Scale remaining durations by (applied / prev) so speeding up the game shortens cooldowns.
+        const factor = (prev === 0) ? 1 : (applied / prev);
         for (let i = 0; i < scenes.length; i++) {
             const sc = scenes[i];
             const clock = sc?.time;
@@ -207,21 +302,20 @@ const DevTools = {
                 // Ranged cooldown
                 if (sc._nextRangedReadyTime != null && sc._nextRangedReadyTime > now) {
                     const remaining = sc._nextRangedReadyTime - now;
-                    sc._nextRangedReadyTime = now + remaining * (prev / applied);
+                    sc._nextRangedReadyTime = now + remaining * factor;
                 }
                 // Melee swing cooldown
                 if (sc._nextSwingCooldownMs != null && sc._lastSwingEndTime != null) {
                     const duration = sc._nextSwingCooldownMs;
                     const elapsed = now - sc._lastSwingEndTime;
-                    const newDuration = duration * (prev / applied);
-                    const newElapsed = elapsed * (prev / applied);
+                    const newDuration = duration * factor;
+                    const newElapsed = elapsed * factor;
                     sc._nextSwingCooldownMs = newDuration;
                     sc._lastSwingEndTime = now - newElapsed;
                 }
                 // Charging adjustments
                 if (sc.isCharging && sc.chargeStart != null) {
                     const elapsed = now - sc.chargeStart;
-                    const factor = prev / applied;
                     sc.chargeStart = now - elapsed * factor;
                     if (sc.chargeMaxMs != null) {
                         sc.chargeMaxMs = Math.floor(sc.chargeMaxMs * factor);
@@ -234,8 +328,8 @@ const DevTools = {
                 sc._activeCooldowns.forEach((info) => {
                     const duration = info.end - info.start;
                     const elapsed = nowUi - info.start;
-                    const newDuration = duration * (prev / applied);
-                    const newElapsed = elapsed * (prev / applied);
+                    const newDuration = duration * factor;
+                    const newElapsed = elapsed * factor;
                     info.start = nowUi - newElapsed;
                     info.end = info.start + newDuration;
                 });
@@ -287,11 +381,20 @@ const DevTools = {
         const target = scene || this._noDarknessScene;
         if (!target) return;
         try {
+            // Force immediate night overlay update
             if (typeof target.updateNightOverlay === 'function') {
                 target.updateNightOverlay();
             } else if (target.dayNight && typeof target.dayNight.updateNightOverlay === 'function') {
                 target.dayNight.updateNightOverlay();
             }
+            
+            // Also force lighting system update for immediate visual feedback
+            if (target.lightingSystem && typeof target.lightingSystem.updateGlobalLighting === 'function') {
+                target.lightingSystem.updateGlobalLighting();
+            }
+            
+            // Force a render update to make changes visible immediately
+            target.sys.queueDepthSort();
         } catch {}
     },
 
@@ -575,7 +678,7 @@ const DevTools = {
         if (mh && mh.children?.iterate) {
             const N     = Math.max(1, (this._MELEE_SUBDIV | 0));                 // total slices across cone
             const batch = Math.max(1, (this.cheats.meleeSliceBatch | 0)) > 1 ? 2 : 1; // 1 or 2
-            const now   = this.now(scene) | 0;
+            const now   = (scene?.time?.now | 0);
 
             mh.children.iterate((hit) => {
                 if (!hit || !hit.active) return;
@@ -632,9 +735,43 @@ const DevTools = {
 
         g.clear().lineStyle(1, 0xffff00, 1).fillStyle(0xffff00, 0.25); // yellow
         const lists = [];
-        if (scene.resources && scene.resources.getChildren) lists.push(scene.resources.getChildren());
-        if (scene.resourcesDyn && scene.resourcesDyn.getChildren) lists.push(scene.resourcesDyn.getChildren());
-        if (scene.resourcesDecor && scene.resourcesDecor.getChildren) lists.push(scene.resourcesDecor.getChildren());
+        
+        // Helper function to get children from different group types
+        const getGroupChildren = (group) => {
+            if (!group) return [];
+            
+            try {
+                // Try physics group .getChildren() method first
+                if (typeof group.getChildren === 'function') {
+                    return group.getChildren() || [];
+                }
+                
+                // Try display group .children.entries array
+                if (group.children && Array.isArray(group.children.entries)) {
+                    return group.children.entries;
+                }
+                
+                // Fallback: try to access children directly if it's an array
+                if (Array.isArray(group.children)) {
+                    return group.children;
+                }
+                
+            } catch (error) {
+                // Silently skip problematic groups
+            }
+            
+            return [];
+        };
+        
+        // Get children from all resource groups (returns empty arrays if no access)
+        const resourceChildren = getGroupChildren(scene.resources); // Static group
+        const resourcesDynChildren = getGroupChildren(scene.resourcesDyn); // Dynamic group  
+        const resourcesDecorChildren = getGroupChildren(scene.resourcesDecor); // Display group
+        
+        // Add non-empty lists
+        if (resourceChildren.length > 0) lists.push(resourceChildren);
+        if (resourcesDynChildren.length > 0) lists.push(resourcesDynChildren);
+        if (resourcesDecorChildren.length > 0) lists.push(resourcesDecorChildren);
 
         for (const list of lists) {
             for (let i = 0; i < list.length; i++) {
@@ -733,6 +870,109 @@ const DevTools = {
         // Ignore leftovers when inventory + hotbar are full
     },
 
+    // ─────────────────────────────────────────────────────────────
+    // Canopy calibration helper — spawns all tree variants near player and prints suggested offsets
+    // ─────────────────────────────────────────────────────────────
+    spawnAllTreeVariantsForCanopy(scene) {
+        if (!scene) scene = this._lastScene;
+        if (!scene) return;
+        try { this.cheats.resourceDetails = true; } catch {}
+
+        // Collect all tree IDs from DB
+        const ids = Object.keys(RESOURCE_DB).filter((k) => /^tree\d+[A-Z]$/i.test(RESOURCE_DB[k]?.id || ''))
+            .map((k) => RESOURCE_DB[k].id);
+        if (!ids.length) return;
+
+        const p = scene.player || { x: 0, y: 0 };
+        const cols = 6;
+        const spacing = 140;
+        let row = 0, col = 0;
+
+        const spawnOne = (id, x, y) => {
+            const cfg = { variants: [{ id, weight: 1 }], clusterMin: 1, clusterMax: 1 };
+            try {
+                scene.resourceSystem?.__testSpawnResourceGroup('trees', cfg, {
+                    bounds: { minX: x, maxX: x, minY: y, maxY: y },
+                    count: 1,
+                    noRespawn: true,
+                    proximityGroup: scene.resources,
+                });
+            } catch (e) {
+                console.warn('[DevTools] spawn failed for', id, e);
+            }
+        };
+
+        for (let i = 0; i < ids.length; i++) {
+            const id = ids[i];
+            const x = Math.round(p.x + (col - Math.floor(cols / 2)) * spacing);
+            const y = Math.round(p.y + row * spacing);
+            spawnOne(id, x, y);
+            col++;
+            if (col >= cols) { col = 0; row++; }
+        }
+
+        // After a short delay, print consolidated suggestions
+        try {
+            scene.time.delayedCall(300, () => {
+                const map = scene._canopyCalib;
+                if (!map || typeof map.forEach !== 'function') {
+                    console.log('[DevTools] No canopy suggestions collected yet. Ensure cheats.resourceDetails is ON.');
+                    return;
+                }
+                console.log('=== Canopy offsetY suggestions (per tree id) ===');
+                map.forEach((info, id) => {
+                    console.log(`${id}: transparent.offsetY=${info.suggestedOffsetY} (was ${info.currentTransparentOffsetY}), overlay.offsetY=${info.suggestedOffsetY} (was ${info.currentOverlayOffsetY})`);
+                });
+                console.log('===============================================');
+            });
+        } catch {}
+    },
+
 };
+
+// Note: DevTools settings are no longer persisted to localStorage.
+// They reset to defaults on page refresh/reload and respawn events.
+// This prevents settings from carrying over between game sessions.
+
+// Expose DevTools globally in browser so console can call helpers
+if (typeof window !== 'undefined') {
+  try { window.DevTools = DevTools; } catch {}
+  
+  // Console commands for test world
+  try {
+    window.gotoTestWorld = function() {
+      const game = window.game;
+      if (!game) {
+        console.warn('Game instance not found');
+        return;
+      }
+      
+      console.log('Switching to TestWorldScene...');
+      // Stop all scenes properly
+      game.scene.stop('MainScene');
+      game.scene.stop('UIScene');
+      game.scene.stop('PauseScene');
+      game.scene.stop('DevUIScene');
+      // Start fresh
+      game.scene.start('TestWorldScene');
+    };
+    
+    window.gotoMainScene = function() {
+      const game = window.game;
+      if (!game) {
+        console.warn('Game instance not found');
+        return;
+      }
+      
+      console.log('Switching to MainScene...');
+      game.scene.stop('TestWorldScene');
+      game.scene.start('MainScene');
+    };
+    
+    console.log('[DevTools] Test world console commands loaded:');
+    console.log('  gotoTestWorld() - Switch to test world with organized resources');
+    console.log('  gotoMainScene() - Return to main game scene');
+  } catch {}
+}
 
 export default DevTools;

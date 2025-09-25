@@ -44,7 +44,9 @@ export default class UIScene extends Phaser.Scene {
         DevTools.applyTimeScale(this);
 
         const main = this.scene.get('MainScene');
-        if (main) {
+        const testWorld = this.scene.get('TestWorldScene');
+        const bindPauseResume = (sceneRef) => {
+            if (!sceneRef) return;
             const onPause = () => { this._pauseStart = this.time.now; };
             const onResume = () => {
                 const now = this.time.now;
@@ -57,13 +59,15 @@ export default class UIScene extends Phaser.Scene {
                 }
                 this._pauseStart = 0;
             };
-            main.events.on(Phaser.Scenes.Events.PAUSE, onPause);
-            main.events.on(Phaser.Scenes.Events.RESUME, onResume);
+            sceneRef.events.on(Phaser.Scenes.Events.PAUSE, onPause);
+            sceneRef.events.on(Phaser.Scenes.Events.RESUME, onResume);
             this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-                main.events.off(Phaser.Scenes.Events.PAUSE, onPause);
-                main.events.off(Phaser.Scenes.Events.RESUME, onResume);
+                try { sceneRef.events.off(Phaser.Scenes.Events.PAUSE, onPause); } catch {}
+                try { sceneRef.events.off(Phaser.Scenes.Events.RESUME, onResume); } catch {}
             });
-        }
+        };
+        if (main) bindPauseResume(main);
+        if (testWorld) bindPauseResume(testWorld);
 
         // -------------------------
         // Basic HUD
@@ -308,9 +312,12 @@ export default class UIScene extends Phaser.Scene {
             const x = pointer.worldX;
             const y = pointer.worldY;
             if (!Phaser.Geom.Rectangle.Contains(this._inventoryBounds, x, y)) {
+                // Drop to the active gameplay scene (MainScene or TestWorldScene)
                 const main = this.scene.get('MainScene');
-                if (main && typeof main.dropItemStack === 'function') {
-                    main.dropItemStack(this.dragCarry.id, this.dragCarry.count);
+                const test = this.scene.get('TestWorldScene');
+                const target = (test && (this.scene.isActive('TestWorldScene') || this.scene.isPaused('TestWorldScene'))) ? test : main;
+                if (target && typeof target.dropItemStack === 'function') {
+                    target.dropItemStack(this.dragCarry.id, this.dragCarry.count);
                 }
                 this.#clearCarry();
             }
@@ -394,6 +401,13 @@ export default class UIScene extends Phaser.Scene {
             this.#syncCooldownOverlays();
         });
 
+        // Allow external systems (DevTools) to force a cooldown overlay refresh
+        this.events.on('ui:refreshCooldowns', () => {
+            this.#syncCooldownOverlays();
+            // Immediately recompute overlay heights to reflect updated timing
+            this.#updateCooldownOverlays();
+        });
+
         // Charging UI events from MainScene
         this.events.on('weapon:charge', (percent) => {
             this.#updateChargeBar(percent);
@@ -410,6 +424,16 @@ export default class UIScene extends Phaser.Scene {
             const now = this.time.now;
             this._activeCooldowns.set(itemId, { start: now, end: now + durationMs });
             this.#syncCooldownOverlays();
+        });
+        // Optional: explicit clear to remove overlays immediately
+        this.events.on('weapon:cooldownClear', ({ itemId }) => {
+            if (!itemId) return;
+            this._activeCooldowns.delete(itemId);
+            // Remove any overlays belonging to this item
+            for (let i = this._slotOverlays.length - 1; i >= 0; i--) {
+                const o = this._slotOverlays[i];
+                if (o.itemId === itemId) this.#removeOverlay(o, i);
+            }
         });
 
         // Day/Night mini HUD

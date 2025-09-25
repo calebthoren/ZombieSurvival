@@ -253,11 +253,16 @@ export default function createDayNightSystem(scene) {
 
                 scene.waveNumber++;
 
-                const dayBonus = scene.dayIndex * nightCfg.perDay;
+                // New linear scaling formula: BaseCount + (NightNumber - 1) * PerNight + SegmentNumber * PerSegment
+                // - NightNumber = scene.dayIndex (Night 1 = 1, Night 2 = 2, etc.)
+                // - SegmentNumber = segmentIndex (Dusk = 0, Midnight = 1, Dawn = 2)
+                const nightNumber = scene.dayIndex;
+                const perNight = nightCfg.perNight ?? nightCfg.perDay ?? 2; // fallback to old perDay
+                const perSegment = nightCfg.perSegment ?? 0; // fallback to 0 if missing
                 const targetCount = Math.min(
                     nightCfg.baseCount +
-                        (scene.waveNumber - 1) * nightCfg.perWave +
-                        dayBonus,
+                        (nightNumber - 1) * perNight +
+                        segmentIndex * perSegment,
                     nightCfg.maxCount,
                 );
 
